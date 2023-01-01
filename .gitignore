@@ -1,0 +1,46 @@
+# The directory Mix will write compiled artifacts to.
+/_build
+
+# If you run "mix test --cover", coverage assets end up here.
+/cover
+
+# The directory Mix downloads your dependencies sources to.
+/deps
+
+# Where 3rd-party dependencies like ExDoc output generated docs.
+/doc
+
+# If the VM crashes, it generates a dump, let's ignore it too.
+erl_crash.dump
+
+# Also ignore archive artifacts (built via "mix archive.build").
+*.ez
+
+# Don't include generated MAVLink file
+MAVLink.ex
+
+# Don't include iex startup script
+.iex.exs
+
+# Don't include any test outputs
+/test/output/*
+
+# Intellij
+.idea
+
+# Where we put message_definition XML files to be parsed
+# We don't want to include these in this repo because:
+# a) They change a lot.
+# b) No-one can decide on standards.
+
+/message_definitions
+
+# Example output directory for generated files.
+/output
+
+# macOS kruft
+
+.DS_Store
+/out/
+
+.elixir_ls/
