@@ -17,22 +17,18 @@ by adding `mavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:mavlink, "~> 0.9.0"}
+     {:xmavlink, "~> 0.1.0"}
    ]
  end
  ```
 
 ## Current Status
 
-![](https://github.com/beamuav/elixir-mavlink/workflows/Elixir/badge.svg)
-
 This library is not officially recognised or supported by MAVLink at this
-time. We aim over time to achieve complete compliance with the MAVLink 2.0
-specification, but our initial focus is on using this library on companion
-computers and ground stations for our team entry in the 
-[2020 UAV Outback Challenge](https://uavchallenge.org/medical-rescue/).
+time.
 
 ## Generating MAVLink Dialect Modules
+
 MAVLink message definition files for popular dialects can be found [here](https://github.com/mavlink/mavlink/tree/master/message_definitions/v1.0).
 To generate an Elixir source file containing the modules we need to speak a MAVLink dialect (for example ardupilotmega):
 
@@ -44,6 +40,7 @@ Generated APM in 'lib/apm.ex'.
 ```
 
 ## Configuring the MAVLink Application
+
 Add `MAVLink.Application` with no start arguments to your `mix.exs`. You need to point the application at the dialect you just generated 
 and list the connections to other vehicles in `config.exs`:
 
@@ -56,6 +53,7 @@ UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. R
 'in' means server.
 
 ## Receive MAVLink messages
+
 With the configured MAVLink application running you can subscribe to particular MAVLink messages:
 
 ```
@@ -108,6 +106,7 @@ MAV.pack_and_send(
 ```
 
 ## Router Architecture
+
 The MAVLink application is to Elixir/Erlang code what [MAVProxy](https://ardupilot.org/mavproxy/)
 is to its Python modules: a router that sits alongside them and gives them access to other MAVLink
 systems over its connections. Unlike MAVProxy it is not responsible for starting/stopping/scheduling
@@ -119,6 +118,7 @@ reconnect each second and continue routing frames on the remaining connections. 
 it will be automatically unsubscribed and any new subscriber will be responsible for reconnection.
 
 ## Roadmap
+
 - MAVLink microservice/protocol helpers (see [elixir_mavlink_util](https://github.com/beamuav/elixir_mavlink_util))
 - Signed MAVLink v2 messages
 
