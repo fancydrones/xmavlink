@@ -1,31 +1,31 @@
-defmodule MAVLink.SerialConnection do
+defmodule XMAVLink.SerialConnection do
   @moduledoc """
-  MAVLink.Router delegate for Serial connections
+  XMAVLink.Router delegate for Serial connections
   """
-  
+
   @smallest_mavlink_message 8
-  
+
   require Logger
-  
-  alias MAVLink.Frame
+
+  alias XMAVLink.Frame
   alias Circuits.UART
-  
-  import MAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
-  
-  
+
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+
+
   defstruct [
     port: nil,
     baud: nil,
     uart: nil,
     buffer: <<>>]
-  @type t :: %MAVLink.SerialConnection{
+  @type t :: %XMAVLink.SerialConnection{
                port: binary,
                baud: non_neg_integer,
                uart: pid,
                buffer: binary}
-  
-  
-  def handle_info({:circuits_uart, port, raw}, receiving_connection=%MAVLink.SerialConnection{buffer: buffer}, dialect) do
+
+
+  def handle_info({:circuits_uart, port, raw}, receiving_connection=%XMAVLink.SerialConnection{buffer: buffer}, dialect) do
     case binary_to_frame_and_tail(buffer <> raw) do
       :not_a_frame ->
         # Noise or malformed frame
@@ -52,8 +52,8 @@ defmodule MAVLink.SerialConnection do
         end
     end
   end
-  
-  
+
+
   def connect(["serial", port, baud, uart], controlling_process) do
     if Map.has_key?(UART.enumerate(), port) do
       case UART.open(uart, port, speed: baud, active: true) do
@@ -65,7 +65,7 @@ defmodule MAVLink.SerialConnection do
               :add_connection,
               port,
               struct(
-                MAVLink.SerialConnection,
+                XMAVLink.SerialConnection,
                 [port: port, baud: baud, uart: uart]
               )
             }
@@ -82,14 +82,14 @@ defmodule MAVLink.SerialConnection do
       connect(["serial", port, baud, uart], controlling_process)
     end
   end
-  
-  
-  def forward(%MAVLink.SerialConnection{uart: uart},
+
+
+  def forward(%XMAVLink.SerialConnection{uart: uart},
       %Frame{version: 1, mavlink_1_raw: packet}) do
     UART.write(uart, packet)
   end
-  
-  def forward(%MAVLink.SerialConnection{uart: uart},
+
+  def forward(%XMAVLink.SerialConnection{uart: uart},
       %Frame{version: 2, mavlink_2_raw: packet}) do
     UART.write(uart, packet)
   end

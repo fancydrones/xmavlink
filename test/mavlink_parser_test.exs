@@ -1,16 +1,16 @@
-defmodule MAVLink.Test.Parser do
+defmodule XMAVLink.Test.Parser do
   use ExUnit.Case
-  import MAVLink.Parser
-  
-  
+  import XMAVLink.Parser
+
+
   @root_dir File.cwd!
-  
-  
+
+
   test "parse mavlink XML no such file" do
     assert {:error, "File 'snark' does not exist"} = parse_mavlink_xml("snark")
   end
-  
-  
+
+
   test "parse mini mavlink XML" do
     assert %{
              dialect: "0",
@@ -279,8 +279,8 @@ defmodule MAVLink.Test.Parser do
              version: "3"
            } = parse_mavlink_xml("#{@root_dir}/test/input/test_mavlink.xml")
   end
-  
-  
+
+
   test "extension fields identified" do
     assert  %{
               dialect: "0",
@@ -349,8 +349,8 @@ defmodule MAVLink.Test.Parser do
               version: "2"
             } = parse_mavlink_xml("#{@root_dir}/test/input/test_extensions.xml")
   end
-  
-  
+
+
   test "parse mini mavlink with include" do
     assert %{
              dialect: "0",

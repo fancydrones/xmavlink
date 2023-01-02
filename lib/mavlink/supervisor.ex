@@ -1,12 +1,12 @@
-defmodule MAVLink.Supervisor do
+defmodule XMAVLink.Supervisor do
   @moduledoc false
-  
+
   use Supervisor
 
 
-  
+
   def start_link(_) do
-    Supervisor.start_link(__MODULE__, [], name: :"MAVLink.Supervisor")
+    Supervisor.start_link(__MODULE__, [], name: :"XMAVLink.Supervisor")
   end
 
   @impl true
@@ -15,24 +15,24 @@ defmodule MAVLink.Supervisor do
       :poolboy.child_spec(
         :worker,
         [
-          name: {:local, MAVLink.UARTPool},
+          name: {:local, XMAVLink.UARTPool},
           worker_module: Circuits.UART,
           size: 0,
           max_overflow: 10  # How many serial ports might you need?
         ]
       ),
       {
-        MAVLink.Router,
+        XMAVLink.Router,
         %{
-          dialect: Application.get_env(:mavlink, :dialect),
-          system: Application.get_env(:mavlink, :system_id),
-          component: Application.get_env(:mavlink, :component_id),
-          connection_strings: Application.get_env(:mavlink, :connections)
+          dialect: Application.get_env(:xmavlink, :dialect),
+          system: Application.get_env(:xmavlink, :system_id),
+          component: Application.get_env(:xmavlink, :component_id),
+          connection_strings: Application.get_env(:xmavlink, :connections)
         }
       }
     ]
 
     Supervisor.init(children, strategy: :one_for_all)
   end
-  
+
 end

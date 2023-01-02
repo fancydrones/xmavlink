@@ -1,7 +1,7 @@
-defmodule MAVLink.Parser do
+defmodule XMAVLink.Parser do
   @moduledoc """
   Parse a mavlink xml file into an idiomatic Elixir representation:
-  
+
   %{
       version: 2,
       dialect: 0,
@@ -47,31 +47,31 @@ defmodule MAVLink.Parser do
       ]
    }
   """
-  
- 
+
+
   import Enum, only: [empty?: 1, reduce: 3, reverse: 1, map: 2, sort_by: 2, into: 3, filter: 2]
   import List, only: [first: 1]
   import Record, only: [defrecord: 2, extract: 2]
   import Regex, only: [replace: 3]
   import String, only: [to_integer: 1, downcase: 1, to_atom: 1, split: 3]
 
-  
+
   @xmerl_header "xmerl/include/xmerl.hrl"
   defrecord :xmlElement, extract(:xmlElement, from_lib: @xmerl_header)
   defrecord :xmlAttribute, extract(:xmlAttribute, from_lib: @xmerl_header)
   defrecord :xmlText, extract(:xmlText, from_lib: @xmerl_header)
-  
+
   @spec parse_mavlink_xml(String.t) :: %{version: integer, dialect: integer, enums: [ enum_description ], messages: [ message_description ]} | {:error, :enoent}
   def parse_mavlink_xml(path) do
     parse_mavlink_xml(path, %{}) |> Map.values |> combine_definitions
   end
-  
-  
+
+
   def parse_mavlink_xml(path, paths) do
     case Map.has_key?(paths, path) do
       true ->
         paths   # Don't include a file twice
-    
+
       false ->
         case :xmerl_scan.file(path) do
           {defs, []} ->
@@ -84,7 +84,7 @@ defmodule MAVLink.Parser do
                 parse_mavlink_xml(include_path, acc)
               end
             )
-            
+
             # And add ourselves to paths if we're not already there through a circular dependency
             version = :xmerl_xpath.string('/mavlink/version/text()', defs) |> extract_text |> nil_to_zero_string
             Map.put_new(paths, path, %{
@@ -93,14 +93,14 @@ defmodule MAVLink.Parser do
               enums:    (for enum <- :xmerl_xpath.string('/mavlink/enums/enum', defs), do: parse_enum(enum)),
               messages: (for msg <- :xmerl_xpath.string('/mavlink/messages/message', defs), do: parse_message(msg, version))
             })
-            
+
           {:error, :enoent} ->
             Map.put(paths, path, {:error, "File '#{path}' does not exist"})
         end
     end
   end
-  
-  
+
+
   # See https://mavlink.io/en/guide/xml_schema.html, mavparse.py merge_enums() and
   # check_duplicates() for proper validation. If making changes to definitions test
   # first with mavgen for now.
@@ -108,7 +108,7 @@ defmodule MAVLink.Parser do
   def combine_definitions([single_def]) do
     single_def
   end
-  
+
   def combine_definitions([
     %{
       version:  v1,
@@ -130,28 +130,28 @@ defmodule MAVLink.Parser do
         messages: sort_by(m1 ++ m2, & &1.id)
        } | more_definitions])
   end
-  
-  
+
+
   def merge_enums(as, bs) do
     a_index = into(as, %{}, fn (enum) -> {enum.name, enum} end)
     b_index = into(bs, %{}, fn (enum) -> {enum.name, enum} end)
     only_in_a = for name <- filter(Map.keys(a_index), & !Map.has_key?(b_index, &1)), do: a_index[name]
     only_in_b = for name <- filter(Map.keys(b_index), & !Map.has_key?(a_index, &1)), do: b_index[name]
-    
+
     in_a_and_b = for name <- filter(Map.keys(a_index), & Map.has_key?(b_index, &1)) do
       %{a_index[name] | entries:  sort_by(a_index[name].entries ++ b_index[name].entries, & &1.value)}
     end
-    
+
     sort_by(only_in_a ++ in_a_and_b ++ only_in_b, & &1.name)
   end
-  
-  
+
+
   @type enum_description :: %{
     name:         atom,
     description:  String.t,
     entries:      [ entry_description ]
   }
-  
+
   @spec parse_enum(tuple) :: enum_description
   defp parse_enum(element) do
     %{
@@ -160,15 +160,15 @@ defmodule MAVLink.Parser do
       entries:      (for entry <- :xmerl_xpath.string('/enum/entry', element), do: parse_entry(entry))
     }
   end
-  
-  
+
+
   @type entry_description :: %{
     value:        integer | nil,
     name:         atom,
     description:  String.t,
     params:       [ param_description ]
   }
-  
+
   @spec parse_entry(tuple) :: entry_description
   defp parse_entry(element) do
     value_attr = :xmerl_xpath.string('@value', element) # Apparently optional in common.xml?
@@ -179,13 +179,13 @@ defmodule MAVLink.Parser do
       params:       (for param <- :xmerl_xpath.string('/entry/param', element), do: parse_param(param))
     }
   end
-  
-  
+
+
   @type param_description :: %{
     index:        integer,
     description:  String.t
   }
-  
+
   @spec parse_param(tuple) :: param_description
   defp parse_param(element) do
     %{
@@ -193,8 +193,8 @@ defmodule MAVLink.Parser do
       description:  :xmerl_xpath.string('/param/text()', element) |> extract_text,
     }
   end
-  
-  
+
+
   @type message_description :: %{
     id:             integer,
     name:           String.t,
@@ -202,7 +202,7 @@ defmodule MAVLink.Parser do
     has_ext_fields: boolean,
     fields:         [ field_description ]
   }
-  
+
   @spec parse_message(tuple, String.t) :: message_description
   defp parse_message(element, version) do
     message_description = reduce(
@@ -226,8 +226,8 @@ defmodule MAVLink.Parser do
       end)
     %{message_description | fields: reverse(message_description.fields)}
   end
-  
-  
+
+
   @type field_description :: %{
     type:         String.t,
     ordinality:   integer,
@@ -241,7 +241,7 @@ defmodule MAVLink.Parser do
     units:        atom | nil,
     description:  String.t
   }
-  
+
   @spec parse_field(tuple, binary(), boolean) :: field_description
   defp parse_field(element, version, is_extension_field) do
     {type, ordinality, omit_arg, constant_val} =
@@ -263,8 +263,8 @@ defmodule MAVLink.Parser do
       description:  :xmerl_xpath.string('/field/text()', element) |> extract_text |> nil_to_empty_string
     }
   end
-  
-  
+
+
   @spec parse_type_ordinality_omit_arg_constant_val(String.t, String.t) :: {String.t, integer, boolean, String.t | nil}
   defp parse_type_ordinality_omit_arg_constant_val(type_string, version) do
     [type | ordinality] = type_string
@@ -287,34 +287,34 @@ defmodule MAVLink.Parser do
         }
     end
   end
-  
-  
+
+
   # TODO Can't spec this without causing dialyzer "nil can't match binary" - Erlang types?
   defp extract_text([xml]), do: extract_text(xml)
   defp extract_text(xmlText(value: value)), do: clean_string(value)
   defp extract_text(xmlAttribute(value: value)), do: clean_string(value)
   defp extract_text(_), do: nil
-  
-  
+
+
   @spec clean_string([ char ] | binary) :: String.t
   defp clean_string(s) do
     trimmed = s |> List.to_string |> String.trim
     replace(~r/\s+/, trimmed, " ")
   end
-  
-  
+
+
   @spec nil_to_empty_string(String.t | nil) :: String.t
   defp nil_to_empty_string(nil), do: ""
   defp nil_to_empty_string(value) when is_binary(value), do: value
-  
+
   @spec nil_to_zero_string(String.t | nil) :: String.t
   defp nil_to_zero_string(nil), do: "0"
   defp nil_to_zero_string(value) when is_binary(value), do: value
-  
-  
+
+
   @spec to_atom_or_nil(String.t | nil) :: atom | nil
   defp to_atom_or_nil(nil), do: nil
   defp to_atom_or_nil(""), do: nil
   defp to_atom_or_nil(value) when is_binary(value), do: to_atom(value)
-  
+
 end

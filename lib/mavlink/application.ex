@@ -1,13 +1,13 @@
-defmodule MAVLink.Application do
+defmodule XMAVLink.Application do
   @moduledoc false
-  
-  
+
+
   use Application
-  
-  
+
+
   def start(_, _) do
-    children = [MAVLink.Supervisor]
+    children = [XMAVLink.Supervisor]
     Supervisor.start_link(children, strategy: :one_for_one)
   end
-  
+
 end

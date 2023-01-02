@@ -1,4 +1,4 @@
-# MAVLink
+# XMAVLink
 
 This library includes a mix task that generates code from a MAVLink xml
 definition files and an application that enables communication with other
@@ -12,7 +12,7 @@ on MAVLink see https://mavlink.io.
 ## Installation
 
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
-by adding `mavlink` to your list of dependencies in `mix.exs`:
+by adding `xmavlink` to your list of dependencies in `mix.exs`:
 
   ```elixir
  def deps do
@@ -33,19 +33,19 @@ MAVLink message definition files for popular dialects can be found [here](https:
 To generate an Elixir source file containing the modules we need to speak a MAVLink dialect (for example ardupilotmega):
 
 ```
-> mix mavlink test/input/ardupilotmega.xml lib/apm.ex APM
+> mix xmavlink test/input/ardupilotmega.xml lib/apm.ex APM
 * creating lib/apm.ex
 Generated APM in 'lib/apm.ex'.
 >
 ```
 
-## Configuring the MAVLink Application
+## Configuring the XMAVLink Application
 
-Add `MAVLink.Application` with no start arguments to your `mix.exs`. You need to point the application at the dialect you just generated 
+Add `XMAVLink.Application` with no start arguments to your `mix.exs`. You need to point the application at the dialect you just generated 
 and list the connections to other vehicles in `config.exs`:
 
 ```
-config :mavlink, dialect: APM, connections: ["serial:/dev/cu.usbserial-A603KH3Y:57600", "udpout:127.0.0.1:14550", "tcpout:127.0.0.1:5760"]
+config :xmavlink, dialect: APM, connections: ["serial:/dev/cu.usbserial-A603KH3Y:57600", "udpout:127.0.0.1:14550", "tcpout:127.0.0.1:5760"]
 ```
 
 The above config specifies the APM dialect we generated and connects to a a vehicle on a radio modem, a ground station listening for 
@@ -57,7 +57,7 @@ UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. R
 With the configured MAVLink application running you can subscribe to particular MAVLink messages:
 
 ```
-alias MAVLink.Router, as: MAV
+alias XMAVLink.Router, as: MAV
 
 defmodule Echo do
   def run() do
@@ -76,7 +76,7 @@ Echo.run()
 or send a MAVLink message:
 
 ```
-alias MAVLink.Router, as: MAV
+alias XMAVLink.Router, as: MAV
 alias APM.Message.RcChannelsOverride
 
 MAV.pack_and_send(
@@ -107,7 +107,7 @@ MAV.pack_and_send(
 
 ## Router Architecture
 
-The MAVLink application is to Elixir/Erlang code what [MAVProxy](https://ardupilot.org/mavproxy/)
+The XMAVLink application is to Elixir/Erlang code what [MAVProxy](https://ardupilot.org/mavproxy/)
 is to its Python modules: a router that sits alongside them and gives them access to other MAVLink
 systems over its connections. Unlike MAVProxy it is not responsible for starting/stopping/scheduling
 Elixir/Erlang code.
@@ -119,7 +119,7 @@ it will be automatically unsubscribed and any new subscriber will be responsible
 
 ## Roadmap
 
-- MAVLink microservice/protocol helpers (see [elixir_mavlink_util](https://github.com/beamuav/elixir_mavlink_util))
+- MAVLink microservice/protocol helpers (see [xmavlink_util](https://github.com/fancydrones/xmavlink+util))
 - Signed MAVLink v2 messages
 
 ## Source

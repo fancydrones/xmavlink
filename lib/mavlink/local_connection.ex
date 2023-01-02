@@ -1,19 +1,19 @@
-defmodule MAVLink.LocalConnection do
+defmodule XMAVLink.LocalConnection do
   @moduledoc false
-  # MAVLink.Router delegate for local connections, i.e
+  # XMAVLink.Router delegate for local connections, i.e
   # Elixir processes using the Router API to subscribe to
   # and send MAVLink messages.
 
-  
-  
+
+
   require Logger
-  
+
   import Enum, only: [reduce: 3, filter: 2]
-  
-  alias MAVLink.Frame
-  alias MAVLink.LocalConnection
-  
-  
+
+  alias XMAVLink.Frame
+  alias XMAVLink.LocalConnection
+
+
   defstruct [
     system: nil,
     component: nil,
@@ -26,8 +26,8 @@ defmodule MAVLink.LocalConnection do
                 subscriptions: [],
                 sequence_number: 0..255
              }
-             
-             
+
+
   # Handle message from Router.pack_and_send()
   # We use handle_info instead of cast for symmetry
   # with the other connection types
@@ -46,8 +46,8 @@ defmodule MAVLink.LocalConnection do
       struct(frame, [source_system: system, source_component: component, sequence_number: sequence_number]) |> Frame.pack_frame
     }
   end
-  
-  
+
+
   def connect(:local, system, component) do
     local_connection = struct(LocalConnection, [system: system, component: component])
     send(
@@ -55,25 +55,25 @@ defmodule MAVLink.LocalConnection do
       {
         :add_connection,
         :local,
-        case Agent.start(fn -> [] end, name: MAVLink.SubscriptionCache) do
+        case Agent.start(fn -> [] end, name: XMAVLink.SubscriptionCache) do
           {:ok, _} ->
             :ok = Logger.debug("Started Subscription Cache")
             local_connection  # No subscriptions to restore
           {:error, {:already_started, _}} ->
             :ok = Logger.debug("Restoring subscriptions from Subscription Cache")
             reduce(
-              Agent.get(MAVLink.SubscriptionCache, fn subs -> subs end),
+              Agent.get(XMAVLink.SubscriptionCache, fn subs -> subs end),
               local_connection,
               fn {query, pid}, lc -> subscribe(query, pid, lc)  end)
         end
       }
     )
   end
-  
-  
+
+
   def forward(to_connection, frame = %Frame{message: nil}) do
-    # If we couldn't unpack the message set the message_type to MAVLink.UnknownMessage
-    forward(to_connection, struct(frame, message: %{__struct__: MAVLink.UnknownMessage}))
+    # If we couldn't unpack the message set the message_type to XMAVLink.UnknownMessage
+    forward(to_connection, struct(frame, message: %{__struct__: XMAVLink.UnknownMessage}))
   end
   def forward(
          %LocalConnection{
@@ -105,7 +105,7 @@ defmodule MAVLink.LocalConnection do
       end
     end
   end
-  
+
 
   # Subscription request from subscriber
   def subscribe(query, pid, local_connection) do
@@ -121,8 +121,8 @@ defmodule MAVLink.LocalConnection do
       )
     }
   end
-  
-  
+
+
   # Unsubscribe request from subscriber
   def unsubscribe(pid, local_connection) do
     :ok = Logger.debug("Unsubscribe #{inspect(pid)}")
@@ -134,8 +134,8 @@ defmodule MAVLink.LocalConnection do
       )
     }
   end
-  
-  
+
+
   # Automatically unsubscribe a dead subscriber process
   def subscriber_down(pid, local_connection) do
     :ok = Logger.debug("Subscriber #{inspect(pid)} exited")
@@ -147,12 +147,12 @@ defmodule MAVLink.LocalConnection do
       )
     }
   end
-  
-  
+
+
   defp update_subscription_cache(subscriptions) do
     :ok = Logger.debug("Update subscription cache: #{inspect(subscriptions)}")
-    Agent.update(MAVLink.SubscriptionCache, fn _ -> subscriptions end)
+    Agent.update(XMAVLink.SubscriptionCache, fn _ -> subscriptions end)
     subscriptions
   end
-  
+
 end

@@ -1,14 +1,14 @@
-defmodule MAVLink.Frame do
+defmodule XMAVLink.Frame do
   @moduledoc """
   Represent and work with MAVLink v1/2 message frames
   """
-  
-  
+
+
   require Logger
-  
-  import MAVLink.Utils, only: [x25_crc: 1, x25_crc: 2]
-  
-  
+
+  import XMAVLink.Utils, only: [x25_crc: 1, x25_crc: 2]
+
+
   defstruct [
     version: nil,              # Which raw attributes are populated?
     payload_length: nil,
@@ -29,9 +29,9 @@ defmodule MAVLink.Frame do
     mavlink_2_raw: nil,
     message: nil
   ]
-  @type message :: MAVLink.Message.t
+  @type message :: XMAVLink.Message.t
   @type version :: 1 | 2
-  @type t :: %MAVLink.Frame{
+  @type t :: %XMAVLink.Frame{
                 version: version,
                 payload_length: 1..255,
                 incompatible_flags: non_neg_integer,
@@ -42,17 +42,17 @@ defmodule MAVLink.Frame do
                 target_system: 1..255,
                 target_component: 1..255,
                 target: :broadcast | :system | :system_component | :component,
-                message_id: MAVLink.Types.message_id,
-                crc_extra: MAVLink.Types.crc_extra,
+                message_id: XMAVLink.Types.message_id,
+                crc_extra: XMAVLink.Types.crc_extra,
                 payload: binary,
                 checksum: pos_integer,
                 mavlink_1_raw: binary,
                 mavlink_2_raw: binary,
                 message: message
              }
-             
- 
-  @spec binary_to_frame_and_tail(binary) :: {MAVLink.Frame.t, binary} | {nil, binary} | :not_a_frame
+
+
+  @spec binary_to_frame_and_tail(binary) :: {XMAVLink.Frame.t, binary} | {nil, binary} | :not_a_frame
   def binary_to_frame_and_tail(raw_and_rest=<<0xfe, # MAVLink version 1
       payload_length::unsigned-integer-size(8),
       sequence_number::unsigned-integer-size(8),
@@ -63,7 +63,7 @@ defmodule MAVLink.Frame do
       checksum::little-unsigned-integer-size(16),
       rest::binary>>) do
     {
-      struct(MAVLink.Frame, [
+      struct(XMAVLink.Frame, [
         version: 1,
         payload_length: payload_length,
         sequence_number: sequence_number,
@@ -80,7 +80,7 @@ defmodule MAVLink.Frame do
       rest
     }
   end
-  
+
   def binary_to_frame_and_tail(raw_and_rest=<<0xfd, # MAVLink version 2
       payload_length::unsigned-integer-size(8),
       incompatible_flags::unsigned-integer-size(8),
@@ -96,7 +96,7 @@ defmodule MAVLink.Frame do
       0 ->
         # Vanilla MAVLink 2, we can deal with this
         {
-          struct(MAVLink.Frame, [
+          struct(XMAVLink.Frame, [
             version: 2,
             payload_length: payload_length,
             incompatible_flags: 0,
@@ -120,15 +120,15 @@ defmodule MAVLink.Frame do
         {nil, rest}
     end
   end
-  
+
   def binary_to_frame_and_tail(unfinished_mavlink_1_frame=<<0xfe, _::binary>>), do: {nil, unfinished_mavlink_1_frame}
   def binary_to_frame_and_tail(unfinished_mavlink_2_frame=<<0xfd, _::binary>>), do: {nil, unfinished_mavlink_2_frame}
   def binary_to_frame_and_tail(<<_, rest::binary>>), do: binary_to_frame_and_tail(rest)
   def binary_to_frame_and_tail(<<>>), do: :not_a_frame
-  
-  
-  @spec validate_and_unpack(MAVLink.Frame.t, module) :: {:ok, MAVLink.Frame.t} | :failed_to_unpack | :checksum_invalid | :unknown_message
-  def validate_and_unpack(frame=%MAVLink.Frame{message_id: message_id, version: version, payload: payload}, dialect) do
+
+
+  @spec validate_and_unpack(XMAVLink.Frame.t, module) :: {:ok, XMAVLink.Frame.t} | :failed_to_unpack | :checksum_invalid | :unknown_message
+  def validate_and_unpack(frame=%XMAVLink.Frame{message_id: message_id, version: version, payload: payload}, dialect) do
     case apply(dialect, :msg_attributes, [message_id]) do
       {:ok, crc_extra, expected_length, target} ->
         if frame.checksum == (:binary.bin_to_list(
@@ -194,10 +194,10 @@ defmodule MAVLink.Frame do
         :unknown_message
     end
   end
-  
-  
+
+
   # Pack message frame
-  def pack_frame(frame=%MAVLink.Frame{version: 1}) do
+  def pack_frame(frame=%XMAVLink.Frame{version: 1}) do
     payload_length = byte_size(frame.payload)
     mavlink_1_frame = <<payload_length::unsigned-integer-size(8),
               frame.sequence_number::unsigned-integer-size(8),
@@ -205,13 +205,13 @@ defmodule MAVLink.Frame do
               frame.source_component::unsigned-integer-size(8),
               frame.message_id::little-unsigned-integer-size(8),
               frame.payload::binary()>>
-    
+
     frame |> struct([
       mavlink_1_raw: <<0xfe>> <> mavlink_1_frame <> checksum(mavlink_1_frame, frame.crc_extra)
     ])
   end
-  
-  def pack_frame(frame=%MAVLink.Frame{version: 2}) do
+
+  def pack_frame(frame=%XMAVLink.Frame{version: 2}) do
     {truncated_length, truncated_payload} = truncate_payload(frame.payload)
     mavlink_2_frame = <<truncated_length::unsigned-integer-size(8),
               0::unsigned-integer-size(8),  # Incompatible flags
@@ -225,8 +225,8 @@ defmodule MAVLink.Frame do
       mavlink_2_raw: <<0xfd>> <> mavlink_2_frame <> checksum(mavlink_2_frame, frame.crc_extra)
     ])
   end
-  
-  
+
+
   # MAVLink 2 truncate trailing 0s in payload
   defp truncate_payload(payload) do
     truncated_payload = String.replace_trailing(payload, <<0>>, "")
@@ -236,12 +236,12 @@ defmodule MAVLink.Frame do
       {byte_size(truncated_payload), truncated_payload}
     end
   end
-  
-  
+
+
   # Calculate checksum
   defp checksum(frame, crc_extra) do
     cs = x25_crc(frame <> <<crc_extra::unsigned-integer-size(8)>>)
     <<cs::little-unsigned-integer-size(16)>>
   end
-  
+
 end

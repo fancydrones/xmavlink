@@ -1,27 +1,27 @@
-defmodule MAVLink.UDPOutConnection do
+defmodule XMAVLink.UDPOutConnection do
   @moduledoc """
-  MAVLink.Router delegate for UDP connections
+  XMAVLink.Router delegate for UDP connections
   """
-  
+
   require Logger
-  import MAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
-  alias MAVLink.Frame
-  
-  
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  alias XMAVLink.Frame
+
+
   defstruct [
     address: nil,
     port: nil,
     socket: nil]
-  @type t :: %MAVLink.UDPOutConnection{
-               address: MAVLink.Types.net_address,
-               port: MAVLink.Types.net_port,
+  @type t :: %XMAVLink.UDPOutConnection{
+               address: XMAVLink.Types.net_address,
+               port: XMAVLink.Types.net_port,
                socket: pid}
-  
+
   # Create connection if this is the first time we've received on it
   def handle_info({:udp, socket, source_addr, source_port, raw}, nil, dialect) do
     handle_info(
       {:udp, socket, source_addr, source_port, raw},
-      %MAVLink.UDPOutConnection{address: source_addr, port: source_port, socket: socket},
+      %XMAVLink.UDPOutConnection{address: source_addr, port: source_port, socket: socket},
       dialect)
   end
 
@@ -49,8 +49,8 @@ defmodule MAVLink.UDPOutConnection do
         end
     end
   end
-  
-  
+
+
   def connect(["udpout", address, port], controlling_process) do
     case :gen_udp.open(0, [:binary, ip: address, active: :true]) do
       {:ok, socket} ->
@@ -61,7 +61,7 @@ defmodule MAVLink.UDPOutConnection do
             :add_connection,
             socket,
             struct(
-              MAVLink.UDPOutConnection,
+              XMAVLink.UDPOutConnection,
               [socket: socket, address: address, port: port]
             )
           }
@@ -73,15 +73,15 @@ defmodule MAVLink.UDPOutConnection do
         connect(["udpout", address, port], controlling_process)
     end
   end
-  
-  
-  def forward(%MAVLink.UDPOutConnection{
+
+
+  def forward(%XMAVLink.UDPOutConnection{
       socket: socket, address: address, port: port},
       %Frame{version: 1, mavlink_1_raw: packet}) do
     :gen_udp.send(socket, address, port, packet)
   end
-  
-  def forward(%MAVLink.UDPOutConnection{
+
+  def forward(%XMAVLink.UDPOutConnection{
       socket: socket, address: address, port: port},
       %Frame{version: 2, mavlink_2_raw: packet}) do
     :gen_udp.send(socket, address, port, packet)

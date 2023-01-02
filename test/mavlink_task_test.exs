@@ -1,6 +1,6 @@
-defmodule MAVLink.Test.Tasks do
+defmodule XMAVLink.Test.Tasks do
   use ExUnit.Case
-  import Mix.Tasks.Mavlink
+  import Mix.Tasks.XMavlink
 
   @input "#{File.cwd!()}/test/input/test_mavlink.xml"
   @output_dir "#{File.cwd!()}/test/output"
@@ -24,10 +24,10 @@ defmodule MAVLink.Test.Tasks do
     # Confirm the list of modules generated from common.xml and its includes
     pairs = Enum.zip(
       [
-        MAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
-        MAVLink.Message.TestMavlink.Message.Data16,
-        MAVLink.Message.TestMavlink.Message.Heartbeat,
-        MAVLink.Message.TestMavlink.Message.VfrHud,
+        XMAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
+        XMAVLink.Message.TestMavlink.Message.Data16,
+        XMAVLink.Message.TestMavlink.Message.Heartbeat,
+        XMAVLink.Message.TestMavlink.Message.VfrHud,
         TestMavlink,
         TestMavlink.Message.ChangeOperatorControl,
         TestMavlink.Message.Data16,
@@ -42,6 +42,6 @@ defmodule MAVLink.Test.Tasks do
     for {expected, actual} <- pairs do
       assert expected == actual
     end
-    
+
   end
 end

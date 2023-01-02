@@ -1,10 +1,10 @@
-defprotocol MAVLink.Message do
-  @spec pack(MAVLink.Message.t(), 1|2) ::
+defprotocol XMAVLink.Message do
+  @spec pack(XMAVLink.Message.t(), 1|2) ::
           {
-            :ok, MAVLink.Types.message_id,
+            :ok, XMAVLink.Types.message_id,
             {
               :ok,
-              MAVLink.Types.crc_extra,
+              XMAVLink.Types.crc_extra,
               pos_integer,
               :broadcast | :system | :system_component | :component
             }, binary()} | {:error, String.t}
@@ -12,6 +12,6 @@ defprotocol MAVLink.Message do
 end
 
 
-defimpl MAVLink.Message, for: [Atom, BitString, Float, Function, Integer, List, Map, PID, Port, Reference, Tuple] do
+defimpl XMAVLink.Message, for: [Atom, BitString, Float, Function, Integer, List, Map, PID, Port, Reference, Tuple] do
   def pack(not_a_message, _), do: {:error, "pack(): #{inspect(not_a_message)} is not a MAVLink message"}
 end

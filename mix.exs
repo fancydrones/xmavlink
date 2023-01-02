@@ -1,4 +1,4 @@
-defmodule MAVLink.Mixfile do
+defmodule XMAVLink.Mixfile do
   use Mix.Project
 
   def project do
@@ -27,15 +27,15 @@ defmodule MAVLink.Mixfile do
   @doc """
   Override environment variables in config.exs e.g:
 
-  config :mavlink, dialect: APM
-  config :mavlink, system_id: 1
-  config :mavlink, component_id: 1
-  config :mavlink, connections: ["udp:192.168.0.10:14550"]
+  config :xmavlink, dialect: APM
+  config :xmavlink, system_id: 1
+  config :xmavlink, component_id: 1
+  config :xmavlink, connections: ["udp:192.168.0.10:14550"]
   """
   def application do
     [
       env: [
-        # Dialect module generated using mix mavlink
+        # Dialect module generated using mix xmavlink
         dialect: nil,
         # Default to ground station-ish system id
         system_id: 245,
@@ -43,7 +43,7 @@ defmodule MAVLink.Mixfile do
         component_id: 250,
         connections: []
       ],
-      mod: {MAVLink.Application, []},
+      mod: {XMAVLink.Application, []},
       extra_applications: [:logger]
     ]
   end

@@ -1,22 +1,22 @@
-defmodule MAVLink.TCPOutConnection do
+defmodule XMAVLink.TCPOutConnection do
   @moduledoc """
   MAVLink.Router delegate for TCP connections
   Typically used to connect to SITL on port 5760
   """
-  
+
   @smallest_mavlink_message 8
-  
+
   require Logger
-  alias MAVLink.Frame
-  
-  import MAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
-  
-  
+  alias XMAVLink.Frame
+
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+
+
   defstruct [socket: nil, address: nil, port: nil, buffer: <<>>]
-  @type t :: %MAVLink.TCPOutConnection{socket: pid, address: MAVLink.Types.net_address, port: MAVLink.Types.net_port, buffer: binary}
-  
-  
-  def handle_info({:tcp, socket, raw}, receiving_connection=%MAVLink.TCPOutConnection{buffer: buffer}, dialect) do
+  @type t :: %XMAVLink.TCPOutConnection{socket: pid, address: XMAVLink.Types.net_address, port: XMAVLink.Types.net_port, buffer: binary}
+
+
+  def handle_info({:tcp, socket, raw}, receiving_connection=%XMAVLink.TCPOutConnection{buffer: buffer}, dialect) do
     case binary_to_frame_and_tail(buffer <> raw) do
       :not_a_frame ->
         # Noise or malformed frame
@@ -43,8 +43,8 @@ defmodule MAVLink.TCPOutConnection do
         end
     end
   end
-  
-  
+
+
   def connect(["tcpout", address, port], controlling_process) do
     case :gen_tcp.connect(address, port, [:binary, active: :true]) do
       {:ok, socket} ->
@@ -55,7 +55,7 @@ defmodule MAVLink.TCPOutConnection do
             :add_connection,
             socket,
             struct(
-              MAVLink.TCPOutConnection,
+              XMAVLink.TCPOutConnection,
               [socket: socket, address: address, port: port]
             )
           }
@@ -67,14 +67,14 @@ defmodule MAVLink.TCPOutConnection do
         connect(["tcpout", address, port], controlling_process)
     end
   end
-  
-  
-  def forward(%MAVLink.TCPOutConnection{socket: socket},
+
+
+  def forward(%XMAVLink.TCPOutConnection{socket: socket},
       %Frame{version: 1, mavlink_1_raw: packet}) do
     :gen_udp.send(socket, packet)
   end
-  
-  def forward(%MAVLink.TCPOutConnection{socket: socket},
+
+  def forward(%XMAVLink.TCPOutConnection{socket: socket},
       %Frame{version: 2, mavlink_2_raw: packet}) do
     :gen_udp.send(socket, packet)
   end
