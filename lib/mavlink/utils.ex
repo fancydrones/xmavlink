@@ -5,8 +5,7 @@ defmodule XMAVLink.Utils do
   in mavutils.py
   """
 
-
-  use Bitwise, only_operators: true
+  import Bitwise
 
 
   import List, only: [flatten: 1]
@@ -46,7 +45,7 @@ defmodule XMAVLink.Utils do
 
 
   def eight_bit_checksum(value) do
-    (value &&& 0xFF) ^^^ (value >>> 8)
+    Bitwise.bxor((value &&& 0xFF), (value >>> 8))
   end
 
 
@@ -79,9 +78,9 @@ defmodule XMAVLink.Utils do
 
 
   defp x25_accumulate(crc, value) do
-    tmp = value ^^^ (crc &&& 0xff)
-    tmp = (tmp ^^^ (tmp <<< 4)) &&& 0xff
-    crc = (crc >>> 8) ^^^ (tmp <<< 8) ^^^ (tmp <<< 3) ^^^ (tmp >>> 4)
+    tmp = Bitwise.bxor(value, (crc &&& 0xff))
+    tmp = (Bitwise.bxor(tmp, (tmp <<< 4))) &&& 0xff
+    crc = Bitwise.bxor(Bitwise.bxor(Bitwise.bxor((crc >>> 8), (tmp <<< 8)), (tmp <<< 3)), (tmp >>> 4))
     crc &&& 0xffff
   end
 

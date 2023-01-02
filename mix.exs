@@ -44,7 +44,7 @@ defmodule XMAVLink.Mixfile do
         connections: []
       ],
       mod: {XMAVLink.Application, []},
-      extra_applications: [:logger]
+      extra_applications: [:logger, :xmerl]
     ]
   end
 
