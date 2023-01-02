@@ -27,7 +27,7 @@ defmodule XMAVLink.Mixfile do
   @doc """
   Override environment variables in config.exs e.g:
 
-  config :xmavlink, dialect: APM
+  config :xmavlink, dialect: Common
   config :xmavlink, system_id: 1
   config :xmavlink, component_id: 1
   config :xmavlink, connections: ["udp:192.168.0.10:14550"]
