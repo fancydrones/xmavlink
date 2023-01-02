@@ -185,7 +185,7 @@ defmodule XMAVLink.Router do
 
   ```
     XMAVLink.Router.pack_and_send(
-      %APM.RcChannelsOverride{
+      %Common.RcChannelsOverride{
         target_system: 1,
         target_component: 1,
         chan1_raw: 1500,

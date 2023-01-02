@@ -45,10 +45,10 @@ Add `XMAVLink.Application` with no start arguments to your `mix.exs`. You need t
 and list the connections to other vehicles in `config.exs`:
 
 ```
-config :xmavlink, dialect: APM, connections: ["serial:/dev/cu.usbserial-A603KH3Y:57600", "udpout:127.0.0.1:14550", "tcpout:127.0.0.1:5760"]
+config :xmavlink, dialect: Common, connections: ["serial:/dev/cu.usbserial-A603KH3Y:57600", "udpout:127.0.0.1:14550", "tcpout:127.0.0.1:5760"]
 ```
 
-The above config specifies the APM dialect we generated and connects to a a vehicle on a radio modem, a ground station listening for 
+The above config specifies the Common dialect we generated and connects to a a vehicle on a radio modem, a ground station listening for 
 UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. Remember 'out' means client, 
 'in' means server.
 
@@ -77,7 +77,7 @@ or send a MAVLink message:
 
 ```
 alias XMAVLink.Router, as: MAV
-alias APM.Message.RcChannelsOverride
+alias Common.Message.RcChannelsOverride
 
 MAV.pack_and_send(
   %RcChannelsOverride{
