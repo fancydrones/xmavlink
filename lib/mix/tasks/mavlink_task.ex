@@ -1,4 +1,4 @@
-defmodule Mix.Tasks.XMavlink do # Mavlink case required for `mix mavlink ...` to work
+defmodule Mix.Tasks.Xmavlink do # Xmavlink case required for `mix xmavlink ...` to work
   use Mix.Task
 
 

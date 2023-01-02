@@ -1,6 +1,6 @@
 defmodule XMAVLink.Test.Tasks do
   use ExUnit.Case
-  import Mix.Tasks.XMavlink
+  import Mix.Tasks.Xmavlink
 
   @input "#{File.cwd!()}/test/input/test_mavlink.xml"
   @output_dir "#{File.cwd!()}/test/output"
