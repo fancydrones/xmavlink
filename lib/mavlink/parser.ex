@@ -298,7 +298,7 @@ defmodule XMAVLink.Parser do
 
   @spec clean_string([ char ] | binary) :: String.t
   defp clean_string(s) do
-    trimmed = s |> List.to_string |> String.trim
+    trimmed = s |> List.to_string |> String.trim |> String.replace("\"", "'")
     replace(~r/\s+/, trimmed, " ")
   end
 
