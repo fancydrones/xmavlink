@@ -126,7 +126,7 @@ defmodule XMAVLink.Test.Parser do
                    },
                    %{
                      constant_val: nil,
-                     description: "Password / Key, depending on version plaintext or encrypted. 25 or less characters, NULL terminated. The characters may involve A-Z, a-z, 0-9, and \"!?,.-\"",
+                     description: "Password / Key, depending on version plaintext or encrypted. 25 or less characters, NULL terminated. The characters may involve A-Z, a-z, 0-9, and '!?,.-'",
                      display: nil,
                      enum: "",
                      is_extension: false,
