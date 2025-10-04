@@ -93,12 +93,12 @@ defmodule XMAVLink.SerialConnection do
           UART.controlling_process(uart, controlling_process)
 
         {:error, _} ->
-          :ok = Logger.warn("Could not open serial port #{port}. Retrying in 1 second")
+          :ok = Logger.warning("Could not open serial port #{port}. Retrying in 1 second")
           :timer.sleep(1000)
           connect(["serial", port, baud, uart], controlling_process)
       end
     else
-      :ok = Logger.warn("Serial port #{port} not attached. Retrying in 1 second")
+      :ok = Logger.warning("Serial port #{port} not attached. Retrying in 1 second")
       :timer.sleep(1000)
       connect(["serial", port, baud, uart], controlling_process)
     end

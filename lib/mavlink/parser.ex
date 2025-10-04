@@ -83,7 +83,7 @@ defmodule XMAVLink.Parser do
             # Recursively add new includes to paths
             paths =
               reduce(
-                :xmerl_xpath.string('/mavlink/include/text()', defs) |> map(&extract_text/1),
+                :xmerl_xpath.string(~c"/mavlink/include/text()", defs) |> map(&extract_text/1),
                 paths,
                 fn next_include, acc ->
                   include_path = Path.dirname(path) <> "/" <> next_include
@@ -93,24 +93,24 @@ defmodule XMAVLink.Parser do
 
             # And add ourselves to paths if we're not already there through a circular dependency
             version =
-              :xmerl_xpath.string('/mavlink/version/text()', defs)
+              :xmerl_xpath.string(~c"/mavlink/version/text()", defs)
               |> extract_text
               |> nil_to_zero_string
 
             Map.put_new(paths, path, %{
               version: version,
               dialect:
-                :xmerl_xpath.string('/mavlink/dialect/text()', defs)
+                :xmerl_xpath.string(~c"/mavlink/dialect/text()", defs)
                 |> extract_text
                 |> nil_to_zero_string,
               enums:
                 for(
-                  enum <- :xmerl_xpath.string('/mavlink/enums/enum', defs),
+                  enum <- :xmerl_xpath.string(~c"/mavlink/enums/enum", defs),
                   do: parse_enum(enum)
                 ),
               messages:
                 for(
-                  msg <- :xmerl_xpath.string('/mavlink/messages/message', defs),
+                  msg <- :xmerl_xpath.string(~c"/mavlink/messages/message", defs),
                   do: parse_message(msg, version)
                 )
             })
@@ -186,12 +186,12 @@ defmodule XMAVLink.Parser do
   @spec parse_enum(tuple) :: enum_description
   defp parse_enum(element) do
     %{
-      name: :xmerl_xpath.string('@name', element) |> extract_text |> downcase |> to_atom,
+      name: :xmerl_xpath.string(~c"@name", element) |> extract_text |> downcase |> to_atom,
       description:
-        :xmerl_xpath.string('/enum/description/text()', element)
+        :xmerl_xpath.string(~c"/enum/description/text()", element)
         |> extract_text
         |> nil_to_empty_string,
-      entries: for(entry <- :xmerl_xpath.string('/enum/entry', element), do: parse_entry(entry))
+      entries: for(entry <- :xmerl_xpath.string(~c"/enum/entry", element), do: parse_entry(entry))
     }
   end
 
@@ -205,16 +205,16 @@ defmodule XMAVLink.Parser do
   @spec parse_entry(tuple) :: entry_description
   defp parse_entry(element) do
     # Apparently optional in common.xml?
-    value_attr = :xmerl_xpath.string('@value', element)
+    value_attr = :xmerl_xpath.string(~c"@value", element)
 
     %{
       value: if(not empty?(value_attr), do: extract_text(value_attr) |> to_integer, else: nil),
-      name: :xmerl_xpath.string('@name', element) |> extract_text |> downcase |> to_atom,
+      name: :xmerl_xpath.string(~c"@name", element) |> extract_text |> downcase |> to_atom,
       description:
-        :xmerl_xpath.string('/entry/description/text()', element)
+        :xmerl_xpath.string(~c"/entry/description/text()", element)
         |> extract_text
         |> nil_to_empty_string,
-      params: for(param <- :xmerl_xpath.string('/entry/param', element), do: parse_param(param))
+      params: for(param <- :xmerl_xpath.string(~c"/entry/param", element), do: parse_param(param))
     }
   end
 
@@ -226,8 +226,8 @@ defmodule XMAVLink.Parser do
   @spec parse_param(tuple) :: param_description
   defp parse_param(element) do
     %{
-      index: :xmerl_xpath.string('@index', element) |> extract_text |> to_integer,
-      description: :xmerl_xpath.string('/param/text()', element) |> extract_text
+      index: :xmerl_xpath.string(~c"@index", element) |> extract_text |> to_integer,
+      description: :xmerl_xpath.string(~c"/param/text()", element) |> extract_text
     }
   end
 
@@ -245,10 +245,10 @@ defmodule XMAVLink.Parser do
       reduce(
         xmlElement(element, :content),
         %{
-          id: :xmerl_xpath.string('@id', element) |> extract_text |> to_integer,
-          name: :xmerl_xpath.string('@name', element) |> extract_text,
+          id: :xmerl_xpath.string(~c"@id", element) |> extract_text |> to_integer,
+          name: :xmerl_xpath.string(~c"@name", element) |> extract_text,
           description:
-            :xmerl_xpath.string('/message/description/text()', element) |> extract_text,
+            :xmerl_xpath.string(~c"/message/description/text()", element) |> extract_text,
           has_ext_fields: false,
           fields: []
         },
@@ -286,7 +286,7 @@ defmodule XMAVLink.Parser do
   @spec parse_field(tuple, binary(), boolean) :: field_description
   defp parse_field(element, version, is_extension_field) do
     {type, ordinality, omit_arg, constant_val} =
-      :xmerl_xpath.string('@type', element)
+      :xmerl_xpath.string(~c"@type", element)
       |> extract_text
       |> parse_type_ordinality_omit_arg_constant_val(version)
 
@@ -297,14 +297,14 @@ defmodule XMAVLink.Parser do
       is_extension: is_extension_field,
       constant_val: constant_val,
       # You can't downcase this, wrecks crc_extra calc for POWER_STATUS
-      name: :xmerl_xpath.string('@name', element) |> extract_text,
+      name: :xmerl_xpath.string(~c"@name", element) |> extract_text,
       enum:
-        :xmerl_xpath.string('@enum', element) |> extract_text |> nil_to_empty_string |> downcase,
-      display: :xmerl_xpath.string('@display', element) |> extract_text |> to_atom_or_nil,
-      print_format: :xmerl_xpath.string('@print_format', element) |> extract_text,
-      units: :xmerl_xpath.string('@units', element) |> extract_text |> to_atom_or_nil,
+        :xmerl_xpath.string(~c"@enum", element) |> extract_text |> nil_to_empty_string |> downcase,
+      display: :xmerl_xpath.string(~c"@display", element) |> extract_text |> to_atom_or_nil,
+      print_format: :xmerl_xpath.string(~c"@print_format", element) |> extract_text,
+      units: :xmerl_xpath.string(~c"@units", element) |> extract_text |> to_atom_or_nil,
       description:
-        :xmerl_xpath.string('/field/text()', element) |> extract_text |> nil_to_empty_string
+        :xmerl_xpath.string(~c"/field/text()", element) |> extract_text |> nil_to_empty_string
     }
   end
 

@@ -241,7 +241,7 @@ defmodule XMAVLink.Frame do
       <<payload_length::unsigned-integer-size(8), frame.sequence_number::unsigned-integer-size(8),
         frame.source_system::unsigned-integer-size(8),
         frame.source_component::unsigned-integer-size(8),
-        frame.message_id::little-unsigned-integer-size(8), frame.payload::binary()>>
+        frame.message_id::little-unsigned-integer-size(8), frame.payload::binary>>
 
     frame
     |> struct(
@@ -263,7 +263,7 @@ defmodule XMAVLink.Frame do
         frame.source_system::unsigned-integer-size(8),
         frame.source_component::unsigned-integer-size(8),
         frame.message_id::little-unsigned-integer-size(24),
-        truncated_payload::binary()
+        truncated_payload::binary
       >>
 
     struct(frame,

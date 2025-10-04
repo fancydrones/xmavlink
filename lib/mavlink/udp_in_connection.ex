@@ -73,7 +73,7 @@ defmodule XMAVLink.UDPInConnection do
 
       other ->
         :ok =
-          Logger.warn(
+          Logger.warning(
             "Could not open udpin:#{Enum.join(Tuple.to_list(address), ".")}:#{port}: #{inspect(other)}. Retrying in 1 second"
           )
 
