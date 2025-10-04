@@ -1,6 +1,7 @@
 name: Elixir
 
-on: push
+on:
+  pull_request:
 
 jobs:
   build:
@@ -11,11 +12,10 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
-      - name: Install make
+      - name: Install dependencies
         run: |
           apt-get update
-          apt-get install make -y
-          apt-get install build-essential -y
+          apt-get install -y ca-certificates make build-essential
 
       - name: Install Dependencies
         run: |
