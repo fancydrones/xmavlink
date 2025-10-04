@@ -1,7 +1,6 @@
 name: Elixir
 
 on:
-  push:
   pull_request:
 
 jobs:
