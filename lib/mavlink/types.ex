@@ -4,7 +4,11 @@ defmodule XMAVLink.Types do
   """
 
   @typedoc "Connection delegate modules for XMAVLink.Router"
-  @type connection ::  XMAVLink.SerialConnection | XMAVLink.TCPConnection | XMAVLink.UDPInConnection | XMAVLink.UDPOutConnection
+  @type connection ::
+          XMAVLink.SerialConnection
+          | XMAVLink.TCPConnection
+          | XMAVLink.UDPInConnection
+          | XMAVLink.UDPOutConnection
 
   @typedoc "A system/component id tuple"
   @type mavlink_address :: {0..255, 0..255}
@@ -22,13 +26,24 @@ defmodule XMAVLink.Types do
   @type net_port :: 1024..65535
 
   @typedoc "A parameter description"
-  @type param_description :: {pos_integer, String.t}
+  @type param_description :: {pos_integer, String.t()}
 
   @typedoc "A list of parameter descriptions"
-  @type param_description_list :: [ param_description ]
+  @type param_description_list :: [param_description]
 
   @typedoc "Type used for field in encoded message"
-  @type field_type :: int8_t | int16_t | int32_t | int64_t | uint8_t | uint16_t | uint32_t | uint64_t | char | float | double
+  @type field_type ::
+          int8_t
+          | int16_t
+          | int32_t
+          | int64_t
+          | uint8_t
+          | uint16_t
+          | uint32_t
+          | uint64_t
+          | char
+          | float
+          | double
 
   @typedoc "8-bit signed integer"
   @type int8_t :: -128..127
@@ -65,5 +80,4 @@ defmodule XMAVLink.Types do
 
   @typedoc "A CRC_EXTRA checksum"
   @type crc_extra :: 0..255
-
 end

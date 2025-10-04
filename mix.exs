@@ -50,10 +50,10 @@ defmodule XMAVLink.Mixfile do
 
   defp deps do
     [
-      {:circuits_uart, "~> 1.5.1"},
+      {:circuits_uart, "~> 1.5"},
       {:poolboy, "~> 1.5"},
-      {:dialyzex, "~> 1.3.0", only: :dev, runtime: false},
-      {:ex_doc, "~> 0.29.1", only: :dev, runtime: false}
+      {:dialyxir, "~> 1.4", only: :dev, runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false}
     ]
   end
 

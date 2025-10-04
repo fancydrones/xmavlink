@@ -22,27 +22,28 @@ defmodule XMAVLink.Test.Tasks do
     Code.compiler_options(ignore_module_conflict: true)
 
     # Confirm the list of modules generated from common.xml and its includes
-    pairs = Enum.zip(
-      [
-        XMAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
-        XMAVLink.Message.TestMavlink.Message.Data16,
-        XMAVLink.Message.TestMavlink.Message.Heartbeat,
-        XMAVLink.Message.TestMavlink.Message.VfrHud,
-        TestMavlink,
-        TestMavlink.Message.ChangeOperatorControl,
-        TestMavlink.Message.Data16,
-        TestMavlink.Message.Heartbeat,
-        TestMavlink.Message.VfrHud,
-        TestMavlink.Types]
+    pairs =
+      Enum.zip(
+        [
+          XMAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
+          XMAVLink.Message.TestMavlink.Message.Data16,
+          XMAVLink.Message.TestMavlink.Message.Heartbeat,
+          XMAVLink.Message.TestMavlink.Message.VfrHud,
+          TestMavlink,
+          TestMavlink.Message.ChangeOperatorControl,
+          TestMavlink.Message.Data16,
+          TestMavlink.Message.Heartbeat,
+          TestMavlink.Message.VfrHud,
+          TestMavlink.Types
+        ]
         |> Enum.sort(),
-      Code.compile_file(@output)
-      |> Keyword.keys()
-      |> Enum.sort()
-    )
+        Code.compile_file(@output)
+        |> Keyword.keys()
+        |> Enum.sort()
+      )
 
     for {expected, actual} <- pairs do
       assert expected == actual
     end
-
   end
 end

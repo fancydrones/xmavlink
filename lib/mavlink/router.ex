@@ -30,7 +30,6 @@ defmodule XMAVLink.Router do
   alias XMAVLink.UDPOutConnection
   alias Circuits.UART
 
-
   @typedoc """
   Represents the state of the XMAVLink.Router. Initial values should be set in config.exs.
 
@@ -57,22 +56,25 @@ defmodule XMAVLink.Router do
                         system/component was last received on. Used to forward messages to that system/component.
   """
   defstruct [
-    dialect: nil,                             # Generated dialect module
-    connection_strings: [],                   # Connection descriptions from user
-    connections: %{},                         # %{socket|port|local: XMAVLink.*_Connection}
-    routes: %{}                               # Connection and MAVLink version tuple keyed by MAVLink addresses
+    # Generated dialect module
+    dialect: nil,
+    # Connection descriptions from user
+    connection_strings: [],
+    # %{socket|port|local: XMAVLink.*_Connection}
+    connections: %{},
+    # Connection and MAVLink version tuple keyed by MAVLink addresses
+    routes: %{}
   ]
-  @type mavlink_address :: Types.mavlink_address  # Can't used qualified type as map key
-  @type mavlink_connection :: Types.connection
+
+  # Can't used qualified type as map key
+  @type mavlink_address :: Types.mavlink_address()
+  @type mavlink_connection :: Types.connection()
   @type t :: %Router{
-               dialect: module | nil,
-               connection_strings: [ String.t ],
-               connections: %{},
-               routes: %{mavlink_address: {mavlink_connection, Types.version}}
-             }
-
-
-
+          dialect: module | nil,
+          connection_strings: [String.t()],
+          connections: %{},
+          routes: %{mavlink_address: {mavlink_connection, Types.version()}}
+        }
 
   ##############
   # Router API #
@@ -98,15 +100,16 @@ defmodule XMAVLink.Router do
   - opts:               Standard GenServer options
   """
   @spec start_link(
-          %{system: 1..255, component: 1..255, dialect: module, connection_strings: [String.t]},
-          [{atom, any}]) :: {:ok, pid}
+          %{system: 1..255, component: 1..255, dialect: module, connection_strings: [String.t()]},
+          [{atom, any}]
+        ) :: {:ok, pid}
   def start_link(args, opts \\ []) do
     GenServer.start_link(
       __MODULE__,
       args,
-      [{:name, __MODULE__} | opts])
+      [{:name, __MODULE__} | opts]
+    )
   end
-
 
   @doc """
   Subscribes the calling process to MAVLink messages from the installed dialect matching the query.
@@ -128,11 +131,14 @@ defmodule XMAVLink.Router do
     XMAVLink.Router.subscribe message: XMAVLink.Message.Heartbeat, source_system: 1
   ```
   """
-  @type subscribe_query_id_key :: :source_system | :source_component | :target_system | :target_component
-  @spec subscribe([{:message, Message.t} | {subscribe_query_id_key, 0..255} | {:as_frame, boolean}]) :: :ok
+  @type subscribe_query_id_key ::
+          :source_system | :source_component | :target_system | :target_component
+  @spec subscribe([
+          {:message, Message.t()} | {subscribe_query_id_key, 0..255} | {:as_frame, boolean}
+        ]) :: :ok
   def subscribe(query \\ []) do
     with message <- Keyword.get(query, :message),
-        true <- message == nil or Code.ensure_loaded?(message) do
+         true <- message == nil or Code.ensure_loaded?(message) do
       GenServer.cast(
         __MODULE__,
         {
@@ -156,7 +162,6 @@ defmodule XMAVLink.Router do
     end
   end
 
-
   @doc """
   Un-subscribes calling process from all existing subscriptions
 
@@ -168,8 +173,6 @@ defmodule XMAVLink.Router do
   """
   @spec unsubscribe() :: :ok
   def unsubscribe(), do: GenServer.cast(__MODULE__, {:unsubscribe, self()})
-
-
 
   @doc """
   Send a MAVLink message to one or more recipients using available
@@ -215,11 +218,14 @@ defmodule XMAVLink.Router do
     # system/component and sequence number for frame
     try do
       {:ok, message_id, {:ok, crc_extra, _, target}, payload} = Message.pack(message, version)
-      {target_system, target_component} = if target != :broadcast do
-        {message.target_system, Map.get(message, :target_component, 0)}
-      else
-        {0, 0}
-      end
+
+      {target_system, target_component} =
+        if target != :broadcast do
+          {message.target_system, Map.get(message, :target_component, 0)}
+        else
+          {0, 0}
+        end
+
       # Although Router is a GenServer we still use send for symmetry because this arrives as
       # a vanilla message, just like messages from a udp/tcp/serial port, and is dealt with in
       # a similar way using handle_info()
@@ -227,7 +233,7 @@ defmodule XMAVLink.Router do
         __MODULE__,
         {
           :local,
-          struct(Frame, [
+          struct(Frame,
             version: version,
             message_id: message_id,
             target_system: target_system,
@@ -235,9 +241,11 @@ defmodule XMAVLink.Router do
             target: target,
             message: message,
             payload: payload,
-            crc_extra: crc_extra])
+            crc_extra: crc_extra
+          )
         }
       )
+
       :ok
     rescue
       # Need to catch Protocol.UndefinedError - happens with SimState (Common) and Simstate (APM)
@@ -248,9 +256,6 @@ defmodule XMAVLink.Router do
         {:error, :protocol_undefined}
     end
   end
-
-
-
 
   #######################
   # GenServer Callbacks #
@@ -270,36 +275,44 @@ defmodule XMAVLink.Router do
     {:ok, %Router{dialect: args.dialect, connection_strings: args.connection_strings}}
   end
 
-
   @impl true
   # Call to subscribe() API
   def handle_cast({:subscribe, query, pid}, state) do
-    {:noreply, update_in(state, [Access.key!(:connections), :local], &LocalConnection.subscribe(query, pid, &1))}
+    {:noreply,
+     update_in(
+       state,
+       [Access.key!(:connections), :local],
+       &LocalConnection.subscribe(query, pid, &1)
+     )}
   end
 
   # Call to unsubscribe() API
   def handle_cast({:unsubscribe, pid}, state) do
-    {:noreply, update_in(state, [Access.key!(:connections), :local], &LocalConnection.unsubscribe(pid, &1))}
+    {:noreply,
+     update_in(state, [Access.key!(:connections), :local], &LocalConnection.unsubscribe(pid, &1))}
   end
-
 
   @impl true
   # Receive data on UDP connection
-  def handle_info(message = {:udp, socket, address, port, _},
-        state = %Router{connections: connections, dialect: dialect}) do
+  def handle_info(
+        message = {:udp, socket, address, port, _},
+        state = %Router{connections: connections, dialect: dialect}
+      ) do
     {
-       :noreply,
-       case connections[{socket, address, port}] do
-         connection = %UDPInConnection{} ->
-           UDPInConnection.handle_info(message, connection, dialect)
-         connection = %UDPOutConnection{} ->
-           UDPOutConnection.handle_info(message, connection, dialect)
-         nil ->
-           # New previously unseen UDPIn client
-           UDPInConnection.handle_info(message, nil, dialect)
-       end
-       |> update_route_info(state)
-       |> route
+      :noreply,
+      case connections[{socket, address, port}] do
+        connection = %UDPInConnection{} ->
+          UDPInConnection.handle_info(message, connection, dialect)
+
+        connection = %UDPOutConnection{} ->
+          UDPOutConnection.handle_info(message, connection, dialect)
+
+        nil ->
+          # New previously unseen UDPIn client
+          UDPInConnection.handle_info(message, nil, dialect)
+      end
+      |> update_route_info(state)
+      |> route
     }
   end
 
@@ -316,10 +329,9 @@ defmodule XMAVLink.Router do
   # Unlike UDP, TCP connections can close
   def handle_info({:tcp_closed, socket}, state) do
     %TCPOutConnection{address: address, port: port} = state.connections[socket]
-    spawn TCPOutConnection, :connect, [["tcpout", address, port], self()]
+    spawn(TCPOutConnection, :connect, [["tcpout", address, port], self()])
     {:noreply, remove_connection(socket, state)}
   end
-
 
   # Received data on serial connection
   def handle_info(message = {:circuits_uart, port, raw}, state) when is_binary(raw) do
@@ -334,7 +346,12 @@ defmodule XMAVLink.Router do
   # Received error on serial connection
   def handle_info({:circuits_uart, port, {:error, _reason}}, state) do
     %SerialConnection{baud: baud, uart: uart} = state.connections[port]
-    spawn SerialConnection, :connect, [["serial", port, baud, :poolboy.checkout(XMAVLink.UARTPool)], self()]
+
+    spawn(SerialConnection, :connect, [
+      ["serial", port, baud, :poolboy.checkout(XMAVLink.UARTPool)],
+      self()
+    ])
+
     :ok = UART.close(uart)
     # After checkout to make sure we get a fresh UART, this one might be reused later
     :poolboy.checkin(XMAVLink.UARTPool, uart)
@@ -342,7 +359,14 @@ defmodule XMAVLink.Router do
   end
 
   # A local subscribing Elixir process has crashed, remove them from our subscriber list
-  def handle_info({:DOWN, _, :process, pid, _}, state), do: {:noreply, update_in(state, [Access.key!(:connections), :local], &LocalConnection.subscriber_down(pid, &1))}
+  def handle_info({:DOWN, _, :process, pid, _}, state),
+    do:
+      {:noreply,
+       update_in(
+         state,
+         [Access.key!(:connections), :local],
+         &LocalConnection.subscriber_down(pid, &1)
+       )}
 
   # A call to pack_and_send() from a local Elixir process, sent as a vanilla message for symmetry with other connection types
   def handle_info({:local, frame}, state) do
@@ -356,13 +380,15 @@ defmodule XMAVLink.Router do
 
   # A spawned *Connection.connect() call has successfully got a
   # connection, and wants to add it to our connection list.
-  def handle_info({:add_connection, connection_key, connection},
-        state=%Router{connections: connections}) do
+  def handle_info(
+        {:add_connection, connection_key, connection},
+        state = %Router{connections: connections}
+      ) do
     {
       :noreply,
       struct(
         state,
-        [connections: Map.put(connections, connection_key, connection)]
+        connections: Map.put(connections, connection_key, connection)
       )
     }
   end
@@ -372,44 +398,53 @@ defmodule XMAVLink.Router do
     {:noreply, state}
   end
 
-
-
-
   ####################
   # Helper Functions #
   ####################
 
-
   # Handle user configured connections by spawning a process to try to connect. If successful they will send
   # us an :add_connection message with the details. The local connection gets added automatically.
-  defp connect(connection_string) when is_binary(connection_string), do: connect String.split(connection_string, [":", ","])
-  defp connect(tokens = ["udpin" | _]), do: spawn(UDPInConnection, :connect, [validate_address_and_port(tokens), self()])
-  defp connect(tokens = ["udpout" | _]), do: spawn(UDPOutConnection, :connect, [validate_address_and_port(tokens), self()])
-  defp connect(tokens = ["tcpout" | _]), do: spawn(TCPOutConnection, :connect, [validate_address_and_port(tokens), self()])
-  defp connect(tokens = ["serial" | _]), do: spawn(SerialConnection, :connect, [validate_port_and_baud(tokens), self()])
-  defp connect([invalid_protocol | _]), do: raise(ArgumentError, message: "invalid protocol #{invalid_protocol}")
+  defp connect(connection_string) when is_binary(connection_string),
+    do: connect(String.split(connection_string, [":", ","]))
 
+  defp connect(tokens = ["udpin" | _]),
+    do: spawn(UDPInConnection, :connect, [validate_address_and_port(tokens), self()])
+
+  defp connect(tokens = ["udpout" | _]),
+    do: spawn(UDPOutConnection, :connect, [validate_address_and_port(tokens), self()])
+
+  defp connect(tokens = ["tcpout" | _]),
+    do: spawn(TCPOutConnection, :connect, [validate_address_and_port(tokens), self()])
+
+  defp connect(tokens = ["serial" | _]),
+    do: spawn(SerialConnection, :connect, [validate_port_and_baud(tokens), self()])
+
+  defp connect([invalid_protocol | _]),
+    do: raise(ArgumentError, message: "invalid protocol #{invalid_protocol}")
 
   # Parse network connection strings
   defp validate_address_and_port([protocol, address, port]) do
     case {parse_ip_address(address), parse_positive_integer(port)} do
-      {{:error, :invalid_ip_address}, _}->
+      {{:error, :invalid_ip_address}, _} ->
         raise ArgumentError, message: "invalid ip address #{address}"
+
       {_, :error} ->
         raise ArgumentError, message: "invalid port #{port}"
+
       {parsed_address, parsed_port} ->
         [protocol, parsed_address, parsed_port]
     end
   end
-
 
   # Parse serial port connection string
   defp validate_port_and_baud(["serial", port, baud]) do
     case {is_binary(port), parse_positive_integer(baud)} do
       {false, _} ->
         raise ArgumentError, message: "Invalid port #{port}"
+
       {_, :error} ->
         raise ArgumentError, message: "invalid baud rate #{baud}"
+
       {true, parsed_baud} ->
         # Have to checkout from uart pool in main process because
         # poolboy monitors the process that calls checkout, and
@@ -421,135 +456,151 @@ defmodule XMAVLink.Router do
     end
   end
 
-
   # A handle_info() received an error and wants us to forget the borked connection
-  defp remove_connection(connection_key, state=%Router{connections: connections}) do
-    struct(state, [connections: Map.delete(connections, connection_key)])
+  defp remove_connection(connection_key, state = %Router{connections: connections}) do
+    struct(state, connections: Map.delete(connections, connection_key))
   end
-
 
   # Map system/component ids to connections on which they have been seen for targeted messages
   # Keep a list of all connections we have received messages from for broadcast messages
-  defp update_route_info({:ok,
-        source_connection_key,
-        source_connection,
-        frame=%Frame{
-          source_system: source_system,
-          source_component: source_component
-        }
-      },
-      state=%Router{routes: routes, connections: connections}) do
+  defp update_route_info(
+         {:ok, source_connection_key, source_connection,
+          frame = %Frame{
+            source_system: source_system,
+            source_component: source_component
+          }},
+         state = %Router{routes: routes, connections: connections}
+       ) do
     {
       :ok,
       source_connection_key,
       frame,
       struct(
         state,
-        [
-          routes:
-            # Don't add system/components from local connection to routes because local
-            # automatically matches everything in matching_system_components() and we
-            # don't want to receive messages twice
-            case source_connection_key do
-              :local ->
-                routes
-              _ ->
-                Map.put(
-                  routes,
-                  {source_system, source_component},
-                  source_connection_key)
-            end,
-          connections: Map.put(
+        # Don't add system/components from local connection to routes because local
+        # automatically matches everything in matching_system_components() and we
+        # don't want to receive messages twice
+        routes:
+          case source_connection_key do
+            :local ->
+              routes
+
+            _ ->
+              Map.put(
+                routes,
+                {source_system, source_component},
+                source_connection_key
+              )
+          end,
+        connections:
+          Map.put(
             connections,
             source_connection_key,
-            source_connection)
-        ]
+            source_connection
+          )
       )
     }
-
   end
 
   # Connection state still needs to be updated if there is an error
   defp update_route_info(
          {:error, reason, connection_key, connection},
-         state=%Router{connections: connections}) do
+         state = %Router{connections: connections}
+       ) do
     {
       :error,
       reason,
       struct(
         state,
-        [
-          connections: Map.put(
+        connections:
+          Map.put(
             connections,
             connection_key,
             connection
           )
-        ]
       )
     }
   end
 
-
   # Broadcast un-targeted messages to all connections except the
   # source we received the message from, unless it was local
-  defp route({:ok,
-        source_connection_key,
-        frame=%Frame{target: :broadcast},
-        state=%Router{connections: connections}}) do
+  defp route(
+         {:ok, source_connection_key, frame = %Frame{target: :broadcast},
+          state = %Router{connections: connections}}
+       ) do
     for {connection_key, connection} <- connections do
-      if  match?(:local, connection_key) or !match?(^connection_key, source_connection_key) do
+      if match?(:local, connection_key) or !match?(^connection_key, source_connection_key) do
         forward(connection, frame)
       end
     end
+
     state
   end
 
   # Only send targeted messages to observed system/components and local
   # Log warning if a message sent locally cannot reach its remote destination
-  defp route({:ok,
-        _,
-        frame=%Frame{
-          source_system: source_system, source_component: source_component,
-          target_system: target_system, target_component: target_component,
-          message: %{__struct__: message_type}},
-        state=%Router{connections: connections}}) do
+  defp route(
+         {:ok, _,
+          frame = %Frame{
+            source_system: source_system,
+            source_component: source_component,
+            target_system: target_system,
+            target_component: target_component,
+            message: %{__struct__: message_type}
+          }, state = %Router{connections: connections}}
+       ) do
     recipients = matching_system_components(target_system, target_component, state)
-    if match?({^recipients, ^source_system, ^source_component}, {[:local], connections.local.system, connections.local.component}) do
-      :ok = Logger.debug("Could not send message #{Atom.to_string(message_type)} to #{target_system}/#{target_component}: destination unreachable")
+
+    if match?(
+         {^recipients, ^source_system, ^source_component},
+         {[:local], connections.local.system, connections.local.component}
+       ) do
+      :ok =
+        Logger.debug(
+          "Could not send message #{Atom.to_string(message_type)} to #{target_system}/#{target_component}: destination unreachable"
+        )
     end
+
     for connection_key <- recipients do
       forward(connections[connection_key], frame)
     end
+
     state
   end
 
   # Swallow any errors from the handle_info |> update_connection_info pipeline
-  defp route({:error, _reason, state=%Router{}}), do: state
-
+  defp route({:error, _reason, state = %Router{}}), do: state
 
   # Known system/components matching target with 0 wildcard
   # Always include local connection because we get to snoop
   # on everybody's messages
-  defp matching_system_components(q_system, q_component,
-         %Router{routes: routes}) do
+  defp matching_system_components(q_system, q_component, %Router{routes: routes}) do
     [
-      :local |
-      Enum.filter(
-        routes,
-        fn {{sid, cid}, _} ->
+      :local
+      | Enum.filter(
+          routes,
+          fn {{sid, cid}, _} ->
             (q_system == 0 or q_system == sid) and
-            (q_component == 0 or q_component == cid)
-        end
-      ) |> Enum.map(fn  {_, ck} -> ck end)
+              (q_component == 0 or q_component == cid)
+          end
+        )
+        |> Enum.map(fn {_, ck} -> ck end)
     ]
   end
 
-
   # Delegate sending a message to connection-type specific code
-  defp forward(connection=%UDPInConnection{}, frame), do: UDPInConnection.forward(connection, frame)
-  defp forward(connection=%UDPOutConnection{}, frame), do: UDPOutConnection.forward(connection, frame)
-  defp forward(connection=%TCPOutConnection{}, frame), do: TCPOutConnection.forward(connection, frame)
-  defp forward(connection=%SerialConnection{}, frame), do: SerialConnection.forward(connection, frame)
-  defp forward(connection=%LocalConnection{}, frame), do: LocalConnection.forward(connection, frame)
+  defp forward(connection = %UDPInConnection{}, frame),
+    do: UDPInConnection.forward(connection, frame)
 
+  defp forward(connection = %UDPOutConnection{}, frame),
+    do: UDPOutConnection.forward(connection, frame)
+
+  defp forward(connection = %TCPOutConnection{}, frame),
+    do: TCPOutConnection.forward(connection, frame)
+
+  defp forward(connection = %SerialConnection{}, frame),
+    do: SerialConnection.forward(connection, frame)
+
+  defp forward(connection = %LocalConnection{}, frame),
+    do: LocalConnection.forward(connection, frame)
 end
