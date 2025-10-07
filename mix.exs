@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.4.3",
+      version: "0.5.0",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -59,15 +59,16 @@ defmodule XMAVLink.Mixfile do
 
   defp description() do
     "A Mix task to generate code from a MAVLink xml definition file,
-    and an application that enables communication with other systems
+    an application that enables communication with other systems
     using the MAVLink 1.0 or 2.0 protocol over serial, UDP and TCP
-    connections."
+    connections, and utility modules for performing common MAVLink
+    commands and tasks with one or more remote vehicles."
   end
 
   defp package() do
     [
       name: "xmavlink",
-      files: ["lib", "mix.exs", "README.md", "LICENSE"],
+      files: ["lib", "priv", "mix.exs", "README.md", "LICENSE"],
       exclude_patterns: [".DS_Store"],
       licenses: ["MIT"],
       links: %{"Github" => "https://github.com/fancydrones/xmavlink"},
