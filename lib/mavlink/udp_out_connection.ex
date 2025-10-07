@@ -61,7 +61,7 @@ defmodule XMAVLink.UDPOutConnection do
   end
 
   def connect(["udpout", address, port], controlling_process) do
-    case :gen_udp.open(0, [:binary, ip: address, active: true]) do
+    case :gen_udp.open(0, [:binary, active: true]) do
       {:ok, socket} ->
         :ok = Logger.info("Opened udpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}")
 

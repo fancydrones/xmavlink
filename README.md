@@ -17,7 +17,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.4.1"}
+     {:xmavlink, "~> 0.5.0"}
    ]
  end
  ```
@@ -152,9 +152,20 @@ restored immediately. If a connection fails or is not available at startup the r
 reconnect each second and continue routing frames on the remaining connections. If a subscriber fails
 it will be automatically unsubscribed and any new subscriber will be responsible for reconnection.
 
+## Utilities
+
+As of version 0.5.0, XMAVLink includes utility modules (previously in the separate xmavlink_util package) for performing common MAVLink commands and tasks with remote vehicles. These utilities provide:
+
+- **Cache Manager**: Automatically caches received messages and parameters from visible MAV systems
+- **Focus Manager**: Manage focus on specific vehicles for streamlined interactive sessions
+- **Arm/Disarm**: Simple functions to arm and disarm vehicles
+- **Parameter Management**: Request and set vehicle parameters
+- **SITL Support**: Forward RC channels for Software-In-The-Loop simulation
+
+See the included `.iex.exs` file for convenient helper imports to use in IEx sessions, providing an interactive experience similar to MAVProxy.
+
 ## Roadmap
 
-- MAVLink microservice/protocol helpers (see [xmavlink_util](https://github.com/fancydrones/xmavlink+util))
 - Signed MAVLink v2 messages
 
 ## Source
