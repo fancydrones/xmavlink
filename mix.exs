@@ -58,9 +58,9 @@ defmodule XMAVLink.Mixfile do
   end
 
   defp description() do
-    "A Mix task to generate code from a MAVLink xml definition file,
+    "An elixir library for MAVLink,
     an application that enables communication with other systems
-    using the MAVLink 1.0 or 2.0 protocol over serial, UDP and TCP
+    using the MAVLink protocol over serial, UDP and TCP
     connections, and utility modules for performing common MAVLink
     commands and tasks with one or more remote vehicles."
   end
