@@ -16,7 +16,7 @@ defmodule XMAVLink.Router do
   use GenServer
   require Logger
 
-  import XMAVLink.Utils, only: [parse_ip_address: 1, parse_positive_integer: 1]
+  import XMAVLink.Utils, only: [resolve_address: 1, parse_positive_integer: 1]
   import Enum, only: [map: 2]
 
   alias XMAVLink.Types
@@ -424,14 +424,15 @@ defmodule XMAVLink.Router do
 
   # Parse network connection strings
   defp validate_address_and_port([protocol, address, port]) do
-    case {parse_ip_address(address), parse_positive_integer(port)} do
-      {{:error, :invalid_ip_address}, _} ->
-        raise ArgumentError, message: "invalid ip address #{address}"
+    case {resolve_address(address), parse_positive_integer(port)} do
+      {{:error, reason}, _} ->
+        raise ArgumentError,
+          message: "invalid address #{address}: #{inspect(reason)}"
 
       {_, :error} ->
         raise ArgumentError, message: "invalid port #{port}"
 
-      {parsed_address, parsed_port} ->
+      {{:ok, parsed_address}, parsed_port} ->
         [protocol, parsed_address, parsed_port]
     end
   end
