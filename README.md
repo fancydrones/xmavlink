@@ -52,6 +52,41 @@ The above config specifies the Common dialect we generated and connects to a a v
 UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. Remember 'out' means client, 
 'in' means server.
 
+### Connection String Formats
+
+XMAVLink supports the following connection string formats:
+
+- **Serial**: `serial:<device_path>:<baud_rate>` (e.g., `"serial:/dev/ttyUSB0:57600"`)
+- **UDP Out (client)**: `udpout:<address>:<port>` (e.g., `"udpout:192.168.1.100:14550"`)
+- **UDP In (server)**: `udpin:<address>:<port>` (e.g., `"udpin:0.0.0.0:14550"`)
+- **TCP Out (client)**: `tcpout:<address>:<port>` (e.g., `"tcpout:192.168.1.100:5760"`)
+- **TCP In (server)**: `tcpin:<address>:<port>` (e.g., `"tcpin:0.0.0.0:5760"`)
+
+### DNS Hostname Support
+
+As of version 0.4.2, XMAVLink supports DNS hostnames in addition to IP addresses for network connections. This is particularly useful in:
+
+- **Kubernetes/Docker environments** where services are accessed via DNS names
+- **Cloud deployments** where static IPs may not be available
+- **Development environments** using service discovery
+
+Examples:
+
+```elixir
+config :xmavlink,
+  dialect: APM.Dialect,
+  connections: [
+    # Using DNS hostname
+    "udpout:router-service.namespace.svc.cluster.local:14550",
+    # Using localhost
+    "tcpout:localhost:5760",
+    # Traditional IP address (still supported)
+    "udpout:192.168.1.100:14551"
+  ]
+```
+
+The router will automatically resolve DNS hostnames to IP addresses at startup. If a hostname cannot be resolved, the router will raise an `ArgumentError` with details about the resolution failure.
+
 ## Receive MAVLink messages
 
 With the configured MAVLink application running you can subscribe to particular MAVLink messages:

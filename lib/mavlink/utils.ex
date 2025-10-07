@@ -106,6 +106,38 @@ defmodule XMAVLink.Utils do
     unpack_array(rest, fun, [elem | lst])
   end
 
+  @doc """
+  Resolve an address string to an IP address tuple.
+
+  Accepts both IP addresses (e.g., "192.168.1.1") and DNS hostnames
+  (e.g., "service.namespace.svc.cluster.local").
+
+  Uses Erlang's `:inet.getaddr/2` for resolution, which handles both
+  IP addresses and DNS lookups.
+
+  Returns `{:ok, ip_tuple}` on success or `{:error, reason}` on failure.
+
+  ## Examples
+
+      iex> resolve_address("127.0.0.1")
+      {:ok, {127, 0, 0, 1}}
+
+      iex> resolve_address("localhost")
+      {:ok, {127, 0, 0, 1}}
+  """
+  def resolve_address(address) when is_binary(address) do
+    # Convert string to charlist for :inet.getaddr
+    charlist_address = String.to_charlist(address)
+
+    case :inet.getaddr(charlist_address, :inet) do
+      {:ok, ip_tuple} ->
+        {:ok, ip_tuple}
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
   @doc "Parse an ip address string into a tuple"
   def parse_ip_address(address) when is_binary(address) do
     parse_ip_address(String.split(address, "."), [], 0)

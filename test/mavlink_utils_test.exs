@@ -59,4 +59,22 @@ defmodule XMAVLink.Test.Utils do
     assert parse_ip_address("Burt") == {:error, :invalid_ip_address}
     assert parse_ip_address("192.168.1000.1") == {:error, :invalid_ip_address}
   end
+
+  test "resolve address with IP address" do
+    # Should resolve IP addresses directly
+    assert {:ok, {192, 168, 0, 10}} = resolve_address("192.168.0.10")
+    assert {:ok, {127, 0, 0, 1}} = resolve_address("127.0.0.1")
+    assert {:ok, {8, 8, 8, 8}} = resolve_address("8.8.8.8")
+  end
+
+  test "resolve address with DNS hostname" do
+    # Should resolve localhost to 127.0.0.1
+    assert {:ok, {127, 0, 0, 1}} = resolve_address("localhost")
+  end
+
+  test "resolve address with invalid hostname" do
+    # Should return error for invalid/unresolvable hostnames
+    assert {:error, _reason} =
+             resolve_address("this-hostname-definitely-does-not-exist-12345.invalid")
+  end
 end
