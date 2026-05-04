@@ -159,8 +159,10 @@ defmodule XMAVLink.Test.Router do
       assert :ok = Router.subscribe(source_system: 1)
 
       # The contract: by the time subscribe/1 returns, the subscription must
-      # already be present in the Router's local connection state. No mailbox
-      # flush, sleep, or :sys.get_state call should be required.
+      # already be present in the Router's local connection state — callers
+      # should not need a mailbox flush or sleep to observe it. We use
+      # :sys.get_state here purely for test introspection of internal state;
+      # production callers should never reach for it.
       state = :sys.get_state(XMAVLink.Router)
       subscriptions = state.connections[:local].subscriptions
       assert Enum.any?(subscriptions, fn {_query, subscriber} -> subscriber == self() end)
