@@ -87,6 +87,39 @@ config :xmavlink,
 
 The router will automatically resolve DNS hostnames to IP addresses at startup. If a hostname cannot be resolved, the router will raise an `ArgumentError` with details about the resolution failure.
 
+### Heartbeat emission
+
+Most MAVLink nodes (cameras, GCSes, companion computers, autopilots) must emit a `HEARTBEAT` roughly once per second so peers know they're alive. Without it, dynamic / peer-learning routers (including the reference `mavlink-router`) won't forward traffic to them. xmavlink does not emit `HEARTBEAT` by default; opt in via the `:heartbeat` config:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["udpout:127.0.0.1:14550"],
+  heartbeat: [
+    interval_ms: 1000,
+    message: %Common.Message.Heartbeat{
+      type: :mav_type_gcs,
+      autopilot: :mav_autopilot_invalid,
+      base_mode: MapSet.new(),
+      custom_mode: 0,
+      system_status: :mav_state_active,
+      mavlink_version: 3
+    }
+  ]
+```
+
+For nodes whose heartbeat reflects runtime state (`system_status`, `base_mode`, `custom_mode`), pass a `{module, function, args}` builder instead. The MFA is invoked on every tick to produce a fresh struct:
+
+```elixir
+config :xmavlink,
+  heartbeat: [
+    interval_ms: 1000,
+    builder: {MyApp.Mavlink, :build_heartbeat, []}
+  ]
+```
+
+The first heartbeat is sent immediately so peer-learning routers admit the node within milliseconds of startup. If `:heartbeat` is unset or `nil`, no heartbeats are emitted (backwards-compatible with versions ≤ 0.6.0; consumers that emit their own heartbeats are unaffected).
+
 ## Receive MAVLink messages
 
 With the configured MAVLink application running you can subscribe to particular MAVLink messages:
