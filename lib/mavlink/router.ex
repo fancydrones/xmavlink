@@ -139,7 +139,11 @@ defmodule XMAVLink.Router do
   def subscribe(query \\ []) do
     with message <- Keyword.get(query, :message),
          true <- message == nil or Code.ensure_loaded?(message) do
-      GenServer.cast(
+      # Synchronous: returns only after the subscription is committed to the
+      # Router state. This prevents a race where the caller sends an outbound
+      # message that elicits a reply before the inbound subscription is in
+      # place, causing the reply to be dropped.
+      GenServer.call(
         __MODULE__,
         {
           :subscribe,
@@ -277,8 +281,8 @@ defmodule XMAVLink.Router do
 
   @impl true
   # Call to subscribe() API
-  def handle_cast({:subscribe, query, pid}, state) do
-    {:noreply,
+  def handle_call({:subscribe, query, pid}, _from, state) do
+    {:reply, :ok,
      update_in(
        state,
        [Access.key!(:connections), :local],
@@ -286,6 +290,7 @@ defmodule XMAVLink.Router do
      )}
   end
 
+  @impl true
   # Call to unsubscribe() API
   def handle_cast({:unsubscribe, pid}, state) do
     {:noreply,
