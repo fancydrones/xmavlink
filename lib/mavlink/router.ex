@@ -559,10 +559,18 @@ defmodule XMAVLink.Router do
     state
   end
 
-  # Only send targeted messages to observed system/components and local
+  # Only send targeted messages to observed system/components and local.
+  # Excludes the source connection so we never echo a frame back to the
+  # connection we received it from — symmetric with the broadcast clause
+  # above. Without this, a frame received via udpout from sysid=N gets
+  # the route `routes[{N, _}] = source_socket` registered, then any
+  # targeted frame with target_system=0 (wildcard) — e.g. TIMESYNC,
+  # which the dialect classifies as `:system_component` even with target
+  # fields set to 0 — would have the source-socket connection in
+  # recipients and forward back out the udpout.
   # Log warning if a message sent locally cannot reach its remote destination
   defp route(
-         {:ok, _,
+         {:ok, source_connection_key,
           frame = %Frame{
             source_system: source_system,
             source_component: source_component,
@@ -571,7 +579,9 @@ defmodule XMAVLink.Router do
             message: %{__struct__: message_type}
           }, state = %Router{connections: connections}}
        ) do
-    recipients = matching_system_components(target_system, target_component, state)
+    recipients =
+      matching_system_components(target_system, target_component, state)
+      |> Enum.reject(fn key -> key == source_connection_key end)
 
     if match?(
          {^recipients, ^source_system, ^source_component},

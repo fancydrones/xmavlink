@@ -193,6 +193,74 @@ defmodule XMAVLink.Test.Router do
       GenServer.stop(router_pid)
     end
 
+    # Regression for the secondary echo path: even after the broadcast-clause
+    # fix above, a frame whose dialect classification is `:system_component`
+    # (e.g. TIMESYNC, msg_id 111) goes through the *targeted* `route/1`
+    # clause. That clause computes recipients via `matching_system_components`
+    # which always includes `:local` and any connection in `routes` that
+    # matches the target. With `target_system=0` (wildcard, as PX4's
+    # TIMESYNC sends), every entry in `routes` matches — including the
+    # UDPOut socket the frame just arrived on (because we just registered
+    # `routes[{source_system, source_component}] = source_connection_key`).
+    # Without source-exclusion, the targeted clause would forward the frame
+    # back out the same UDPOut, producing the same echo as the broadcast
+    # path did before 0.6.2.
+    test "TIMESYNC reply is not echoed back via the udpout (regression: targeted route clause source-exclusion)" do
+      # A real UDP listener stands in for the peer the udpout would forward
+      # to. If the router echoes the frame, bytes arrive at this socket
+      # and we'll detect it via `assert_receive`/`refute_receive`.
+      {:ok, trap_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, trap_port} = :inet.port(trap_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:#{trap_port}"]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(trap_socket)
+
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      udpout_socket = wait_for_udpout_socket(router_pid)
+
+      # TIMESYNC v2 frame from sysid=1/compid=1 (PX4-style): msg_id 111,
+      # target_system=0, target_component=0. CRC validates under Common.
+      # Captured from a production xmavlink emitter.
+      raw_timesync =
+        <<0xFD, 0x0D, 0x00, 0x00, 0x37, 0x01, 0x01, 0x6F, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x00, 0x00, 0x00, 0x00, 0xF8, 0x17, 0xE4, 0x36, 0x1B, 0x14, 0x31>>
+
+      # Inject as if the reply arrived from a NAT'd source IP. The
+      # specific IP doesn't matter for the targeted-clause echo bug —
+      # what matters is that `routes[{1,1}]` ends up pointing at the
+      # udpout_socket, which it does as soon as we attribute the frame
+      # to the UDPOut.
+      fake_reply_ip = {10, 42, 0, 1}
+      send(router_pid, {:udp, udpout_socket, fake_reply_ip, trap_port, raw_timesync})
+
+      # Sync with the router process.
+      _state = :sys.get_state(router_pid)
+
+      # If the router echoes, the trap socket's controlling process
+      # (us) receives a `{:udp, _, _, _, _}` message. With the
+      # source-exclusion fix in place, no echo should fire.
+      refute_receive {:udp, ^trap_socket, _, _, _},
+                     100,
+                     "router echoed a :system_component-classified frame back via the udpout"
+
+      GenServer.stop(router_pid)
+    end
+
     defp wait_for_udpout_socket(router_pid, attempts \\ 50) do
       state = :sys.get_state(router_pid)
 
