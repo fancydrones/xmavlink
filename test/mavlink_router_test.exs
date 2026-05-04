@@ -131,4 +131,44 @@ defmodule XMAVLink.Test.Router do
       assert message =~ "invalid port"
     end
   end
+
+  describe "subscribe/1" do
+    test "is synchronous - subscription is committed when call returns" do
+      {:ok, pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: APM.Dialect,
+            connection_strings: ["udpout:127.0.0.1:14555"]
+          },
+          []
+        )
+
+      # The SubscriptionCache is a named Agent that persists across Router
+      # instances. Clear it on exit so a subscription from this test process
+      # doesn't survive into the next test — otherwise the next Router init
+      # restores the cached subscription, monitors a now-dead pid, and crashes
+      # on the resulting :DOWN before its :local connection is registered.
+      on_exit(fn ->
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      assert :ok = Router.subscribe(source_system: 1)
+
+      # The contract: by the time subscribe/1 returns, the subscription must
+      # already be present in the Router's local connection state — callers
+      # should not need a mailbox flush or sleep to observe it. We use
+      # :sys.get_state here purely for test introspection of internal state;
+      # production callers should never reach for it.
+      state = :sys.get_state(XMAVLink.Router)
+      subscriptions = state.connections[:local].subscriptions
+      assert Enum.any?(subscriptions, fn {_query, subscriber} -> subscriber == self() end)
+
+      Router.unsubscribe()
+      GenServer.stop(pid)
+    end
+  end
 end
