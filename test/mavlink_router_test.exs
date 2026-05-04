@@ -132,6 +132,91 @@ defmodule XMAVLink.Test.Router do
     end
   end
 
+  describe "udpout reply handling" do
+    # Regression for the NAT-mismatch echo loop: when a `udpout:` connection's
+    # reply arrives from a source IP that differs from the configured target
+    # (because NAT, masquerade, kube-proxy DNAT, or multipath routing
+    # rewrote the reply's source), the router previously filed it as a
+    # brand-new UDPInConnection at `{socket, reply_ip, reply_port}`. The
+    # broadcast clause of `route/1` would then forward subsequent inbound
+    # frames back out the original UDPOut — i.e. echo the host's traffic
+    # back to itself, producing a sustained sub-millisecond loop with the
+    # peer. Fixed by always attributing inbound on a UDPOut's socket to
+    # that UDPOut, regardless of source IP.
+    test "reply from a NAT'd source IP is attributed to the existing UDPOut, not filed as a phantom UDPInConnection" do
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:14556"]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      # The UDPOut is added asynchronously by the spawned connect/2 process,
+      # so wait until it lands in `connections`.
+      socket = wait_for_udpout_socket(router_pid)
+
+      # Real HEARTBEAT bytes (msg_id 0) packed under Common: sysid=1,
+      # compid=100, custom_mode=0, mav_type_quadrotor, autopilot=invalid,
+      # mav_state_active. CRC validates under Common.
+      raw_heartbeat =
+        <<0xFD, 0x09, 0x00, 0x00, 0x0F, 0x01, 0x64, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+          0x1E, 0x00, 0x00, 0x03, 0x03, 0xC3, 0xBC>>
+
+      # Reply arrives with a source IP different from the configured
+      # target (127.0.0.1) — simulates NAT.
+      fake_reply_ip = {10, 42, 0, 1}
+      fake_reply_port = 14556
+
+      send(router_pid, {:udp, socket, fake_reply_ip, fake_reply_port, raw_heartbeat})
+
+      # `:sys.get_state/1` is synchronous — by the time it returns, the
+      # `:udp` message has been processed.
+      state = :sys.get_state(router_pid)
+
+      refute Map.has_key?(state.connections, {socket, fake_reply_ip, fake_reply_port}),
+             "router filed a phantom UDPInConnection for the NAT'd reply " <>
+               "(would cause echo loop in production)"
+
+      assert match?(%XMAVLink.UDPOutConnection{}, state.connections[socket]),
+             "expected the UDPOut to remain registered under the bare socket key"
+
+      GenServer.stop(router_pid)
+    end
+
+    defp wait_for_udpout_socket(router_pid, attempts \\ 50) do
+      state = :sys.get_state(router_pid)
+
+      udpout =
+        Enum.find(state.connections, fn
+          {key, %XMAVLink.UDPOutConnection{}} when is_port(key) -> true
+          _ -> false
+        end)
+
+      cond do
+        udpout != nil ->
+          {socket, _} = udpout
+          socket
+
+        attempts > 0 ->
+          Process.sleep(20)
+          wait_for_udpout_socket(router_pid, attempts - 1)
+
+        true ->
+          flunk("UDPOut connection didn't materialize within timeout")
+      end
+    end
+  end
+
   describe "subscribe/1" do
     test "is synchronous - subscription is committed when call returns" do
       {:ok, pid} =

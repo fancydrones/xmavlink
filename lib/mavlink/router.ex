@@ -305,16 +305,32 @@ defmodule XMAVLink.Router do
       ) do
     {
       :noreply,
-      case connections[{socket, address, port}] do
-        connection = %UDPInConnection{} ->
-          UDPInConnection.handle_info(message, connection, dialect)
+      case connections[socket] do
+        # A `udpout:` connection is registered under the bare `socket` key
+        # (see UDPOutConnection.connect/2). Any UDP packet arriving on that
+        # socket is a reply to our outbound traffic — attribute it to the
+        # UDPOut regardless of source IP. This is required behind NAT /
+        # masquerade / kube-proxy DNAT, where the reply's source IP is the
+        # NAT gateway rather than the address we sent to. Without this,
+        # we'd file the reply as a brand-new UDPInConnection under
+        # `{socket, reply_ip, reply_port}` and the broadcast `route/1`
+        # clause would forward subsequent inbound frames back out the
+        # original UDPOut — i.e. echo the host's traffic back to itself.
+        udpout = %UDPOutConnection{} ->
+          UDPOutConnection.handle_info(message, udpout, dialect)
 
-        connection = %UDPOutConnection{} ->
-          UDPOutConnection.handle_info(message, connection, dialect)
+        _ ->
+          case connections[{socket, address, port}] do
+            connection = %UDPInConnection{} ->
+              UDPInConnection.handle_info(message, connection, dialect)
 
-        nil ->
-          # New previously unseen UDPIn client
-          UDPInConnection.handle_info(message, nil, dialect)
+            connection = %UDPOutConnection{} ->
+              UDPOutConnection.handle_info(message, connection, dialect)
+
+            nil ->
+              # New previously unseen UDPIn client
+              UDPInConnection.handle_info(message, nil, dialect)
+          end
       end
       |> update_route_info(state)
       |> route
