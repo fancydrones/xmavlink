@@ -1,4 +1,6 @@
 name: Elixir
+permissions:
+  contents: read
 
 on:
   pull_request:
@@ -11,7 +13,7 @@ jobs:
       image: elixir:1.18.4-slim
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Install dependencies
         run: |
           apt-get update
