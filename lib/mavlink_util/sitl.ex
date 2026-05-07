@@ -1,54 +1,98 @@
 defmodule XMAVLink.Util.SITL do
   @moduledoc """
-  Provide SITL specific support e.g RC channel forwarding
+  Provides SITL-specific support such as RC channel forwarding.
+
+  `forward_rc/2` starts a linked task that subscribes to `RC_CHANNELS_RAW`
+  messages and forwards the eight primary channels as little-endian 16-bit
+  values to a SITL RC input UDP endpoint. Pass `:router` to target a named
+  router and `:destination_address` to forward somewhere other than
+  `{127, 0, 0, 1}`.
   """
 
   require Logger
-  alias XMAVLink.Router, as: MAV
+  import XMAVLink.Utils, only: [resolve_address: 1]
+
+  alias XMAVLink.Util.CacheManager
   alias Common.Message.RcChannelsRaw
   alias Common.Message.RequestDataStream
   import XMAVLink.Util.FocusManager, only: [focus: 0]
 
   @resend_stream_interval 90
 
-  def forward_rc(sitl_rc_in_port \\ 5501) do
+  def forward_rc(sitl_rc_in_port_or_opts \\ 5501, opts \\ [])
+
+  def forward_rc(opts, []) when is_list(opts), do: forward_rc(5501, opts)
+
+  def forward_rc(sitl_rc_in_port, opts) do
     with {:ok, {system_id, component_id, mavlink_version}} <- focus() do
-      forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port)
+      forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port, opts)
     end
   end
 
-  def forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port) do
+  def forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port, opts \\ []) do
     Task.start_link(__MODULE__, :_connect, [
       system_id,
       component_id,
       mavlink_version,
-      sitl_rc_in_port
+      sitl_rc_in_port,
+      Keyword.get(opts, :router, CacheManager.router()),
+      Keyword.get(opts, :destination_address, {127, 0, 0, 1})
     ])
   end
 
-  def _connect(system_id, component_id, mavlink_version, sitl_rc_in_port) do
-    with {:ok, socket} <- :gen_udp.open(0, [:binary, ip: {127, 0, 0, 1}]),
+  def _connect(
+        system_id,
+        component_id,
+        mavlink_version,
+        sitl_rc_in_port,
+        router,
+        destination_address
+      ) do
+    with {:ok, destination_address} <- resolve_destination_address(destination_address),
+         {:ok, socket} <- :gen_udp.open(0, [:binary, ip: {127, 0, 0, 1}]),
          :ok <-
-           MAV.subscribe(
+           XMAVLink.Router.subscribe(
+             router,
              message: RcChannelsRaw,
              source_system: system_id,
              source_component: component_id
            ) do
       Logger.info(
-        "Start forwarding RC from vehicle #{system_id}.#{component_id} to SITL rc-in port #{sitl_rc_in_port}}"
+        "Start forwarding RC from vehicle #{system_id}.#{component_id} to SITL rc-in port #{sitl_rc_in_port}"
       )
 
-      _forward(system_id, component_id, mavlink_version, sitl_rc_in_port, socket, 0)
+      _forward(
+        system_id,
+        component_id,
+        mavlink_version,
+        sitl_rc_in_port,
+        socket,
+        0,
+        router,
+        destination_address
+      )
     else
-      _ ->
+      {:error, reason} ->
         Logger.warning(
-          "Could not subscribe or open port to forward RC from vehicle #{system_id}.#{component_id}"
+          "Could not subscribe or open port to forward RC from vehicle #{system_id}.#{component_id}: #{inspect(reason)}"
         )
+
+        {:error, reason}
     end
   end
 
-  def _forward(system_id, component_id, mavlink_version, sitl_rc_in_port, socket, 0) do
-    MAV.pack_and_send(
+  def _forward(
+        system_id,
+        component_id,
+        mavlink_version,
+        sitl_rc_in_port,
+        socket,
+        0,
+        router,
+        destination_address
+      ) do
+    XMAVLink.Router.pack_and_send(
+      router,
       %RequestDataStream{
         target_system: system_id,
         # APM Planner sends this, doesn't work with real component id
@@ -67,11 +111,22 @@ defmodule XMAVLink.Util.SITL do
       mavlink_version,
       sitl_rc_in_port,
       socket,
-      @resend_stream_interval
+      @resend_stream_interval,
+      router,
+      destination_address
     )
   end
 
-  def _forward(system_id, component_id, mavlink_version, sitl_rc_in_port, socket, count) do
+  def _forward(
+        system_id,
+        component_id,
+        mavlink_version,
+        sitl_rc_in_port,
+        socket,
+        count,
+        router,
+        destination_address
+      ) do
     receive do
       %RcChannelsRaw{
         chan1_raw: c1,
@@ -85,8 +140,7 @@ defmodule XMAVLink.Util.SITL do
       } ->
         :gen_udp.send(
           socket,
-          # TODO accept destination IP as parameter
-          {127, 0, 0, 1},
+          destination_address,
           sitl_rc_in_port,
           <<
             c1::little-unsigned-integer-size(16),
@@ -100,7 +154,26 @@ defmodule XMAVLink.Util.SITL do
           >>
         )
 
-        _forward(system_id, component_id, mavlink_version, sitl_rc_in_port, socket, count - 1)
+        _forward(
+          system_id,
+          component_id,
+          mavlink_version,
+          sitl_rc_in_port,
+          socket,
+          count - 1,
+          router,
+          destination_address
+        )
     end
   end
+
+  defp resolve_destination_address({a, b, c, d} = address)
+       when a in 0..255 and b in 0..255 and c in 0..255 and d in 0..255,
+       do: {:ok, address}
+
+  defp resolve_destination_address(address) when is_tuple(address),
+    do: {:error, :invalid_destination_address}
+
+  defp resolve_destination_address(address) when is_binary(address), do: resolve_address(address)
+  defp resolve_destination_address(_address), do: {:error, :invalid_destination_address}
 end

@@ -16,7 +16,7 @@ defmodule XMAVLink.Util.FocusManager do
 
   # API
   def start_link(state, opts \\ []) do
-    GenServer.start_link(__MODULE__, state, [{:name, __MODULE__} | opts])
+    GenServer.start_link(__MODULE__, state, Keyword.put_new(opts, :name, __MODULE__))
   end
 
   def focus() do
@@ -24,7 +24,8 @@ defmodule XMAVLink.Util.FocusManager do
   end
 
   def focus(pid) when is_pid(pid) do
-    with [{^pid, scid}] <- :ets.lookup(@sessions, pid) do
+    with :ok <- require_table(@sessions),
+         [{^pid, scid}] <- :ets.lookup(@sessions, pid) do
       if pid == self() do
         Logger.info("Vehicle #{format(scid)}")
       else
@@ -33,6 +34,9 @@ defmodule XMAVLink.Util.FocusManager do
 
       {:ok, scid}
     else
+      {:error, reason} ->
+        {:error, reason}
+
       _ ->
         Logger.warning("#{inspect(pid)} has no vehicle focus")
         {:error, :not_focussed}
@@ -40,10 +44,14 @@ defmodule XMAVLink.Util.FocusManager do
   end
 
   def focus(system_id, component_id \\ 1) do
-    {:ok, {system_id, component_id, _}} =
-      GenServer.call(XMAVLink.Util.FocusManager, {:focus, {system_id, component_id}})
-
-    configure_iex_prompt(system_id, component_id)
+    with pid when is_pid(pid) <- GenServer.whereis(__MODULE__),
+         {:ok, {system_id, component_id, _}} <-
+           GenServer.call(pid, {:focus, {system_id, component_id}}) do
+      configure_iex_prompt(system_id, component_id)
+    else
+      nil -> {:error, :not_started}
+      {:error, reason} -> {:error, reason}
+    end
   end
 
   @impl true
@@ -54,7 +62,8 @@ defmodule XMAVLink.Util.FocusManager do
 
   @impl true
   def handle_call({:focus, scid = {system_id, component_id}}, {caller_pid, _}, state) do
-    with mavlink_major_version when is_number(mavlink_major_version) <-
+    with :ok <- require_table(@systems),
+         mavlink_major_version when is_number(mavlink_major_version) <-
            :ets.foldl(
              fn {next_scid, %{mavlink_major_version: mmv}}, acc ->
                if next_scid == scid do
@@ -77,6 +86,7 @@ defmodule XMAVLink.Util.FocusManager do
         {:reply, {:error, :no_such_mav}, state}
       end
     else
+      {:error, reason} -> {:reply, {:error, reason}, state}
       _ -> {:reply, {:error, :no_mav_data}, state}
     end
   end
@@ -140,4 +150,11 @@ defmodule XMAVLink.Util.FocusManager do
 
   defp format({s, c, _}), do: format({s, c})
   defp format({s, c}), do: "#{s}.#{c}"
+
+  defp require_table(table) do
+    case :ets.info(table) do
+      :undefined -> {:error, :not_started}
+      _ -> :ok
+    end
+  end
 end

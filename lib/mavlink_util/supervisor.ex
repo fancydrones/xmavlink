@@ -3,15 +3,17 @@ defmodule XMAVLink.Util.Supervisor do
 
   use Supervisor
 
-  def start_link(_) do
-    Supervisor.start_link(__MODULE__, [], name: :"MAVLink.Util.Supervisor")
+  def start_link(opts) do
+    Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @impl true
-  def init(_) do
+  def init(opts) do
+    router = Keyword.get(opts, :router, XMAVLink.Router)
+
     children = [
-      {XMAVLink.Util.CacheManager, %{}},
-      {XMAVLink.Util.FocusManager, %{}}
+      {XMAVLink.Util.FocusManager, %{}},
+      {XMAVLink.Util.CacheManager, %{router: router}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)

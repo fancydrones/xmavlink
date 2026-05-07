@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.9.1"}
+     {:xmavlink, "~> 0.10.0"}
    ]
  end
  ```
@@ -300,7 +300,41 @@ As of version 0.5.0, XMAVLink includes utility modules (previously in the separa
 - **Parameter Management**: Request and set vehicle parameters
 - **SITL Support**: Forward RC channels for Software-In-The-Loop simulation
 
-See the included `.iex.exs` file for convenient helper imports to use in IEx sessions, providing an interactive experience similar to MAVProxy.
+The utility layer is opt-in because `CacheManager` subscribes to MAVLink traffic
+and requests vehicle parameter lists when vehicles appear. Enable it for the
+configured application router with:
+
+```elixir
+config :xmavlink,
+  utilities: true
+```
+
+or supervise it explicitly when using a named router:
+
+```elixir
+children = [
+  {XMAVLink.Router,
+   %{
+     name: MyApp.VehicleRouter,
+     system: 245,
+     component: 250,
+     dialect: Common,
+     connection_strings: ["udpout:127.0.0.1:14550"]
+   }},
+  {XMAVLink.Util.Supervisor, router: MyApp.VehicleRouter}
+]
+```
+
+The current utility API is scoped to one configured router per VM. It uses
+global process names and ETS tables for IEx-friendly helpers, so applications
+that need multiple independent routers should use the core `XMAVLink.Router`
+API directly or keep utility usage limited to one selected router.
+
+Command helpers such as arm/disarm and parameter setting use bounded retry
+loops by default. Pass `:retries`, `:retry_interval_ms`, or `:router` in the
+options when a helper needs different behavior. Parameter queries return maps
+keyed by MAVLink parameter names as strings. `XMAVLink.Util.SITL.forward_rc/2`
+also accepts `:destination_address` when the SITL RC input is not on loopback.
 
 ## Roadmap
 

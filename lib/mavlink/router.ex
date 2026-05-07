@@ -483,7 +483,7 @@ defmodule XMAVLink.Router do
     subscription_cache = subscription_cache_name(args.name)
     {:ok, connection_supervisor} = ConnectionSupervisor.start_link()
 
-    LocalConnection.connect(:local, args.system, args.component, subscription_cache)
+    local_connection = LocalConnection.new(args.system, args.component, subscription_cache)
     connection_specs = Enum.map(args.connection_strings, &connection_spec/1)
 
     for connection_spec <- connection_specs do
@@ -497,7 +497,8 @@ defmodule XMAVLink.Router do
        connection_strings: args.connection_strings,
        connection_retry_ms: args.connection_retry_ms,
        connection_supervisor: connection_supervisor,
-       subscription_cache: subscription_cache
+       subscription_cache: subscription_cache,
+       connections: %{local: local_connection}
      }}
   end
 
