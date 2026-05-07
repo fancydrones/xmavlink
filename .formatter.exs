@@ -1,6 +1,7 @@
 [
-  # lib/common.ex is checked-in generated dialect output. Keep it out of the
-  # formatter gate until the generator emits deterministic, formatted code.
+  # lib/common.ex is checked-in generated Common dialect output. Keep generated
+  # dialect modules out of the formatter gate; regenerate them from MAVLink XML
+  # instead of hand-formatting or hand-editing generated code.
   inputs: [
     "mix.exs",
     "config/**/*.{ex,exs}",

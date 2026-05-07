@@ -17,9 +17,9 @@ for PLTs and Mix build artifacts.
 ## Generated dialect output
 
 `lib/common.ex` is checked-in generated MAVLink dialect output. It is excluded
-from the formatter gate because the current generator does not emit stable,
-formatter-compatible code. Treat large formatting or timestamp churn in this
-file as generator work, not manual cleanup.
+from the formatter gate intentionally. Treat generated dialect modules as build
+artifacts: update the generator or XML input and regenerate them instead of
+hand-editing, hand-formatting, or reviewing large formatting-only diffs.
 
 # Testing locally with ArduPilot, MAVProxy, SITL, and X-Plane
 
