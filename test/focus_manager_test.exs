@@ -9,11 +9,6 @@ defmodule XMAVLink.Util.FocusManager.Test do
     create_systems_table()
     start_supervised!(FocusManager)
 
-    on_exit(fn ->
-      delete_table(:sessions)
-      delete_table(:systems)
-    end)
-
     :ok
   end
 
@@ -22,6 +17,16 @@ defmodule XMAVLink.Util.FocusManager.Test do
 
     assert :ok = FocusManager.focus(1, 1)
     assert {:ok, {1, 1, 2}} = FocusManager.focus()
+  end
+
+  test "focus/2 returns an error when the vehicle does not exist" do
+    assert {:error, :no_such_mav} = FocusManager.focus(1, 1)
+  end
+
+  test "focus/2 returns an error when utility state has not been started" do
+    delete_table(:systems)
+
+    assert {:error, :not_started} = FocusManager.focus(1, 1)
   end
 
   test "focus sessions are removed when the owner process exits" do

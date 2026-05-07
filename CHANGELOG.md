@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.10.0 - 2026-05-07
+
+- Made utility supervision opt-in and documented how to start utilities for
+  the configured router or an explicitly supervised named router.
+- Clarified that the current utility layer is scoped to one selected router per
+  VM while the core router API remains the multi-router integration surface.
+- Changed utility focus and cache helpers to return normal `{:error, reason}`
+  results when utility state or MAV data is missing.
+- Added bounded retry behavior and cleanup for arm/disarm, parameter request,
+  and parameter set helpers.
+- Changed parameter query results to use MAVLink parameter names as string keys
+  instead of creating atoms from vehicle-provided input.
+- Added configurable SITL RC forwarding destination addresses.
+
 ## 0.9.1 - 2026-05-07
 
 - Strengthened CI release gates with formatting, warnings-as-errors, xref,

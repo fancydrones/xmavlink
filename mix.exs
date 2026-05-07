@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.9.1",
+      version: "0.10.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -43,6 +43,9 @@ defmodule XMAVLink.Mixfile do
         component_id: 250,
         # Default registered router name
         router_name: XMAVLink.Router,
+        # Utility processes are opt-in because CacheManager actively subscribes
+        # to MAVLink traffic and requests vehicle parameter lists.
+        utilities: false,
         connections: []
       ],
       mod: {XMAVLink.Application, []},

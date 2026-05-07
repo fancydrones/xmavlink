@@ -13,7 +13,6 @@ defmodule XMAVLink.Util.CacheManager do
 
   use GenServer
   require Logger
-  alias XMAVLink.Router, as: MAV
   alias XMAVLink.Util.ParamRequest
   alias Common.Message.Heartbeat
   alias Common.Message.ParamValue
@@ -28,18 +27,31 @@ defmodule XMAVLink.Util.CacheManager do
 
   defstruct one_second_interval_ms: 1_000,
             five_second_interval_ms: 5_000,
-            ten_second_interval_ms: 10_000
+            ten_second_interval_ms: 10_000,
+            router: nil
 
   # API
 
   def start_link(state, opts \\ []) do
-    GenServer.start_link(__MODULE__, state, [{:name, __MODULE__} | opts])
+    GenServer.start_link(__MODULE__, state, Keyword.put_new(opts, :name, __MODULE__))
   end
 
   def mavs() do
-    scids = :ets.foldl(fn {scid, _}, acc -> [scid | acc] end, [], @systems)
-    Logger.info("Listing #{length(scids)} visible vehicles")
-    {:ok, scids}
+    with :ok <- require_table(@systems) do
+      scids = :ets.foldl(fn {scid, _}, acc -> [scid | acc] end, [], @systems)
+      Logger.info("Listing #{length(scids)} visible vehicles")
+      {:ok, scids}
+    end
+  end
+
+  def router() do
+    case GenServer.whereis(__MODULE__) do
+      nil ->
+        Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
+
+      pid ->
+        GenServer.call(pid, :router)
+    end
   end
 
   def msg() do
@@ -49,20 +61,22 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   def msg({system_id, component_id, _}) do
-    {
-      :ok,
-      :ets.foldl(
-        fn
-          {{^system_id, ^component_id, msg_type}, {received, msg}}, acc ->
-            Enum.into([{msg_type, {now() - received, msg}}], acc)
+    with :ok <- require_table(@messages) do
+      {
+        :ok,
+        :ets.foldl(
+          fn
+            {{^system_id, ^component_id, msg_type}, {received, msg}}, acc ->
+              Enum.into([{msg_type, {now() - received, msg}}], acc)
 
-          _, acc ->
-            acc
-        end,
-        %{},
-        @messages
-      )
-    }
+            _, acc ->
+              acc
+          end,
+          %{},
+          @messages
+        )
+      }
+    end
   end
 
   def msg(name) do
@@ -72,7 +86,8 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   def msg({system_id, component_id, _}, msg_type) when is_atom(msg_type) do
-    with [{_key, {received, message}}] <-
+    with :ok <- require_table(@messages),
+         [{_key, {received, message}}] <-
            :ets.lookup(@messages, {system_id, component_id, msg_type}) do
       Logger.info("Most recent \"#{dequalify_msg_type(msg_type)}\" message")
       {:ok, now() - received, message}
@@ -103,17 +118,15 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   def params({system_id, component_id, _mavlink_version}, match) when is_binary(match) do
-    with match_upcase <- String.upcase(match),
+    with :ok <- require_table(@params),
+         match_upcase <- String.upcase(match),
          param_map when is_map(param_map) <-
            :ets.foldl(
              fn
                {{^system_id, ^component_id, param_id}, {_, %ParamValue{param_value: param_value}}},
                acc ->
                  if String.contains?(param_id, match_upcase) do
-                   Enum.into(
-                     [{param_id |> String.downcase() |> String.to_atom(), param_value}],
-                     acc
-                   )
+                   Enum.into([{param_id, param_value}], acc)
                  else
                    acc
                  end
@@ -139,9 +152,8 @@ defmodule XMAVLink.Util.CacheManager do
     :ets.new(@systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
     :ets.new(@params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
 
-    MAV.subscribe(as_frame: true)
-
-    state = struct(__MODULE__, opts)
+    state = __MODULE__ |> struct(opts) |> normalize_router()
+    XMAVLink.Router.subscribe(state.router, as_frame: true)
 
     {
       :ok,
@@ -153,6 +165,10 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   @impl true
+  def handle_call(:router, _caller, state) do
+    {:reply, state.router, state}
+  end
+
   def handle_call(_msg, _caller, state) do
     {:reply, :ok, state}
   end
@@ -243,7 +259,8 @@ defmodule XMAVLink.Util.CacheManager do
     spawn_link(ParamRequest, :param_request_list, [
       source_system_id,
       source_component_id,
-      mavlink_major_version
+      mavlink_major_version,
+      [router: state.router]
     ])
 
     state
@@ -321,4 +338,20 @@ defmodule XMAVLink.Util.CacheManager do
     |> String.split(".")
     |> (fn parts -> parts |> Enum.reverse() |> List.first() end).()
   end
+
+  defp require_table(table) do
+    case :ets.info(table) do
+      :undefined -> {:error, :not_started}
+      _ -> :ok
+    end
+  end
+
+  defp normalize_router(state = %{router: nil}) do
+    %{
+      state
+      | router: Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
+    }
+  end
+
+  defp normalize_router(state), do: state
 end

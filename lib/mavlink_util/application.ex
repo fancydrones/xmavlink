@@ -4,7 +4,9 @@ defmodule XMAVLink.Util.Application do
   use Application
 
   def start(_, _) do
-    children = [XMAVLink.Util.Supervisor]
+    router_name = Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
+    children = [{XMAVLink.Util.Supervisor, router: router_name}]
+
     Supervisor.start_link(children, strategy: :one_for_one)
   end
 end

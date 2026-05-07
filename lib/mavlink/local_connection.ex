@@ -59,7 +59,7 @@ defmodule XMAVLink.LocalConnection do
     }
   end
 
-  def connect(:local, system, component, subscription_cache \\ XMAVLink.SubscriptionCache) do
+  def new(system, component, subscription_cache \\ XMAVLink.SubscriptionCache) do
     local_connection =
       struct(LocalConnection,
         system: system,
@@ -67,13 +67,19 @@ defmodule XMAVLink.LocalConnection do
         subscription_cache: subscription_cache
       )
 
+    restore_subscriptions(local_connection)
+  end
+
+  def connect(:local, system, component, subscription_cache \\ XMAVLink.SubscriptionCache) do
+    local_connection = new(system, component, subscription_cache)
+
     send(
       # Local connection guaranteed, so this connect() called directly from Router process
       self(),
       {
         :add_connection,
         :local,
-        restore_subscriptions(local_connection)
+        local_connection
       }
     )
   end
