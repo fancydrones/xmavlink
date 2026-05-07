@@ -144,6 +144,152 @@ defmodule XMAVLink.Test.Router do
     end
   end
 
+  describe "router instances" do
+    test "child specs use the configured router name as the child id" do
+      router_name = XMAVLink.Test.Router.ChildSpecRouter
+
+      assert %{
+               id: ^router_name,
+               start:
+                 {Router, :start_link,
+                  [
+                    %{
+                      name: ^router_name,
+                      system: 1,
+                      component: 1,
+                      dialect: Common,
+                      connections: [],
+                      connection_strings: []
+                    }
+                  ]}
+             } =
+               Router.child_spec(%{
+                 name: router_name,
+                 system: 1,
+                 component: 1,
+                 dialect: Common,
+                 connections: []
+               })
+    end
+
+    test "targets subscriptions and outbound sends to a named router" do
+      router_name = XMAVLink.Test.Router.NamedRouter
+
+      {:ok, router_pid} =
+        Router.start_link(%{
+          name: router_name,
+          system: 42,
+          component: 100,
+          dialect: Common,
+          connection_strings: []
+        })
+
+      on_exit(fn ->
+        stop_router(router_pid)
+        stop_subscription_cache(router_name)
+      end)
+
+      assert :ok =
+               Router.subscribe(router_name, message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = sample_heartbeat()
+      assert :ok = Router.pack_and_send(router_name, msg)
+
+      assert_receive %XMAVLink.Frame{
+                       message: ^msg,
+                       source_system: 42,
+                       source_component: 100
+                     },
+                     200
+
+      state = :sys.get_state(router_name)
+      assert state.name == router_name
+      assert state.subscription_cache == subscription_cache_name(router_name)
+
+      Router.unsubscribe(router_name)
+    end
+
+    test "keeps subscriptions isolated between named routers" do
+      router_a = XMAVLink.Test.Router.NamedRouterA
+      router_b = XMAVLink.Test.Router.NamedRouterB
+
+      {:ok, pid_a} =
+        Router.start_link(%{
+          name: router_a,
+          system: 1,
+          component: 100,
+          dialect: Common,
+          connection_strings: []
+        })
+
+      {:ok, pid_b} =
+        Router.start_link(%{
+          name: router_b,
+          system: 2,
+          component: 100,
+          dialect: Common,
+          connection_strings: []
+        })
+
+      on_exit(fn ->
+        stop_router(pid_a)
+        stop_router(pid_b)
+        stop_subscription_cache(router_a)
+        stop_subscription_cache(router_b)
+      end)
+
+      assert :ok = Router.subscribe(router_a, message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = sample_heartbeat()
+      assert :ok = Router.pack_and_send(router_b, msg)
+
+      refute_receive %XMAVLink.Frame{source_system: 2}, 50
+
+      assert :ok = Router.pack_and_send(router_a, msg)
+
+      assert_receive %XMAVLink.Frame{
+                       message: ^msg,
+                       source_system: 1,
+                       source_component: 100
+                     },
+                     200
+
+      Router.unsubscribe(router_a)
+    end
+
+    test "targets an unregistered router by pid" do
+      {:ok, router_pid} =
+        Router.start_link(%{
+          name: nil,
+          system: 3,
+          component: 100,
+          dialect: Common,
+          connection_strings: []
+        })
+
+      on_exit(fn -> stop_router(router_pid) end)
+
+      assert :ok =
+               Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = sample_heartbeat()
+      assert :ok = Router.pack_and_send(router_pid, msg)
+
+      assert_receive %XMAVLink.Frame{
+                       message: ^msg,
+                       source_system: 3,
+                       source_component: 100
+                     },
+                     200
+
+      state = :sys.get_state(router_pid)
+      assert state.name == nil
+      assert state.subscription_cache == nil
+
+      Router.unsubscribe(router_pid)
+    end
+  end
+
   describe "udpout reply handling" do
     # Regression for the NAT-mismatch echo loop: when a `udpout:` connection's
     # reply arrives from a source IP that differs from the configured target
@@ -542,5 +688,28 @@ defmodule XMAVLink.Test.Router do
     send(acceptor, :close_tcp_peer)
     :gen_tcp.close(listen_socket)
     :ok
+  end
+
+  defp subscription_cache_name(XMAVLink.Router), do: XMAVLink.SubscriptionCache
+
+  defp subscription_cache_name(router_name) when is_atom(router_name) do
+    router_name
+    |> Atom.to_string()
+    |> Kernel.<>(".SubscriptionCache")
+    |> String.to_atom()
+  end
+
+  defp stop_subscription_cache(router_name) do
+    router_name
+    |> subscription_cache_name()
+    |> Process.whereis()
+    |> case do
+      nil -> :ok
+      pid -> Agent.stop(pid)
+    end
+  end
+
+  defp stop_router(pid) do
+    if Process.alive?(pid), do: GenServer.stop(pid)
   end
 end

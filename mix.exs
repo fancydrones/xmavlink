@@ -41,6 +41,8 @@ defmodule XMAVLink.Mixfile do
         system_id: 245,
         # Default to system control
         component_id: 250,
+        # Default registered router name
+        router_name: XMAVLink.Router,
         connections: []
       ],
       mod: {XMAVLink.Application, []},

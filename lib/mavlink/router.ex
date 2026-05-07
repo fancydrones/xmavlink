@@ -56,10 +56,14 @@ defmodule XMAVLink.Router do
                         system/component was last received on. Used to forward messages to that system/component.
   """
   defstruct [
+    # Registered router name, if any
+    name: nil,
     # Generated dialect module
     dialect: nil,
     # Connection descriptions from user
     connection_strings: [],
+    # Subscription cache name for restart restoration, if any
+    subscription_cache: nil,
     # %{socket|port|local: XMAVLink.*_Connection}
     connections: %{},
     # Connection and MAVLink version tuple keyed by MAVLink addresses
@@ -69,12 +73,24 @@ defmodule XMAVLink.Router do
   # Can't used qualified type as map key
   @type mavlink_address :: Types.mavlink_address()
   @type mavlink_connection :: Types.connection()
+  @type router_name :: atom | {:global, term} | {:via, module, term}
+  @type router_ref :: GenServer.server()
+  @type subscribe_query :: [
+          {:message, Message.t() | :unknown}
+          | {subscribe_query_id_key, 0..255}
+          | {:as_frame, boolean}
+        ]
   @type t :: %Router{
+          name: router_name | nil,
           dialect: module | nil,
           connection_strings: [String.t()],
+          subscription_cache: router_name | nil,
           connections: %{},
           routes: %{mavlink_address: {mavlink_connection, Types.version()}}
         }
+
+  defguardp is_router_ref(router)
+            when is_atom(router) or is_pid(router) or is_tuple(router)
 
   ##############
   # Router API #
@@ -97,18 +113,37 @@ defmodule XMAVLink.Router do
                         tcpout:<remote ip>:<remote port>
                         serial:<device>:<baud rate>
 
-  - opts:               Standard GenServer options
+  - opts:               Standard GenServer options. Pass `:name` to register
+                        a non-default router, or `name: nil` in the args map to
+                        start an unregistered router addressed by pid.
   """
   @spec start_link(
-          %{system: 1..255, component: 1..255, dialect: module, connection_strings: [String.t()]},
+          %{
+            required(:system) => 1..255,
+            required(:component) => 1..255,
+            required(:dialect) => module,
+            optional(:name) => router_name | nil,
+            optional(:connection_strings) => [String.t()],
+            optional(:connections) => [String.t()]
+          },
           [{atom, any}]
         ) :: {:ok, pid}
   def start_link(args, opts \\ []) do
-    GenServer.start_link(
-      __MODULE__,
-      args,
-      [{:name, __MODULE__} | opts]
-    )
+    args = normalize_start_args(args)
+    name = Keyword.get(opts, :name, Map.get(args, :name, __MODULE__))
+
+    GenServer.start_link(__MODULE__, Map.put(args, :name, name), start_options(opts, name))
+  end
+
+  @doc false
+  def child_spec(args) do
+    args = normalize_start_args(args)
+    name = Map.get(args, :name, __MODULE__)
+
+    %{
+      id: Map.get(args, :id, name || __MODULE__),
+      start: {__MODULE__, :start_link, [Map.delete(args, :id)]}
+    }
   end
 
   @doc """
@@ -116,6 +151,7 @@ defmodule XMAVLink.Router do
 
   ## Parameters
 
+  - router: Optional router name or pid. Defaults to `XMAVLink.Router`.
   - query:  Keyword list of zero or more of the following query keywords:
 
     message:          message_module | :unknown (use latter with as_frame)
@@ -133,18 +169,23 @@ defmodule XMAVLink.Router do
   """
   @type subscribe_query_id_key ::
           :source_system | :source_component | :target_system | :target_component
-  @spec subscribe([
-          {:message, Message.t()} | {subscribe_query_id_key, 0..255} | {:as_frame, boolean}
-        ]) :: :ok
-  def subscribe(query \\ []) do
+  @spec subscribe() :: :ok | {:error, :invalid_message}
+  def subscribe(), do: subscribe(__MODULE__, [])
+
+  @spec subscribe(router_ref | subscribe_query) :: :ok | {:error, :invalid_message}
+  def subscribe(router) when is_router_ref(router), do: subscribe(router, [])
+  def subscribe(query), do: subscribe(__MODULE__, query)
+
+  @spec subscribe(router_ref, subscribe_query) :: :ok | {:error, :invalid_message}
+  def subscribe(router, query) do
     with message <- Keyword.get(query, :message),
-         true <- message == nil or Code.ensure_loaded?(message) do
+         true <- message == nil or message == :unknown or Code.ensure_loaded?(message) do
       # Synchronous: returns only after the subscription is committed to the
       # Router state. This prevents a race where the caller sends an outbound
       # message that elicits a reply before the inbound subscription is in
       # place, causing the reply to be dropped.
       GenServer.call(
-        __MODULE__,
+        router,
         {
           :subscribe,
           [
@@ -176,7 +217,10 @@ defmodule XMAVLink.Router do
   ```
   """
   @spec unsubscribe() :: :ok
-  def unsubscribe(), do: GenServer.cast(__MODULE__, {:unsubscribe, self()})
+  def unsubscribe(), do: unsubscribe(__MODULE__)
+
+  @spec unsubscribe(router_ref) :: :ok
+  def unsubscribe(router), do: GenServer.cast(router, {:unsubscribe, self()})
 
   @doc """
   Send a MAVLink message to one or more recipients using available
@@ -185,6 +229,7 @@ defmodule XMAVLink.Router do
 
   ## Parameters
 
+  - router: Optional router name or pid. Defaults to `XMAVLink.Router`.
   - message: A MAVLink message structure from the installed dialect
   - version: Force sending using a specific MAVLink protocol (default 2)
   - opts: Optional send settings:
@@ -220,13 +265,35 @@ defmodule XMAVLink.Router do
     )
   ```
   """
-  def pack_and_send(message, version_or_opts \\ 2)
+  @spec pack_and_send(Message.t()) :: :ok | {:error, :protocol_undefined}
+  def pack_and_send(message), do: pack_and_send(__MODULE__, message, 2, [])
 
-  def pack_and_send(message, opts) when is_list(opts), do: pack_and_send(message, 2, opts)
+  @spec pack_and_send(router_ref, Message.t()) :: :ok | {:error, :protocol_undefined}
+  def pack_and_send(router, message) when is_router_ref(router) and is_map(message),
+    do: pack_and_send(router, message, 2, [])
 
-  def pack_and_send(message, version), do: pack_and_send(message, version, [])
+  @spec pack_and_send(Message.t(), Types.version() | keyword) ::
+          :ok | {:error, :protocol_undefined}
+  def pack_and_send(message, opts) when is_list(opts),
+    do: pack_and_send(__MODULE__, message, 2, opts)
 
-  def pack_and_send(message, version, opts) do
+  def pack_and_send(message, version), do: pack_and_send(__MODULE__, message, version, [])
+
+  @spec pack_and_send(router_ref, Message.t(), Types.version() | keyword) ::
+          :ok | {:error, :protocol_undefined}
+  def pack_and_send(router, message, opts) when is_router_ref(router) and is_list(opts),
+    do: pack_and_send(router, message, 2, opts)
+
+  def pack_and_send(router, message, version) when is_router_ref(router),
+    do: pack_and_send(router, message, version, [])
+
+  @spec pack_and_send(Message.t(), Types.version(), keyword) ::
+          :ok | {:error, :protocol_undefined}
+  def pack_and_send(message, version, opts), do: pack_and_send(__MODULE__, message, version, opts)
+
+  @spec pack_and_send(router_ref, Message.t(), Types.version(), keyword) ::
+          :ok | {:error, :protocol_undefined}
+  def pack_and_send(router, message, version, opts) do
     source_identity = source_identity!(opts)
 
     # We can only pack payload at this point because we need router state to get source
@@ -241,26 +308,23 @@ defmodule XMAVLink.Router do
           {0, 0}
         end
 
-      # Although Router is a GenServer we still use send for symmetry because this arrives as
-      # a vanilla message, just like messages from a udp/tcp/serial port, and is dealt with in
-      # a similar way using handle_info()
-      send(
-        __MODULE__,
-        {
-          :local,
-          struct(Frame,
-            version: version,
-            message_id: message_id,
-            source_system: source_identity[:source_system],
-            source_component: source_identity[:source_component],
-            target_system: target_system,
-            target_component: target_component,
-            target: target,
-            message: message,
-            payload: payload,
-            crc_extra: crc_extra
-          )
-        }
+      # Atom and pid targets still receive the same vanilla message as external
+      # connections. Global/via names need GenServer dispatch because Kernel.send/2
+      # cannot resolve those names.
+      dispatch_local(
+        router,
+        struct(Frame,
+          version: version,
+          message_id: message_id,
+          source_system: source_identity[:source_system],
+          source_component: source_identity[:source_component],
+          target_system: target_system,
+          target_component: target_component,
+          target: target,
+          message: message,
+          payload: payload,
+          crc_extra: crc_extra
+        )
       )
 
       :ok
@@ -272,6 +336,51 @@ defmodule XMAVLink.Router do
       Protocol.UndefinedError ->
         {:error, :protocol_undefined}
     end
+  end
+
+  defp dispatch_local({:global, _} = router, frame), do: GenServer.cast(router, {:local, frame})
+  defp dispatch_local({:via, _, _} = router, frame), do: GenServer.cast(router, {:local, frame})
+  defp dispatch_local(router, frame), do: send(router, {:local, frame})
+
+  defp normalize_start_args(args) do
+    args = Map.new(args)
+    connection_strings = Map.get(args, :connection_strings, Map.get(args, :connections, [])) || []
+
+    Map.put(args, :connection_strings, connection_strings)
+  end
+
+  defp start_options(opts, nil), do: Keyword.delete(opts, :name)
+
+  defp start_options(opts, name) do
+    opts
+    |> Keyword.delete(:name)
+    |> Keyword.put(:name, name)
+  end
+
+  defp subscription_cache_name(nil), do: nil
+  defp subscription_cache_name(__MODULE__), do: XMAVLink.SubscriptionCache
+
+  defp subscription_cache_name(name) when is_atom(name) do
+    name
+    |> Atom.to_string()
+    |> Kernel.<>(".SubscriptionCache")
+    |> String.to_atom()
+  end
+
+  defp subscription_cache_name({:global, name}) do
+    {:global, {__MODULE__, :subscription_cache, name}}
+  end
+
+  defp subscription_cache_name({:via, registry, name}) do
+    {:via, registry, {__MODULE__, :subscription_cache, name}}
+  end
+
+  defp subscription_cache_name(_name), do: nil
+
+  defp route_local(frame, state) do
+    LocalConnection.handle_info({:local, frame}, state.connections.local, state.dialect)
+    |> update_route_info(state)
+    |> route
   end
 
   defp source_identity!(opts) do
@@ -310,9 +419,18 @@ defmodule XMAVLink.Router do
   # Start connections (they will send :add_connection messages
   # to us if successful) and initialise Router state
   def init(args) do
-    LocalConnection.connect(:local, args.system, args.component)
+    subscription_cache = subscription_cache_name(args.name)
+
+    LocalConnection.connect(:local, args.system, args.component, subscription_cache)
     _ = map(args.connection_strings, &connect/1)
-    {:ok, %Router{dialect: args.dialect, connection_strings: args.connection_strings}}
+
+    {:ok,
+     %Router{
+       name: args.name,
+       dialect: args.dialect,
+       connection_strings: args.connection_strings,
+       subscription_cache: subscription_cache
+     }}
   end
 
   @impl true
@@ -331,6 +449,11 @@ defmodule XMAVLink.Router do
   def handle_cast({:unsubscribe, pid}, state) do
     {:noreply,
      update_in(state, [Access.key!(:connections), :local], &LocalConnection.unsubscribe(pid, &1))}
+  end
+
+  # A call to pack_and_send() targeting a non-local registered name.
+  def handle_cast({:local, frame}, state) do
+    {:noreply, route_local(frame, state)}
   end
 
   @impl true
@@ -427,12 +550,7 @@ defmodule XMAVLink.Router do
 
   # A call to pack_and_send() from a local Elixir process, sent as a vanilla message for symmetry with other connection types
   def handle_info({:local, frame}, state) do
-    {
-      :noreply,
-      LocalConnection.handle_info({:local, frame}, state.connections.local, state.dialect)
-      |> update_route_info(state)
-      |> route
-    }
+    {:noreply, route_local(frame, state)}
   end
 
   # A spawned *Connection.connect() call has successfully got a

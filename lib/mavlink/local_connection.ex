@@ -13,6 +13,7 @@ defmodule XMAVLink.LocalConnection do
 
   defstruct system: nil,
             component: nil,
+            subscription_cache: nil,
             subscriptions: [],
             sequence_number: 0,
             sequence_numbers: %{}
@@ -20,6 +21,7 @@ defmodule XMAVLink.LocalConnection do
   @type t :: %LocalConnection{
           system: 1..255,
           component: 1..255,
+          subscription_cache: GenServer.server() | nil,
           subscriptions: [],
           sequence_number: 0..255,
           sequence_numbers: %{{1..255, 1..255} => 0..255}
@@ -57,8 +59,13 @@ defmodule XMAVLink.LocalConnection do
     }
   end
 
-  def connect(:local, system, component) do
-    local_connection = struct(LocalConnection, system: system, component: component)
+  def connect(:local, system, component, subscription_cache \\ XMAVLink.SubscriptionCache) do
+    local_connection =
+      struct(LocalConnection,
+        system: system,
+        component: component,
+        subscription_cache: subscription_cache
+      )
 
     send(
       # Local connection guaranteed, so this connect() called directly from Router process
@@ -66,21 +73,7 @@ defmodule XMAVLink.LocalConnection do
       {
         :add_connection,
         :local,
-        case Agent.start(fn -> [] end, name: XMAVLink.SubscriptionCache) do
-          {:ok, _} ->
-            :ok = Logger.debug("Started Subscription Cache")
-            # No subscriptions to restore
-            local_connection
-
-          {:error, {:already_started, _}} ->
-            :ok = Logger.debug("Restoring subscriptions from Subscription Cache")
-
-            reduce(
-              Agent.get(XMAVLink.SubscriptionCache, fn subs -> subs end),
-              local_connection,
-              fn {query, pid}, lc -> subscribe(query, pid, lc) end
-            )
-        end
+        restore_subscriptions(local_connection)
       }
     )
   end
@@ -137,7 +130,7 @@ defmodule XMAVLink.LocalConnection do
       local_connection
       | subscriptions:
           Enum.uniq([{query, pid} | local_connection.subscriptions])
-          |> update_subscription_cache
+          |> update_subscription_cache(local_connection.subscription_cache)
     }
   end
 
@@ -149,7 +142,7 @@ defmodule XMAVLink.LocalConnection do
       local_connection
       | subscriptions:
           filter(local_connection.subscriptions, &(not match?({_, ^pid}, &1)))
-          |> update_subscription_cache
+          |> update_subscription_cache(local_connection.subscription_cache)
     }
   end
 
@@ -161,13 +154,42 @@ defmodule XMAVLink.LocalConnection do
       local_connection
       | subscriptions:
           filter(local_connection.subscriptions, &(not match?({_, ^pid}, &1)))
-          |> update_subscription_cache
+          |> update_subscription_cache(local_connection.subscription_cache)
     }
   end
 
-  defp update_subscription_cache(subscriptions) do
+  defp restore_subscriptions(local_connection = %LocalConnection{subscription_cache: nil}) do
+    local_connection
+  end
+
+  defp restore_subscriptions(
+         local_connection = %LocalConnection{subscription_cache: subscription_cache}
+       ) do
+    case Agent.start(fn -> [] end, name: subscription_cache) do
+      {:ok, _} ->
+        :ok = Logger.debug("Started Subscription Cache #{inspect(subscription_cache)}")
+        # No subscriptions to restore
+        local_connection
+
+      {:error, {:already_started, _}} ->
+        :ok =
+          Logger.debug(
+            "Restoring subscriptions from Subscription Cache #{inspect(subscription_cache)}"
+          )
+
+        reduce(
+          Agent.get(subscription_cache, fn subs -> subs end),
+          local_connection,
+          fn {query, pid}, lc -> subscribe(query, pid, lc) end
+        )
+    end
+  end
+
+  defp update_subscription_cache(subscriptions, nil), do: subscriptions
+
+  defp update_subscription_cache(subscriptions, subscription_cache) do
     :ok = Logger.debug("Update subscription cache: #{inspect(subscriptions)}")
-    Agent.update(XMAVLink.SubscriptionCache, fn _ -> subscriptions end)
+    Agent.update(subscription_cache, fn _ -> subscriptions end)
     subscriptions
   end
 

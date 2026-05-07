@@ -9,6 +9,8 @@ defmodule XMAVLink.Supervisor do
 
   @impl true
   def init(_) do
+    router_name = Application.get_env(:xmavlink, :router_name, XMAVLink.Router)
+
     children =
       [
         :poolboy.child_spec(
@@ -22,25 +24,29 @@ defmodule XMAVLink.Supervisor do
         {
           XMAVLink.Router,
           %{
+            name: router_name,
             dialect: Application.get_env(:xmavlink, :dialect),
             system: Application.get_env(:xmavlink, :system_id),
             component: Application.get_env(:xmavlink, :component_id),
             connection_strings: Application.get_env(:xmavlink, :connections)
           }
         }
-      ] ++ heartbeat_child_specs()
+      ] ++ heartbeat_child_specs(router_name)
 
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  defp heartbeat_child_specs do
+  defp heartbeat_child_specs(router_name) do
     specs = heartbeat_specs()
     multi? = length(specs) > 1
 
     specs
     |> Enum.with_index()
     |> Enum.map(fn {spec, index} ->
-      child_spec = if multi?, do: Keyword.put_new(spec, :name, nil), else: spec
+      child_spec =
+        spec
+        |> Keyword.put_new(:router, router_name)
+        |> maybe_unnamed_heartbeat(multi?)
 
       %{
         id: Keyword.get(spec, :id, {XMAVLink.Heartbeat, index}),
@@ -48,6 +54,9 @@ defmodule XMAVLink.Supervisor do
       }
     end)
   end
+
+  defp maybe_unnamed_heartbeat(spec, true), do: Keyword.put_new(spec, :name, nil)
+  defp maybe_unnamed_heartbeat(spec, false), do: spec
 
   # Heartbeats are started only when configured, so existing apps that
   # build their own heartbeats keep working unchanged. `:heartbeat` keeps
