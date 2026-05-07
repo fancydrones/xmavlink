@@ -4,7 +4,8 @@
 
 - Made generated dialect source deterministic and formatter-compatible by
   removing timestamp/path churn, combining parsed XML inputs in stable order,
-  and formatting the generated output before writing it.
+  formatting the generated output before writing it, and including generated
+  Common output in the formatter gate.
 
 ## 0.10.0 - 2026-05-07
 
