@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-XMAVLink is an Elixir/Mix library and OTP application for MAVLink communication over serial, UDP, and TCP connections. Core runtime code lives under `lib/mavlink`, utility modules under `lib/mavlink_util`, the dialect generator Mix task in `lib/mix/tasks/mavlink_task.ex`, and tests in `test`.
+XMAVLink is an Elixir/Mix library and OTP application for MAVLink communication over serial, UDP, and TCP connections. Core runtime code lives under `lib/mavlink`, utility modules under `lib/mavlink_util`, the dialect generator is the `mix xmavlink` Mix task implemented in `lib/mix/tasks/mavlink_task.ex`, and tests in `test`.
 
 `lib/common.ex` is a checked-in generated MAVLink dialect module. Treat it as generated output: prefer changing the generator or XML inputs, then regenerating, instead of hand-editing it. Regeneration can create large diffs because generated module docs include timestamps.
 
