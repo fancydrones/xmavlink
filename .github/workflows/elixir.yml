@@ -54,6 +54,9 @@ jobs:
           mix local.hex --force
           mix deps.get
 
+      - name: Check dependency lock hygiene
+        run: mix deps.unlock --check-unused
+
       - name: Check formatting
         run: mix format --check-formatted
 
