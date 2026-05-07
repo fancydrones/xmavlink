@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 - 2026-05-07
+
+- Strengthened CI release gates with formatting, warnings-as-errors, xref,
+  tests, and Dialyzer coverage across the supported toolchain checks.
+- Clarified supported transports and MAVLink 2 limitations in public docs.
+- Fixed utility process lifecycle issues in `CacheManager` and `FocusManager`.
+
 ## 0.9.0 - 2026-05-07
 
 - Moved configured connection startup and reconnect behavior under supervised
