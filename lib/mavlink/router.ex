@@ -90,7 +90,15 @@ defmodule XMAVLink.Router do
         }
 
   defguardp is_router_ref(router)
-            when is_atom(router) or is_pid(router) or is_tuple(router)
+            when is_pid(router) or
+                   (is_atom(router) and not is_nil(router)) or
+                   (is_tuple(router) and tuple_size(router) == 2 and
+                      elem(router, 0) == :global) or
+                   (is_tuple(router) and tuple_size(router) == 3 and
+                      elem(router, 0) == :via and is_atom(elem(router, 1))) or
+                   (is_tuple(router) and tuple_size(router) == 2 and
+                      is_atom(elem(router, 0)) and not is_nil(elem(router, 0)) and
+                      is_atom(elem(router, 1)) and not is_nil(elem(router, 1)))
 
   ##############
   # Router API #
@@ -141,7 +149,7 @@ defmodule XMAVLink.Router do
     name = Map.get(args, :name, __MODULE__)
 
     %{
-      id: Map.get(args, :id, name || __MODULE__),
+      id: child_id(args, name),
       start: {__MODULE__, :start_link, [Map.delete(args, :id)]}
     }
   end
@@ -174,12 +182,20 @@ defmodule XMAVLink.Router do
 
   @spec subscribe(router_ref | subscribe_query) :: :ok | {:error, :invalid_message}
   def subscribe(router) when is_router_ref(router), do: subscribe(router, [])
+  def subscribe(nil), do: invalid_router_ref!(nil)
+
+  def subscribe(invalid_router) when is_tuple(invalid_router),
+    do: invalid_router_ref!(invalid_router)
+
   def subscribe(query), do: subscribe(__MODULE__, query)
 
   @spec subscribe(router_ref, subscribe_query) :: :ok | {:error, :invalid_message}
-  def subscribe(router, query) do
+  def subscribe(router, query) when is_router_ref(router) do
+    query = normalize_subscribe_query(query)
+
     with message <- Keyword.get(query, :message),
-         true <- message == nil or message == :unknown or Code.ensure_loaded?(message) do
+         true <-
+           message == nil or message == XMAVLink.UnknownMessage or Code.ensure_loaded?(message) do
       # Synchronous: returns only after the subscription is committed to the
       # Router state. This prevents a race where the caller sends an outbound
       # message that elicits a reply before the inbound subscription is in
@@ -207,6 +223,8 @@ defmodule XMAVLink.Router do
     end
   end
 
+  def subscribe(invalid_router, _query), do: invalid_router_ref!(invalid_router)
+
   @doc """
   Un-subscribes calling process from all existing subscriptions
 
@@ -220,7 +238,10 @@ defmodule XMAVLink.Router do
   def unsubscribe(), do: unsubscribe(__MODULE__)
 
   @spec unsubscribe(router_ref) :: :ok
-  def unsubscribe(router), do: GenServer.cast(router, {:unsubscribe, self()})
+  def unsubscribe(router) when is_router_ref(router),
+    do: GenServer.cast(router, {:unsubscribe, self()})
+
+  def unsubscribe(invalid_router), do: invalid_router_ref!(invalid_router)
 
   @doc """
   Send a MAVLink message to one or more recipients using available
@@ -272,6 +293,9 @@ defmodule XMAVLink.Router do
   def pack_and_send(router, message) when is_router_ref(router) and is_map(message),
     do: pack_and_send(router, message, 2, [])
 
+  def pack_and_send(invalid_router, message) when is_map(message),
+    do: invalid_router_ref!(invalid_router)
+
   @spec pack_and_send(Message.t(), Types.version() | keyword) ::
           :ok | {:error, :protocol_undefined}
   def pack_and_send(message, opts) when is_list(opts),
@@ -287,13 +311,16 @@ defmodule XMAVLink.Router do
   def pack_and_send(router, message, version) when is_router_ref(router),
     do: pack_and_send(router, message, version, [])
 
+  def pack_and_send(invalid_router, message, _version) when is_map(message),
+    do: invalid_router_ref!(invalid_router)
+
   @spec pack_and_send(Message.t(), Types.version(), keyword) ::
           :ok | {:error, :protocol_undefined}
   def pack_and_send(message, version, opts), do: pack_and_send(__MODULE__, message, version, opts)
 
   @spec pack_and_send(router_ref, Message.t(), Types.version(), keyword) ::
           :ok | {:error, :protocol_undefined}
-  def pack_and_send(router, message, version, opts) do
+  def pack_and_send(router, message, version, opts) when is_router_ref(router) do
     source_identity = source_identity!(opts)
 
     # We can only pack payload at this point because we need router state to get source
@@ -308,9 +335,8 @@ defmodule XMAVLink.Router do
           {0, 0}
         end
 
-      # Atom and pid targets still receive the same vanilla message as external
-      # connections. Global/via names need GenServer dispatch because Kernel.send/2
-      # cannot resolve those names.
+      # Resolve all router target shapes before dispatch so missing global/via
+      # names fail fast instead of being silently dropped by GenServer.cast/2.
       dispatch_local(
         router,
         struct(Frame,
@@ -338,9 +364,22 @@ defmodule XMAVLink.Router do
     end
   end
 
-  defp dispatch_local({:global, _} = router, frame), do: GenServer.cast(router, {:local, frame})
-  defp dispatch_local({:via, _, _} = router, frame), do: GenServer.cast(router, {:local, frame})
-  defp dispatch_local(router, frame), do: send(router, {:local, frame})
+  def pack_and_send(invalid_router, _message, _version, _opts),
+    do: invalid_router_ref!(invalid_router)
+
+  defp dispatch_local(router, frame) do
+    case GenServer.whereis(router) do
+      nil -> router_not_running!(router)
+      pid -> send(pid, {:local, frame})
+    end
+  end
+
+  defp child_id(%{id: id}, _name) when not is_nil(id), do: id
+
+  defp child_id(_args, nil),
+    do: raise(ArgumentError, "router child_spec requires :id when :name is nil")
+
+  defp child_id(_args, name), do: name
 
   defp normalize_start_args(args) do
     args = Map.new(args)
@@ -360,22 +399,22 @@ defmodule XMAVLink.Router do
   defp subscription_cache_name(nil), do: nil
   defp subscription_cache_name(__MODULE__), do: XMAVLink.SubscriptionCache
 
-  defp subscription_cache_name(name) when is_atom(name) do
-    name
-    |> Atom.to_string()
-    |> Kernel.<>(".SubscriptionCache")
-    |> String.to_atom()
+  defp subscription_cache_name(name), do: {:global, {__MODULE__, :subscription_cache, name}}
+
+  defp normalize_subscribe_query(query) do
+    Keyword.update(query, :message, nil, fn
+      :unknown -> XMAVLink.UnknownMessage
+      message -> message
+    end)
   end
 
-  defp subscription_cache_name({:global, name}) do
-    {:global, {__MODULE__, :subscription_cache, name}}
+  defp invalid_router_ref!(router) do
+    raise ArgumentError, "invalid router target #{inspect(router)}"
   end
 
-  defp subscription_cache_name({:via, registry, name}) do
-    {:via, registry, {__MODULE__, :subscription_cache, name}}
+  defp router_not_running!(router) do
+    raise ArgumentError, "router target #{inspect(router)} is not running"
   end
-
-  defp subscription_cache_name(_name), do: nil
 
   defp route_local(frame, state) do
     LocalConnection.handle_info({:local, frame}, state.connections.local, state.dialect)

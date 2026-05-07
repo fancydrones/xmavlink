@@ -9,7 +9,7 @@ defmodule XMAVLink.Supervisor do
 
   @impl true
   def init(_) do
-    router_name = Application.get_env(:xmavlink, :router_name, XMAVLink.Router)
+    router_name = Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
 
     children =
       [

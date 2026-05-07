@@ -172,6 +172,31 @@ defmodule XMAVLink.Test.Router do
                })
     end
 
+    test "child specs require an explicit id for unnamed routers" do
+      assert_raise ArgumentError, ~r/requires :id when :name is nil/, fn ->
+        Router.child_spec(%{
+          name: nil,
+          system: 1,
+          component: 1,
+          dialect: Common,
+          connections: []
+        })
+      end
+
+      assert %{
+               id: :unnamed_router,
+               start: {Router, :start_link, [%{name: nil}]}
+             } =
+               Router.child_spec(%{
+                 id: :unnamed_router,
+                 name: nil,
+                 system: 1,
+                 component: 1,
+                 dialect: Common,
+                 connections: []
+               })
+    end
+
     test "targets subscriptions and outbound sends to a named router" do
       router_name = XMAVLink.Test.Router.NamedRouter
 
@@ -287,6 +312,62 @@ defmodule XMAVLink.Test.Router do
       assert state.subscription_cache == nil
 
       Router.unsubscribe(router_pid)
+    end
+
+    test "normalizes :unknown subscriptions to the downstream unknown-message sentinel" do
+      router_name = XMAVLink.Test.Router.UnknownMessageRouter
+
+      {:ok, router_pid} =
+        Router.start_link(%{
+          name: router_name,
+          system: 4,
+          component: 100,
+          dialect: Common,
+          connection_strings: []
+        })
+
+      on_exit(fn ->
+        stop_router(router_pid)
+        stop_subscription_cache(router_name)
+      end)
+
+      assert :ok = Router.subscribe(router_name, message: :unknown, as_frame: true)
+
+      subscriber = self()
+      state = :sys.get_state(router_name)
+      [{query, ^subscriber}] = state.connections.local.subscriptions
+      assert query.message == XMAVLink.UnknownMessage
+
+      XMAVLink.LocalConnection.forward(state.connections.local, %XMAVLink.Frame{
+        source_system: 1,
+        source_component: 1,
+        target_system: 0,
+        target_component: 0,
+        target: :broadcast,
+        message: nil
+      })
+
+      assert_receive %XMAVLink.Frame{message: %{__struct__: XMAVLink.UnknownMessage}}, 200
+
+      Router.unsubscribe(router_name)
+    end
+
+    test "rejects invalid router target shapes" do
+      assert_raise ArgumentError, ~r/invalid router target nil/, fn ->
+        Router.subscribe(nil, [])
+      end
+
+      assert_raise ArgumentError, ~r/invalid router target {:bad}/, fn ->
+        Router.pack_and_send({:bad}, sample_heartbeat())
+      end
+    end
+
+    test "raises when a named router target is not running" do
+      assert_raise ArgumentError,
+                   ~r/router target {:global, :missing_router} is not running/,
+                   fn ->
+                     Router.pack_and_send({:global, :missing_router}, sample_heartbeat())
+                   end
     end
   end
 
@@ -692,17 +773,13 @@ defmodule XMAVLink.Test.Router do
 
   defp subscription_cache_name(XMAVLink.Router), do: XMAVLink.SubscriptionCache
 
-  defp subscription_cache_name(router_name) when is_atom(router_name) do
-    router_name
-    |> Atom.to_string()
-    |> Kernel.<>(".SubscriptionCache")
-    |> String.to_atom()
-  end
+  defp subscription_cache_name(router_name),
+    do: {:global, {XMAVLink.Router, :subscription_cache, router_name}}
 
   defp stop_subscription_cache(router_name) do
     router_name
     |> subscription_cache_name()
-    |> Process.whereis()
+    |> GenServer.whereis()
     |> case do
       nil -> :ok
       pid -> Agent.stop(pid)
