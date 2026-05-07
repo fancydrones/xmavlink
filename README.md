@@ -49,6 +49,11 @@ Generated APM in 'lib/apm.ex'.
 >
 ```
 
+The repository includes `lib/common.ex` as checked-in generated output for the
+MAVLink Common dialect. Treat generated dialect modules as build artifacts:
+change the generator or XML input and regenerate them rather than editing or
+formatting generated files by hand.
+
 ## Configuring the XMAVLink Application
 
 Add `XMAVLink.Application` with no start arguments to your `mix.exs`. You need to point the application at the dialect you just generated 

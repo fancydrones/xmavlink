@@ -3,6 +3,7 @@
 The release gate in CI runs these checks across the supported Elixir/OTP matrix:
 
 ```bash
+mix deps.unlock --check-unused
 mix format --check-formatted
 mix compile --warnings-as-errors
 mix xref graph --label compile-connected --fail-above 0
@@ -12,6 +13,13 @@ mix dialyzer
 
 Dialyzer runs on the pinned baseline Elixir/OTP toolchain and uses CI caching
 for PLTs and Mix build artifacts.
+
+## Generated dialect output
+
+`lib/common.ex` is checked-in generated MAVLink dialect output. It is excluded
+from the formatter gate intentionally. Treat generated dialect modules as build
+artifacts: update the generator or XML input and regenerate them instead of
+hand-editing, hand-formatting, or reviewing large formatting-only diffs.
 
 # Testing locally with ArduPilot, MAVProxy, SITL, and X-Plane
 
