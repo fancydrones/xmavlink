@@ -187,6 +187,9 @@ defmodule XMAVLink.Router do
 
   - message: A MAVLink message structure from the installed dialect
   - version: Force sending using a specific MAVLink protocol (default 2)
+  - opts: Optional send settings:
+    - `:source_system` and `:source_component` override the router's
+      configured local identity for this message. Provide both or neither.
 
   ## Example
 
@@ -217,7 +220,15 @@ defmodule XMAVLink.Router do
     )
   ```
   """
-  def pack_and_send(message, version \\ 2) do
+  def pack_and_send(message, version_or_opts \\ 2)
+
+  def pack_and_send(message, opts) when is_list(opts), do: pack_and_send(message, 2, opts)
+
+  def pack_and_send(message, version), do: pack_and_send(message, version, [])
+
+  def pack_and_send(message, version, opts) do
+    source_identity = source_identity!(opts)
+
     # We can only pack payload at this point because we need router state to get source
     # system/component and sequence number for frame
     try do
@@ -240,6 +251,8 @@ defmodule XMAVLink.Router do
           struct(Frame,
             version: version,
             message_id: message_id,
+            source_system: source_identity[:source_system],
+            source_component: source_identity[:source_component],
             target_system: target_system,
             target_component: target_component,
             target: target,
@@ -258,6 +271,29 @@ defmodule XMAVLink.Router do
       # message definitions and regenerate the dialect module.
       Protocol.UndefinedError ->
         {:error, :protocol_undefined}
+    end
+  end
+
+  defp source_identity!(opts) do
+    source_system = Keyword.get(opts, :source_system)
+    source_component = Keyword.get(opts, :source_component)
+
+    case {source_system, source_component} do
+      {nil, nil} ->
+        []
+
+      {system, component} when system in 1..255 and component in 1..255 ->
+        [source_system: system, source_component: component]
+
+      {nil, _component} ->
+        raise ArgumentError, "source_system is required when source_component is set"
+
+      {_system, nil} ->
+        raise ArgumentError, "source_component is required when source_system is set"
+
+      _ ->
+        raise ArgumentError,
+              "source_system and source_component must be integers in the MAVLink range 1..255"
     end
   end
 

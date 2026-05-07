@@ -27,7 +27,7 @@ defmodule XMAVLink.LocalConnection do
   # We use handle_info instead of cast for symmetry
   # with the other connection types
   def handle_info(
-        {:local, frame},
+        {:local, frame = %Frame{source_system: frame_system, source_component: frame_component}},
         receiving_connection = %LocalConnection{
           system: system,
           component: component,
@@ -36,13 +36,16 @@ defmodule XMAVLink.LocalConnection do
         _dialect
       ) do
     # Fill in missing frame details source_system, source_component, sequence_number
+    source_system = frame_system || system
+    source_component = frame_component || component
+
     {
       :ok,
       :local,
       struct(receiving_connection, sequence_number: rem(sequence_number + 1, 255)),
       struct(frame,
-        source_system: system,
-        source_component: component,
+        source_system: source_system,
+        source_component: source_component,
         sequence_number: sequence_number
       )
       |> Frame.pack_frame()

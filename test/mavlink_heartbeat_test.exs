@@ -36,6 +36,22 @@ defmodule XMAVLink.HeartbeatTest do
 
       GenServer.stop(hb)
     end
+
+    test "dispatches heartbeats with an explicit source identity" do
+      msg = sample_heartbeat()
+
+      {:ok, hb} =
+        Heartbeat.start_link(
+          interval_ms: 50,
+          message: msg,
+          source_system: 245,
+          source_component: 191
+        )
+
+      assert_receive {:local, %{message: ^msg, source_system: 245, source_component: 191}}, 200
+
+      GenServer.stop(hb)
+    end
   end
 
   describe "with a {m, f, a} :builder" do

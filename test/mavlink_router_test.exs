@@ -324,4 +324,48 @@ defmodule XMAVLink.Test.Router do
       GenServer.stop(pid)
     end
   end
+
+  describe "pack_and_send/3" do
+    test "can override the local source identity for one message" do
+      {:ok, pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 100,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn ->
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      assert :ok = Router.subscribe(message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = %Common.Message.Heartbeat{
+        type: :mav_type_gcs,
+        autopilot: :mav_autopilot_invalid,
+        base_mode: MapSet.new(),
+        custom_mode: 0,
+        system_status: :mav_state_active,
+        mavlink_version: 3
+      }
+
+      assert :ok = Router.pack_and_send(msg, 2, source_system: 245, source_component: 191)
+
+      assert_receive %XMAVLink.Frame{
+                       message: ^msg,
+                       source_system: 245,
+                       source_component: 191
+                     },
+                     200
+
+      Router.unsubscribe()
+      GenServer.stop(pid)
+    end
+  end
 end

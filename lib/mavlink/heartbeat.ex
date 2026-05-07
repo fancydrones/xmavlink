@@ -18,9 +18,11 @@ defmodule XMAVLink.Heartbeat do
   ### Static message
 
       config :xmavlink,
-        heartbeat: [
-          interval_ms: 1000,
-          message: %Common.Message.Heartbeat{
+      heartbeat: [
+        interval_ms: 1000,
+        source_system: 245,
+        source_component: 191,
+        message: %Common.Message.Heartbeat{
             type: :mav_type_gcs,
             autopilot: :mav_autopilot_invalid,
             base_mode: MapSet.new(),
@@ -36,10 +38,12 @@ defmodule XMAVLink.Heartbeat do
   ### Dynamic builder
 
       config :xmavlink,
-        heartbeat: [
-          interval_ms: 1000,
-          builder: {MyApp.Mavlink, :build_heartbeat, []}
-        ]
+      heartbeat: [
+        interval_ms: 1000,
+        source_system: 1,
+        source_component: 100,
+        builder: {MyApp.Mavlink, :build_heartbeat, []}
+      ]
 
   The `{module, function, args}` tuple is invoked on every tick to
   produce a fresh struct. Use this when `system_status`, `base_mode`,
@@ -60,24 +64,29 @@ defmodule XMAVLink.Heartbeat do
 
   @doc false
   def start_link(spec) do
-    GenServer.start_link(__MODULE__, spec, name: __MODULE__)
+    {name, spec} = Keyword.pop(spec, :name, __MODULE__)
+    opts = if name, do: [name: name], else: []
+
+    GenServer.start_link(__MODULE__, spec, opts)
   end
 
   @impl true
   def init(spec) do
     interval_ms = Keyword.fetch!(spec, :interval_ms)
     builder = build_builder(spec)
+    version = Keyword.get(spec, :version, 2)
+    send_opts = Keyword.take(spec, [:source_system, :source_component])
 
     # First heartbeat ASAP so peer-learning routers admit us fast.
     send(self(), :tick)
-    {:ok, %{interval_ms: interval_ms, builder: builder}}
+    {:ok, %{interval_ms: interval_ms, builder: builder, version: version, send_opts: send_opts}}
   end
 
   @impl true
   def handle_info(:tick, state) do
     case safe_build(state.builder) do
       {:ok, msg} ->
-        XMAVLink.Router.pack_and_send(msg)
+        XMAVLink.Router.pack_and_send(msg, state.version, state.send_opts)
 
       {:error, error} ->
         Logger.error("XMAVLink.Heartbeat builder failed: #{inspect(error)}")
