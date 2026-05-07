@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0 - 2026-05-07
+
+- Added named router instance support while preserving the default
+  `XMAVLink.Router` convenience process.
+- Added targetable `subscribe`, `unsubscribe`, and `pack_and_send` router APIs
+  for named or pid router instances.
+- Isolated local subscription restart caches per named router.
+
 ## 0.7.1 - 2026-05-07
 
 - Fixed TCP outbound forwarding to send MAVLink frames over the TCP socket

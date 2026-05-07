@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.7.1",
+      version: "0.8.0",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -41,6 +41,8 @@ defmodule XMAVLink.Mixfile do
         system_id: 245,
         # Default to system control
         component_id: 250,
+        # Default registered router name
+        router_name: XMAVLink.Router,
         connections: []
       ],
       mod: {XMAVLink.Application, []},

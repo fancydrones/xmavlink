@@ -50,7 +50,8 @@ defmodule XMAVLink.Heartbeat do
   or `custom_mode` should reflect application state.
 
   Either `:message` or `:builder` is required (not both). `:interval_ms`
-  is required.
+  is required. Pass `:router` when heartbeats should be emitted through a
+  named or pid router other than the default `XMAVLink.Router`.
 
   ## First heartbeat
 
@@ -75,18 +76,27 @@ defmodule XMAVLink.Heartbeat do
     interval_ms = Keyword.fetch!(spec, :interval_ms)
     builder = build_builder(spec)
     version = Keyword.get(spec, :version, 2)
+    router = Keyword.get(spec, :router, XMAVLink.Router)
     send_opts = Keyword.take(spec, [:source_system, :source_component])
 
     # First heartbeat ASAP so peer-learning routers admit us fast.
     send(self(), :tick)
-    {:ok, %{interval_ms: interval_ms, builder: builder, version: version, send_opts: send_opts}}
+
+    {:ok,
+     %{
+       interval_ms: interval_ms,
+       builder: builder,
+       router: router,
+       version: version,
+       send_opts: send_opts
+     }}
   end
 
   @impl true
   def handle_info(:tick, state) do
     case safe_build(state.builder) do
       {:ok, msg} ->
-        XMAVLink.Router.pack_and_send(msg, state.version, state.send_opts)
+        XMAVLink.Router.pack_and_send(state.router, msg, state.version, state.send_opts)
 
       {:error, error} ->
         Logger.error("XMAVLink.Heartbeat builder failed: #{inspect(error)}")

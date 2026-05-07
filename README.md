@@ -17,7 +17,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.7.1"}
+     {:xmavlink, "~> 0.8.0"}
    ]
  end
  ```
@@ -51,6 +51,17 @@ config :xmavlink, dialect: Common, connections: ["serial:/dev/cu.usbserial-A603K
 The above config specifies the Common dialect we generated and connects to a a vehicle on a radio modem, a ground station listening for 
 UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. Remember 'out' means client, 
 'in' means server.
+
+By default the application supervises one router registered as `XMAVLink.Router`.
+Set `:router_name` when the application-owned router should use another registered
+name:
+
+```elixir
+config :xmavlink,
+  router_name: MyApp.MAVRouter,
+  dialect: Common,
+  connections: []
+```
 
 ### Connection String Formats
 
@@ -209,6 +220,33 @@ The XMAVLink application is to Elixir/Erlang code what [MAVProxy](https://ardupi
 is to its Python modules: a router that sits alongside them and gives them access to other MAVLink
 systems over its connections. Unlike MAVProxy it is not responsible for starting/stopping/scheduling
 Elixir/Erlang code.
+
+### Router instance model
+
+`XMAVLink.Router` remains the default convenience router name. Applications that
+need multiple independent routers can supervise named router instances and pass
+the router name or pid as the first argument to the public API:
+
+```elixir
+children = [
+  {XMAVLink.Router,
+   %{
+     name: MyApp.VehicleRouter,
+     dialect: Common,
+     system: 245,
+     component: 191,
+     connections: ["udpout:127.0.0.1:14550"]
+   }}
+]
+
+XMAVLink.Router.subscribe(MyApp.VehicleRouter, message: Common.Message.Heartbeat)
+XMAVLink.Router.pack_and_send(MyApp.VehicleRouter, message)
+XMAVLink.Router.unsubscribe(MyApp.VehicleRouter)
+```
+
+Named routers keep separate connection state, route tables, local sequence
+numbers, and subscription restart caches. Passing no router target continues to
+use the default `XMAVLink.Router` process.
 
 The router is supervised. On a failure the configured connections and previous subscriptions are 
 restored immediately. If a connection fails or is not available at startup the router will attempt to

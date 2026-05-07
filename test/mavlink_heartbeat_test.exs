@@ -52,6 +52,21 @@ defmodule XMAVLink.HeartbeatTest do
 
       GenServer.stop(hb)
     end
+
+    test "dispatches through a configured router target" do
+      msg = sample_heartbeat()
+
+      {:ok, hb} =
+        Heartbeat.start_link(
+          interval_ms: 10,
+          message: msg,
+          router: self()
+        )
+
+      assert_receive {:local, %{message: ^msg}}, 200
+
+      GenServer.stop(hb)
+    end
   end
 
   describe "with a {m, f, a} :builder" do
