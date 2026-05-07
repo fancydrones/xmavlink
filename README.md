@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.10.0"}
+     {:xmavlink, "~> 0.10.1"}
    ]
  end
  ```
@@ -52,7 +52,8 @@ Generated APM in 'lib/apm.ex'.
 The repository includes `lib/common.ex` as checked-in generated output for the
 MAVLink Common dialect. Treat generated dialect modules as build artifacts:
 change the generator or XML input and regenerate them rather than editing or
-formatting generated files by hand.
+formatting generated files by hand. The generator emits deterministic,
+formatter-compatible source for repeatable diffs.
 
 ## Configuring the XMAVLink Application
 

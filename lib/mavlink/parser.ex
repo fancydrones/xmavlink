@@ -68,7 +68,11 @@ defmodule XMAVLink.Parser do
           }
           | {:error, :enoent}
   def parse_mavlink_xml(path) do
-    parse_mavlink_xml(path, %{}) |> Map.values() |> combine_definitions
+    path
+    |> parse_mavlink_xml(%{})
+    |> Enum.sort_by(fn {path, _definition} -> path end)
+    |> Enum.map(fn {_path, definition} -> definition end)
+    |> combine_definitions()
   end
 
   def parse_mavlink_xml(path, paths) do
