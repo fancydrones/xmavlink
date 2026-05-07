@@ -5,16 +5,19 @@ defmodule XMAVLink.UDPOutConnection do
 
   require Logger
   import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
 
   defstruct address: nil,
             port: nil,
-            socket: nil
+            socket: nil,
+            worker: nil
 
   @type t :: %XMAVLink.UDPOutConnection{
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
-          socket: pid
+          socket: pid,
+          worker: pid | nil
         }
 
   # Create connection if this is the first time we've received on it
@@ -64,36 +67,39 @@ defmodule XMAVLink.UDPOutConnection do
     end
   end
 
-  def connect(["udpout", address, port], controlling_process) do
+  def open(["udpout", address, port], controlling_process) do
     case :gen_udp.open(0, [:binary, active: true]) do
       {:ok, socket} ->
         :ok = Logger.info("Opened udpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}")
 
-        send(
-          controlling_process,
-          {
-            :add_connection,
-            socket,
-            struct(
-              XMAVLink.UDPOutConnection,
-              socket: socket,
-              address: address,
-              port: port
-            )
-          }
-        )
+        :ok = :gen_udp.controlling_process(socket, controlling_process)
 
-        :gen_udp.controlling_process(socket, controlling_process)
+        {:ok, socket,
+         struct(
+           XMAVLink.UDPOutConnection,
+           socket: socket,
+           address: address,
+           port: port,
+           worker: controlling_process
+         )}
 
       other ->
-        :ok =
-          Logger.debug(
-            "Could not open udpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}: #{inspect(other)}. Retrying in 1 second"
-          )
-
-        :timer.sleep(1000)
-        connect(["udpout", address, port], controlling_process)
+        {:error, other}
     end
+  end
+
+  def close(%XMAVLink.UDPOutConnection{socket: socket}) do
+    :gen_udp.close(socket)
+  end
+
+  def forward(
+        connection = %XMAVLink.UDPOutConnection{
+          worker: worker
+        },
+        frame
+      )
+      when is_pid(worker) do
+    ConnectionWorker.forward(worker, connection, frame)
   end
 
   def forward(

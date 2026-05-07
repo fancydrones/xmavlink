@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Moved configured connection startup and reconnect behavior under supervised
+  per-router connection workers with explicit retry delays.
+- Added documentation and coverage for connection worker retry/reconnect
+  behavior.
+
 ## 0.8.0 - 2026-05-07
 
 - Added named router instance support while preserving the default

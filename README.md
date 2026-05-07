@@ -73,6 +73,23 @@ XMAVLink supports the following connection string formats:
 - **TCP Out (client)**: `tcpout:<address>:<port>` (e.g., `"tcpout:192.168.1.100:5760"`)
 - **TCP In (server)**: `tcpin:<address>:<port>` (e.g., `"tcpin:0.0.0.0:5760"`)
 
+### Configured Connection Lifecycle
+
+Configured serial, UDP, and TCP connections run under a per-router dynamic
+supervisor. Each connection has a worker process that owns its socket or UART
+resource, forwards inbound frames to the router, and reconnects after open
+failures or TCP/serial disconnects.
+
+By default, connection workers retry every 1000 ms. Override the retry delay
+with `:connection_retry_ms`:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["tcpout:127.0.0.1:5760"],
+  connection_retry_ms: 500
+```
+
 ### DNS Hostname Support
 
 As of version 0.4.2, XMAVLink supports DNS hostnames in addition to IP addresses for network connections. This is particularly useful in:

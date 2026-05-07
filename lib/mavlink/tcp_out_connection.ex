@@ -7,17 +7,19 @@ defmodule XMAVLink.TCPOutConnection do
   @smallest_mavlink_message 8
 
   require Logger
+  alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
 
   import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
 
-  defstruct socket: nil, address: nil, port: nil, buffer: <<>>
+  defstruct socket: nil, address: nil, port: nil, buffer: <<>>, worker: nil
 
   @type t :: %XMAVLink.TCPOutConnection{
           socket: pid,
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
-          buffer: binary
+          buffer: binary,
+          worker: pid | nil
         }
 
   def handle_info(
@@ -65,36 +67,37 @@ defmodule XMAVLink.TCPOutConnection do
     end
   end
 
-  def connect(["tcpout", address, port], controlling_process) do
+  def open(["tcpout", address, port], controlling_process) do
     case :gen_tcp.connect(address, port, [:binary, active: true]) do
       {:ok, socket} ->
         :ok = Logger.debug("Opened tcpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}")
 
-        send(
-          controlling_process,
-          {
-            :add_connection,
-            socket,
-            struct(
-              XMAVLink.TCPOutConnection,
-              socket: socket,
-              address: address,
-              port: port
-            )
-          }
-        )
+        :ok = :gen_tcp.controlling_process(socket, controlling_process)
 
-        :gen_tcp.controlling_process(socket, controlling_process)
+        {:ok, socket,
+         struct(
+           XMAVLink.TCPOutConnection,
+           socket: socket,
+           address: address,
+           port: port,
+           worker: controlling_process
+         )}
 
       other ->
-        :ok =
-          Logger.debug(
-            "Could not open tcpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}: #{inspect(other)}. Retrying in 1 second"
-          )
-
-        :timer.sleep(1000)
-        connect(["tcpout", address, port], controlling_process)
+        {:error, other}
     end
+  end
+
+  def close(%XMAVLink.TCPOutConnection{socket: socket}) do
+    :gen_tcp.close(socket)
+  end
+
+  def forward(
+        connection = %XMAVLink.TCPOutConnection{worker: worker},
+        frame
+      )
+      when is_pid(worker) do
+    ConnectionWorker.forward(worker, connection, frame)
   end
 
   def forward(
