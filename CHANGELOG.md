@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1 - 2026-05-07
 
 - Made generated dialect source deterministic and formatter-compatible by
   removing timestamp/path churn, combining parsed XML inputs in stable order,
