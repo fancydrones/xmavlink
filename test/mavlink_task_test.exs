@@ -1,25 +1,33 @@
 defmodule XMAVLink.Test.Tasks do
   use ExUnit.Case
+
+  import ExUnit.CaptureIO
   import Mix.Tasks.Xmavlink
 
   @input "#{File.cwd!()}/test/input/test_mavlink.xml"
-  @output_dir "#{File.cwd!()}/test/output"
+  @output_dir "#{Mix.Project.build_path()}/generated"
   @output "#{@output_dir}/test_mavlink.ex"
   @output_module "TestMavlink"
 
   test "generate" do
-    # Setup output directory
     File.mkdir_p(@output_dir)
     File.rm(@output)
 
-    # Run mix task
-    run([@input, @output, @output_module])
+    output =
+      capture_io(fn ->
+        assert :ok = run([@input, @output, @output_module])
+      end)
 
-    # Did it generate
+    assert output =~ "Generated #{@output_module}"
     assert File.exists?(@output)
 
     # We don't care if we redefine MAVLink modules while running the following test
+    previous_compiler_options = Code.compiler_options()
     Code.compiler_options(ignore_module_conflict: true)
+
+    on_exit(fn ->
+      Code.compiler_options(previous_compiler_options)
+    end)
 
     # Confirm the list of modules generated from common.xml and its includes
     pairs =

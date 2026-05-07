@@ -36,33 +36,41 @@ defmodule XMAVLink.Test.Router do
     end
 
     test "accepts IP address in tcpout connection string" do
-      # TCP should also work with IP addresses
+      {listen_socket, acceptor, port} = open_tcp_listener()
+      on_exit(fn -> close_tcp_listener(listen_socket, acceptor) end)
+
       assert {:ok, pid} =
                Router.start_link(
                  %{
                    system: 1,
                    component: 1,
                    dialect: APM.Dialect,
-                   connection_strings: ["tcpout:127.0.0.1:14552"]
+                   connection_strings: ["tcpout:127.0.0.1:#{port}"]
                  },
                  []
                )
+
+      assert_receive :tcp_peer_accepted, 1_000
 
       GenServer.stop(pid)
     end
 
     test "accepts DNS hostname in tcpout connection string" do
-      # TCP should also work with DNS hostnames
+      {listen_socket, acceptor, port} = open_tcp_listener()
+      on_exit(fn -> close_tcp_listener(listen_socket, acceptor) end)
+
       assert {:ok, pid} =
                Router.start_link(
                  %{
                    system: 1,
                    component: 1,
                    dialect: APM.Dialect,
-                   connection_strings: ["tcpout:localhost:14553"]
+                   connection_strings: ["tcpout:localhost:#{port}"]
                  },
                  []
                )
+
+      assert_receive :tcp_peer_accepted, 1_000
 
       GenServer.stop(pid)
     end
@@ -255,7 +263,7 @@ defmodule XMAVLink.Test.Router do
       # (us) receives a `{:udp, _, _, _, _}` message. With the
       # source-exclusion fix in place, no echo should fire.
       refute_receive {:udp, ^trap_socket, _, _, _},
-                     100,
+                     50,
                      "router echoed a :system_component-classified frame back via the udpout"
 
       GenServer.stop(router_pid)
@@ -475,5 +483,46 @@ defmodule XMAVLink.Test.Router do
       system_status: :mav_state_active,
       mavlink_version: 3
     }
+  end
+
+  defp open_tcp_listener do
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [
+        :binary,
+        active: false,
+        packet: :raw,
+        reuseaddr: true,
+        ip: {127, 0, 0, 1}
+      ])
+
+    {:ok, {{127, 0, 0, 1}, port}} = :inet.sockname(listen_socket)
+    parent = self()
+
+    acceptor =
+      spawn_link(fn ->
+        case :gen_tcp.accept(listen_socket, 1_000) do
+          {:ok, peer_socket} ->
+            send(parent, :tcp_peer_accepted)
+
+            receive do
+              :close_tcp_peer -> :ok
+            after
+              1_000 -> :ok
+            end
+
+            :gen_tcp.close(peer_socket)
+
+          other ->
+            other
+        end
+      end)
+
+    {listen_socket, acceptor, port}
+  end
+
+  defp close_tcp_listener(listen_socket, acceptor) do
+    send(acceptor, :close_tcp_peer)
+    :gen_tcp.close(listen_socket)
+    :ok
   end
 end
