@@ -71,13 +71,14 @@ defmodule XMAVLink.Router do
     connection_worker_monitors: %{},
     # %{socket|port|local: XMAVLink.*_Connection}
     connections: %{},
-    # Connection and MAVLink version tuple keyed by MAVLink addresses
+    # Connection key last observed for each MAVLink address
     routes: %{}
   ]
 
   # Can't used qualified type as map key
   @type mavlink_address :: Types.mavlink_address()
   @type mavlink_connection :: Types.connection()
+  @type connection_key :: :local | binary | port | {port, Types.net_address(), Types.net_port()}
   @type router_name :: atom | {:global, term} | {:via, module, term}
   @type router_ref :: GenServer.server()
   @type subscribe_query :: [
@@ -92,10 +93,10 @@ defmodule XMAVLink.Router do
           connection_retry_ms: non_neg_integer,
           subscription_cache: router_name | nil,
           connection_supervisor: pid | nil,
-          connection_workers: %{term => pid},
+          connection_workers: %{connection_key() => pid},
           connection_worker_monitors: %{reference => pid},
-          connections: %{},
-          routes: %{mavlink_address: {mavlink_connection, Types.version()}}
+          connections: %{connection_key() => mavlink_connection()},
+          routes: %{mavlink_address() => connection_key()}
         }
 
   defguardp is_router_ref(router)

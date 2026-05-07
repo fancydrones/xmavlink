@@ -6,7 +6,7 @@ defmodule XMAVLink.Types do
   @typedoc "Connection delegate modules for XMAVLink.Router"
   @type connection ::
           XMAVLink.SerialConnection
-          | XMAVLink.TCPConnection
+          | XMAVLink.TCPOutConnection
           | XMAVLink.UDPInConnection
           | XMAVLink.UDPOutConnection
 

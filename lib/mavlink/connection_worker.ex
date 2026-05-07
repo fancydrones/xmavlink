@@ -24,7 +24,7 @@ defmodule XMAVLink.ConnectionWorker do
           connection_key: term | nil,
           connection: term | nil,
           retry_ms: non_neg_integer,
-          retry_timer: reference | nil,
+          retry_timer: {reference, reference} | nil,
           status: :disconnected | :connecting | :connected
         }
 
@@ -100,13 +100,17 @@ defmodule XMAVLink.ConnectionWorker do
   end
 
   def handle_cast({:forward, connection, frame}, state) do
-    _ = state.transport.forward(connection, frame)
+    _ = state.transport.forward(direct_connection(connection), frame)
     {:noreply, state}
   end
 
   @impl true
-  def handle_info(:connect, state) do
+  def handle_info({:connect, connect_ref}, %{retry_timer: {_timer_ref, connect_ref}} = state) do
     {:noreply, connect(%{state | retry_timer: nil})}
+  end
+
+  def handle_info({:connect, _stale_ref}, state) do
+    {:noreply, state}
   end
 
   def handle_info(message = {:udp, _socket, _address, _port, _raw}, state) do
@@ -200,13 +204,19 @@ defmodule XMAVLink.ConnectionWorker do
     %{
       state
       | status: :disconnected,
-        retry_timer: Process.send_after(self(), :connect, state.retry_ms)
+        retry_timer: schedule_connect(state.retry_ms)
     }
+  end
+
+  defp schedule_connect(retry_ms) do
+    connect_ref = make_ref()
+    timer_ref = Process.send_after(self(), {:connect, connect_ref}, retry_ms)
+    {timer_ref, connect_ref}
   end
 
   defp cancel_retry(%{retry_timer: nil} = state), do: state
 
-  defp cancel_retry(%{retry_timer: retry_timer} = state) do
+  defp cancel_retry(%{retry_timer: {retry_timer, _connect_ref}} = state) do
     Process.cancel_timer(retry_timer)
     %{state | retry_timer: nil}
   end
@@ -217,6 +227,12 @@ defmodule XMAVLink.ConnectionWorker do
     _ = state.transport.close(state.connection)
     state
   end
+
+  defp direct_connection(%{worker: _worker} = connection) do
+    %{connection | worker: nil}
+  end
+
+  defp direct_connection(connection), do: connection
 
   defp connection_description([protocol, address, port])
        when is_tuple(address) and tuple_size(address) == 4 do

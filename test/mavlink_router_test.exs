@@ -191,6 +191,35 @@ defmodule XMAVLink.Test.Router do
       GenServer.stop(router_pid)
     end
 
+    test "forwards outbound frames through worker-owned sockets" do
+      {udp_socket, udp_port} = open_udp_socket()
+      :ok = :inet.setopts(udp_socket, active: true)
+      on_exit(fn -> :gen_udp.close(udp_socket) end)
+
+      assert {:ok, router_pid} =
+               Router.start_link(
+                 %{
+                   system: 1,
+                   component: 1,
+                   dialect: Common,
+                   connection_strings: ["udpout:127.0.0.1:#{udp_port}"],
+                   connection_retry_ms: 10
+                 },
+                 []
+               )
+
+      _socket = wait_for_udpout_socket(router_pid)
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat())
+
+      assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, <<magic, _rest::binary>>},
+                     500
+
+      assert magic in [0xFE, 0xFD]
+
+      GenServer.stop(router_pid)
+    end
+
     test "tcpout workers reconnect after the peer closes" do
       {listen_socket, acceptor, port} = open_tcp_reconnect_listener(2)
       on_exit(fn -> close_tcp_reconnect_listener(listen_socket, acceptor) end)

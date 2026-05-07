@@ -75,4 +75,27 @@ defmodule XMAVLink.Test.ConnectionWorker do
 
     GenServer.stop(worker)
   end
+
+  test "ignores stale retry timer messages after an explicit reconnect" do
+    {:ok, worker} =
+      ConnectionWorker.start_link(%{
+        router: self(),
+        transport: Transport,
+        tokens: [parent: self(), failures: 1],
+        retry_ms: 1_000
+      })
+
+    assert_receive {:open_attempt, 1}, 100
+    assert %{retry_timer: {_timer_ref, connect_ref}} = ConnectionWorker.status(worker)
+
+    ConnectionWorker.reconnect(worker)
+
+    assert_receive {:open_attempt, 2}, 100
+    assert_receive {:add_connection, :fake_connection, %Transport{attempt: 2}, ^worker}, 100
+
+    send(worker, {:connect, connect_ref})
+    refute_receive {:open_attempt, 3}, 50
+
+    GenServer.stop(worker)
+  end
 end
