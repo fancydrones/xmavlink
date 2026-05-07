@@ -13,6 +13,7 @@ defmodule XMAVLink.Util.Supervisor do
       {XMAVLink.Util.CacheManager, %{}},
       {XMAVLink.Util.FocusManager, %{}}
     ]
+
     Supervisor.init(children, strategy: :one_for_one)
   end
 end
