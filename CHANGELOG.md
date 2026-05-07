@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 - 2026-05-07
 
 - Moved configured connection startup and reconnect behavior under supervised
   per-router connection workers with explicit retry delays.
