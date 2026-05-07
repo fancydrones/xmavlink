@@ -1,12 +1,12 @@
 # XMAVLink
 
-This library includes a mix task that generates code from a MAVLink xml
+This library includes a mix task that generates code from MAVLink XML
 definition files and an application that enables communication with other
-systems using the MAVLink 1.0 or 2.0 protocol over serial, UDP and TCP
-connections.
+systems using MAVLink 1 frames and unsigned MAVLink 2 frames over serial,
+UDP, and outbound TCP connections.
 
-MAVLink is a Micro Air Vehicle communication protocol used by Pixhawk, 
-Ardupilot and other leading autopilot platforms. For more information
+MAVLink is a Micro Air Vehicle communication protocol used by Pixhawk,
+ArduPilot and other leading autopilot platforms. For more information
 on MAVLink see https://mavlink.io.
 
 ## Installation
@@ -31,6 +31,12 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
 This library is not officially recognised or supported by MAVLink at this
 time.
 
+XMAVLink parses and emits MAVLink 1 frames and unsigned MAVLink 2 frames that
+do not set incompatible flags. MAVLink 2 signing is not implemented; inbound
+MAVLink 2 frames with incompatible flags are discarded. Supported configured
+transports are serial, UDP client (`udpout`), UDP server (`udpin`), and TCP
+client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
+
 ## Generating MAVLink Dialect Modules
 
 MAVLink message definition files for popular dialects can be found [here](https://github.com/mavlink/mavlink/tree/master/message_definitions/v1.0).
@@ -52,9 +58,12 @@ and list the connections to other vehicles in `config.exs`:
 config :xmavlink, dialect: Common, connections: ["serial:/dev/cu.usbserial-A603KH3Y:57600", "udpout:127.0.0.1:14550", "tcpout:127.0.0.1:5760"]
 ```
 
-The above config specifies the Common dialect we generated and connects to a a vehicle on a radio modem, a ground station listening for 
-UDP packets on 14550 and a SITL vehicle listening for TCP connections on 5760. Remember 'out' means client, 
-'in' means server.
+The above config specifies the Common dialect we generated and connects to a
+vehicle on a radio modem, a UDP peer listening on port 14550, and a SITL vehicle
+listening for TCP connections on port 5760. For configured network transports,
+`out` means XMAVLink connects or sends to a remote endpoint. `udpin` means
+XMAVLink opens a local UDP socket and receives packets from peers. TCP server
+mode is not currently supported.
 
 By default the application supervises one router registered as `XMAVLink.Router`.
 Set `:router_name` when the application-owned router should use another registered
@@ -75,7 +84,9 @@ XMAVLink supports the following connection string formats:
 - **UDP Out (client)**: `udpout:<address>:<port>` (e.g., `"udpout:192.168.1.100:14550"`)
 - **UDP In (server)**: `udpin:<address>:<port>` (e.g., `"udpin:0.0.0.0:14550"`)
 - **TCP Out (client)**: `tcpout:<address>:<port>` (e.g., `"tcpout:192.168.1.100:5760"`)
-- **TCP In (server)**: `tcpin:<address>:<port>` (e.g., `"tcpin:0.0.0.0:5760"`)
+
+There is no `tcpin` connection string. TCP is currently supported only as an
+outbound client connection, primarily for SITL endpoints.
 
 ### Configured Connection Lifecycle
 

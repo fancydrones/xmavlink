@@ -30,7 +30,7 @@ defmodule XMAVLink.Mixfile do
   config :xmavlink, dialect: Common
   config :xmavlink, system_id: 1
   config :xmavlink, component_id: 1
-  config :xmavlink, connections: ["udp:192.168.0.10:14550"]
+  config :xmavlink, connections: ["udpout:192.168.0.10:14550"]
   """
   def application do
     [
