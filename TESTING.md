@@ -13,93 +13,83 @@ mix test --warnings-as-errors
 base still has a known warning tracked by v1.0.0 readiness issue #31. Add it to
 CI once that warning is resolved or formally excluded.
 
-# Testing locally with Ardupilot, MavProxy, SITL and X-Plane
+# Testing locally with ArduPilot, MAVProxy, SITL, and X-Plane
+
+Use the upstream ArduPilot documentation as the source of truth for installing
+and running SITL and MAVProxy:
+
+- https://ardupilot.org/dev/docs/SITL-setup-landingpage.html
+- https://ardupilot.org/dev/docs/using-sitl-for-ardupilot-testing.html
+- https://ardupilot.org/mavproxy/docs/getting_started/download_and_installation.html
+
+The old local instructions used Python 2 and global `sudo pip` installs. Do not
+use those for new setup. Current ArduPilot tooling is Python 3 based; prefer the
+platform-specific upstream setup, a virtual environment, or user-local install.
+
+For a local XMAVLink smoke test, start SITL through `sim_vehicle.py` and add or
+verify a MAVProxy UDP output to the port XMAVLink will use. On a typical local
+SITL session, MAVProxy already exposes UDP outputs on `127.0.0.1:14550` and
+`127.0.0.1:14551`; confirm with:
+
+```
+output
+```
+
+If needed, add an output explicitly from the MAVProxy prompt:
+
+```
+output add 127.0.0.1:14550
+```
+
+Then configure XMAVLink with a matching UDP listener:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["udpin:0.0.0.0:14550"]
+```
+
+or run a script that starts a router with the same connection string.
+
+For TCP-based SITL, connect XMAVLink as a TCP client:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["tcpout:127.0.0.1:5760"]
+```
+
+XMAVLink does not currently provide a TCP server (`tcpin`) transport.
+
+## X-Plane
 
 It's possible to use SITL with X-Plane:
 
-http://ardupilot.org/dev/docs/sitl-with-xplane.html
+https://ardupilot.org/dev/docs/sitl-with-xplane.html
 
-### Install dependencies:
-
-```
-brew install python@2.7
-```
-
-Verify with: `python --version`.
-
-Remove this incompatible library:
+Start X-Plane and set up the data export settings per the upstream page, then
+run ArduPlane and MAVProxy. A MAVProxy output can forward frames to an XMAVLink
+UDP listener:
 
 ```
-sudo pip uninstall python-dateutil
-```
-
-### Install MavProxy
-
-```
-sudo pip install wxPython
-sudo pip install gnureadline
-sudo pip install billiard
-sudo pip install numpy pyparsing
-sudo pip install MAVProxy
-```
-
-### Ardupilot
-
-Install Ardupilot dependencies:
-
-```
-brew tap ardupilot/homebrew-px4
-brew install genromfs
-brew install gcc-arm-none-eabi
-brew install gawk
-```
-
-Download Ardupilot:
-
-```bash
-git clone git@github.com:ArduPilot/ardupilot.git
-```
-
-Build Ardupilot for macOS:
-
-```bash
-cd ardupilot && ./Tools/environment_install/install-prereqs-mac.sh
-```
-
-Add the following to your shell:
-
-```
-export PATH=/Path/To/ardupilot/Tools/autotest:$PATH
-```
-
-Configure Ardupilot for SITL:
-
-```
-cd ardupilot
-./waf configure --board sitl
-cd ArduCopter
-sim_vehicle.py -w
-```
-
-After initialisation Ctl C and run the following:
-
-```
-sim_vehicle.py --console
-```
-
-Start X-Plane and set up the data export settings per web page, then run arduplane and mavproxy
-
 mavproxy.py --master=tcp:127.0.0.1:5760 --out 127.0.0.1:14550
+```
 
-Then
+Then run an XMAVLink script or application configured with:
+
+```elixir
+connections: ["udpin:0.0.0.0:14550"]
+```
+
+For example:
 
 ```bash
 mix run scripts/listen.exs
 ```
 
-will receive messages
+will receive messages if the script starts a matching listener.
 
-## to kill emlid noise bug in mavproxy:
+## MAVProxy noise setting
 
 ```
 set shownoise False
@@ -113,7 +103,7 @@ In another directory (like `..`):
 
 ```bash
 git clone git@github.com:mavlink/mavlink.git
-cd elixir-mavlink
+cd mavlink
 ```
 
 The message definitions live in:
@@ -127,7 +117,7 @@ To generate a protocol file for APM:
 ```bash
 mkdir message_definitions
 cp ../mavlink/message_definitions/v1.0/* message_definitions
-mix mavlink message_definitions/ardupilotmega.xml output/apm.ex APM
+mix xmavlink message_definitions/ardupilotmega.xml output/apm.ex APM
 ```
 
 ## Example usage
