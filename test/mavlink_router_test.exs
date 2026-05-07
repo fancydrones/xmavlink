@@ -142,6 +142,105 @@ defmodule XMAVLink.Test.Router do
       assert {:error, {%ArgumentError{message: message}, _stacktrace}} = result
       assert message =~ "invalid port"
     end
+
+    test "rejects invalid connection retry delays" do
+      assert_raise ArgumentError, ~r/connection_retry_ms/, fn ->
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: APM.Dialect,
+            connection_strings: [],
+            connection_retry_ms: -1
+          },
+          []
+        )
+      end
+    end
+  end
+
+  describe "connection lifecycle" do
+    test "starts configured connections as supervised workers" do
+      {udp_socket, udp_port} = open_udp_socket()
+      on_exit(fn -> :gen_udp.close(udp_socket) end)
+
+      assert {:ok, router_pid} =
+               Router.start_link(
+                 %{
+                   system: 1,
+                   component: 1,
+                   dialect: APM.Dialect,
+                   connection_strings: ["udpout:127.0.0.1:#{udp_port}"],
+                   connection_retry_ms: 10
+                 },
+                 []
+               )
+
+      socket = wait_for_udpout_socket(router_pid)
+      state = :sys.get_state(router_pid)
+
+      assert Process.alive?(state.connection_supervisor)
+      assert worker = state.connection_workers[socket]
+      assert Process.alive?(worker)
+
+      assert Enum.any?(DynamicSupervisor.which_children(state.connection_supervisor), fn
+               {_id, ^worker, :worker, [XMAVLink.ConnectionWorker]} -> true
+               _ -> false
+             end)
+
+      GenServer.stop(router_pid)
+    end
+
+    test "forwards outbound frames through worker-owned sockets" do
+      {udp_socket, udp_port} = open_udp_socket()
+      :ok = :inet.setopts(udp_socket, active: true)
+      on_exit(fn -> :gen_udp.close(udp_socket) end)
+
+      assert {:ok, router_pid} =
+               Router.start_link(
+                 %{
+                   system: 1,
+                   component: 1,
+                   dialect: Common,
+                   connection_strings: ["udpout:127.0.0.1:#{udp_port}"],
+                   connection_retry_ms: 10
+                 },
+                 []
+               )
+
+      _socket = wait_for_udpout_socket(router_pid)
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat())
+
+      assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, <<magic, _rest::binary>>},
+                     500
+
+      assert magic in [0xFE, 0xFD]
+
+      GenServer.stop(router_pid)
+    end
+
+    test "tcpout workers reconnect after the peer closes" do
+      {listen_socket, acceptor, port} = open_tcp_reconnect_listener(2)
+      on_exit(fn -> close_tcp_reconnect_listener(listen_socket, acceptor) end)
+
+      assert {:ok, router_pid} =
+               Router.start_link(
+                 %{
+                   system: 1,
+                   component: 1,
+                   dialect: APM.Dialect,
+                   connection_strings: ["tcpout:127.0.0.1:#{port}"],
+                   connection_retry_ms: 10
+                 },
+                 []
+               )
+
+      assert_receive {:tcp_peer_accepted, 1}, 1_000
+      assert_receive {:tcp_peer_accepted, 2}, 1_000
+
+      GenServer.stop(router_pid)
+    end
   end
 
   describe "router instances" do
@@ -765,9 +864,45 @@ defmodule XMAVLink.Test.Router do
     {listen_socket, acceptor, port}
   end
 
+  defp open_tcp_reconnect_listener(accept_count) do
+    {:ok, listen_socket} =
+      :gen_tcp.listen(0, [
+        :binary,
+        active: false,
+        packet: :raw,
+        reuseaddr: true,
+        ip: {127, 0, 0, 1}
+      ])
+
+    {:ok, {{127, 0, 0, 1}, port}} = :inet.sockname(listen_socket)
+    parent = self()
+
+    acceptor =
+      spawn_link(fn ->
+        for index <- 1..accept_count do
+          case :gen_tcp.accept(listen_socket, 1_000) do
+            {:ok, peer_socket} ->
+              send(parent, {:tcp_peer_accepted, index})
+              :gen_tcp.close(peer_socket)
+
+            other ->
+              send(parent, {:tcp_accept_failed, index, other})
+          end
+        end
+      end)
+
+    {listen_socket, acceptor, port}
+  end
+
   defp close_tcp_listener(listen_socket, acceptor) do
     send(acceptor, :close_tcp_peer)
     :gen_tcp.close(listen_socket)
+    :ok
+  end
+
+  defp close_tcp_reconnect_listener(listen_socket, acceptor) do
+    :gen_tcp.close(listen_socket)
+    Process.exit(acceptor, :kill)
     :ok
   end
 

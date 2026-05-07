@@ -7,6 +7,7 @@ defmodule XMAVLink.SerialConnection do
 
   require Logger
 
+  alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
   alias Circuits.UART
 
@@ -15,13 +16,15 @@ defmodule XMAVLink.SerialConnection do
   defstruct port: nil,
             baud: nil,
             uart: nil,
-            buffer: <<>>
+            buffer: <<>>,
+            worker: nil
 
   @type t :: %XMAVLink.SerialConnection{
           port: binary,
           baud: non_neg_integer,
           uart: pid,
-          buffer: binary
+          buffer: binary,
+          worker: pid | nil
         }
 
   def handle_info(
@@ -70,38 +73,45 @@ defmodule XMAVLink.SerialConnection do
     end
   end
 
-  def connect(["serial", port, baud, uart], controlling_process) do
+  def open(["serial", port, baud], controlling_process) do
     if Map.has_key?(UART.enumerate(), port) do
+      uart = :poolboy.checkout(XMAVLink.UARTPool)
+
       case UART.open(uart, port, speed: baud, active: true) do
         :ok ->
           :ok = Logger.info("Opened serial port #{port} at #{baud} baud")
 
-          send(
-            controlling_process,
-            {
-              :add_connection,
-              port,
-              struct(
-                XMAVLink.SerialConnection,
-                port: port,
-                baud: baud,
-                uart: uart
-              )
-            }
-          )
+          :ok = UART.controlling_process(uart, controlling_process)
 
-          UART.controlling_process(uart, controlling_process)
+          {:ok, port,
+           struct(
+             XMAVLink.SerialConnection,
+             port: port,
+             baud: baud,
+             uart: uart,
+             worker: controlling_process
+           )}
 
-        {:error, _} ->
-          :ok = Logger.warning("Could not open serial port #{port}. Retrying in 1 second")
-          :timer.sleep(1000)
-          connect(["serial", port, baud, uart], controlling_process)
+        {:error, reason} ->
+          :poolboy.checkin(XMAVLink.UARTPool, uart)
+          {:error, {:open_failed, reason}}
       end
     else
-      :ok = Logger.warning("Serial port #{port} not attached. Retrying in 1 second")
-      :timer.sleep(1000)
-      connect(["serial", port, baud, uart], controlling_process)
+      {:error, :not_attached}
     end
+  end
+
+  def close(%XMAVLink.SerialConnection{uart: uart}) do
+    _ = UART.close(uart)
+    :poolboy.checkin(XMAVLink.UARTPool, uart)
+  end
+
+  def forward(
+        connection = %XMAVLink.SerialConnection{worker: worker},
+        frame
+      )
+      when is_pid(worker) do
+    ConnectionWorker.forward(worker, connection, frame)
   end
 
   def forward(

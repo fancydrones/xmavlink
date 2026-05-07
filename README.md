@@ -17,7 +17,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.8.0"}
+     {:xmavlink, "~> 0.9.0"}
    ]
  end
  ```
@@ -72,6 +72,23 @@ XMAVLink supports the following connection string formats:
 - **UDP In (server)**: `udpin:<address>:<port>` (e.g., `"udpin:0.0.0.0:14550"`)
 - **TCP Out (client)**: `tcpout:<address>:<port>` (e.g., `"tcpout:192.168.1.100:5760"`)
 - **TCP In (server)**: `tcpin:<address>:<port>` (e.g., `"tcpin:0.0.0.0:5760"`)
+
+### Configured Connection Lifecycle
+
+Configured serial, UDP, and TCP connections run under a per-router dynamic
+supervisor. Each connection has a worker process that owns its socket or UART
+resource, forwards inbound frames to the router, and reconnects after open
+failures or TCP/serial disconnects.
+
+By default, connection workers retry every 1000 ms. Override the retry delay
+with `:connection_retry_ms`:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["tcpout:127.0.0.1:5760"],
+  connection_retry_ms: 500
+```
 
 ### DNS Hostname Support
 

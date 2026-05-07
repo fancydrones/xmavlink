@@ -17,9 +17,9 @@ defmodule XMAVLink.Router do
   require Logger
 
   import XMAVLink.Utils, only: [resolve_address: 1, parse_positive_integer: 1]
-  import Enum, only: [map: 2]
-
   alias XMAVLink.Types
+  alias XMAVLink.ConnectionSupervisor
+  alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
   alias XMAVLink.Message
   alias XMAVLink.Router
@@ -28,7 +28,6 @@ defmodule XMAVLink.Router do
   alias XMAVLink.TCPOutConnection
   alias XMAVLink.UDPInConnection
   alias XMAVLink.UDPOutConnection
-  alias Circuits.UART
 
   @typedoc """
   Represents the state of the XMAVLink.Router. Initial values should be set in config.exs.
@@ -62,17 +61,24 @@ defmodule XMAVLink.Router do
     dialect: nil,
     # Connection descriptions from user
     connection_strings: [],
+    # Supervised connection retry delay
+    connection_retry_ms: 1_000,
     # Subscription cache name for restart restoration, if any
     subscription_cache: nil,
+    # Per-router supervised connection workers
+    connection_supervisor: nil,
+    connection_workers: %{},
+    connection_worker_monitors: %{},
     # %{socket|port|local: XMAVLink.*_Connection}
     connections: %{},
-    # Connection and MAVLink version tuple keyed by MAVLink addresses
+    # Connection key last observed for each MAVLink address
     routes: %{}
   ]
 
   # Can't used qualified type as map key
   @type mavlink_address :: Types.mavlink_address()
   @type mavlink_connection :: Types.connection()
+  @type connection_key :: :local | binary | port | {port, Types.net_address(), Types.net_port()}
   @type router_name :: atom | {:global, term} | {:via, module, term}
   @type router_ref :: GenServer.server()
   @type subscribe_query :: [
@@ -84,9 +90,13 @@ defmodule XMAVLink.Router do
           name: router_name | nil,
           dialect: module | nil,
           connection_strings: [String.t()],
+          connection_retry_ms: non_neg_integer,
           subscription_cache: router_name | nil,
-          connections: %{},
-          routes: %{mavlink_address: {mavlink_connection, Types.version()}}
+          connection_supervisor: pid | nil,
+          connection_workers: %{connection_key() => pid},
+          connection_worker_monitors: %{reference => pid},
+          connections: %{connection_key() => mavlink_connection()},
+          routes: %{mavlink_address() => connection_key()}
         }
 
   defguardp is_router_ref(router)
@@ -120,6 +130,10 @@ defmodule XMAVLink.Router do
                         udpout:<remote ip>:<remote port>
                         tcpout:<remote ip>:<remote port>
                         serial:<device>:<baud rate>
+  - connection_retry_ms:
+                        Retry delay for configured connection workers after
+                        open failures or TCP/serial disconnects. Defaults to
+                        1000 ms.
 
   - opts:               Standard GenServer options. Pass `:name` to register
                         a non-default router, or `name: nil` in the args map to
@@ -132,7 +146,8 @@ defmodule XMAVLink.Router do
             required(:dialect) => module,
             optional(:name) => router_name | nil,
             optional(:connection_strings) => [String.t()],
-            optional(:connections) => [String.t()]
+            optional(:connections) => [String.t()],
+            optional(:connection_retry_ms) => non_neg_integer
           },
           [{atom, any}]
         ) :: {:ok, pid}
@@ -384,8 +399,15 @@ defmodule XMAVLink.Router do
   defp normalize_start_args(args) do
     args = Map.new(args)
     connection_strings = Map.get(args, :connection_strings, Map.get(args, :connections, [])) || []
+    connection_retry_ms = Map.get(args, :connection_retry_ms, 1_000)
 
-    Map.put(args, :connection_strings, connection_strings)
+    if not (is_integer(connection_retry_ms) and connection_retry_ms >= 0) do
+      raise ArgumentError, "connection_retry_ms must be a non-negative integer"
+    end
+
+    args
+    |> Map.put(:connection_strings, connection_strings)
+    |> Map.put(:connection_retry_ms, connection_retry_ms)
   end
 
   defp start_options(opts, nil), do: Keyword.delete(opts, :name)
@@ -459,15 +481,22 @@ defmodule XMAVLink.Router do
   # to us if successful) and initialise Router state
   def init(args) do
     subscription_cache = subscription_cache_name(args.name)
+    {:ok, connection_supervisor} = ConnectionSupervisor.start_link()
 
     LocalConnection.connect(:local, args.system, args.component, subscription_cache)
-    _ = map(args.connection_strings, &connect/1)
+    connection_specs = Enum.map(args.connection_strings, &connection_spec/1)
+
+    for connection_spec <- connection_specs do
+      start_connection_worker(connection_supervisor, connection_spec, args.connection_retry_ms)
+    end
 
     {:ok,
      %Router{
        name: args.name,
        dialect: args.dialect,
        connection_strings: args.connection_strings,
+       connection_retry_ms: args.connection_retry_ms,
+       connection_supervisor: connection_supervisor,
        subscription_cache: subscription_cache
      }}
   end
@@ -496,104 +525,80 @@ defmodule XMAVLink.Router do
   end
 
   @impl true
+  # Receive data from a supervised connection worker
+  def handle_info({:connection_message, worker, message = {:udp, _, _, _, _}}, state) do
+    handle_udp_message(message, worker, state)
+  end
+
   # Receive data on UDP connection
   def handle_info(
-        message = {:udp, socket, address, port, _},
-        state = %Router{connections: connections, dialect: dialect}
+        message = {:udp, _socket, _address, _port, _},
+        state
       ) do
-    {
-      :noreply,
-      case connections[socket] do
-        # A `udpout:` connection is registered under the bare `socket` key
-        # (see UDPOutConnection.connect/2). Any UDP packet arriving on that
-        # socket is a reply to our outbound traffic — attribute it to the
-        # UDPOut regardless of source IP. This is required behind NAT /
-        # masquerade / kube-proxy DNAT, where the reply's source IP is the
-        # NAT gateway rather than the address we sent to. Without this,
-        # we'd file the reply as a brand-new UDPInConnection under
-        # `{socket, reply_ip, reply_port}` and the broadcast `route/1`
-        # clause would forward subsequent inbound frames back out the
-        # original UDPOut — i.e. echo the host's traffic back to itself.
-        udpout = %UDPOutConnection{} ->
-          UDPOutConnection.handle_info(message, udpout, dialect)
+    handle_udp_message(message, nil, state)
+  end
 
-        _ ->
-          case connections[{socket, address, port}] do
-            connection = %UDPInConnection{} ->
-              UDPInConnection.handle_info(message, connection, dialect)
-
-            connection = %UDPOutConnection{} ->
-              UDPOutConnection.handle_info(message, connection, dialect)
-
-            nil ->
-              # New previously unseen UDPIn client
-              UDPInConnection.handle_info(message, nil, dialect)
-          end
-      end
-      |> update_route_info(state)
-      |> route
-    }
+  def handle_info({:connection_message, _worker, message = {:tcp, _, _}}, state) do
+    handle_tcp_message(message, state)
   end
 
   # Receive data on TCP connection
-  def handle_info(message = {:tcp, socket, _}, state) do
-    {
-      :noreply,
-      TCPOutConnection.handle_info(message, state.connections[socket], state.dialect)
-      |> update_route_info(state)
-      |> route
-    }
+  def handle_info(message = {:tcp, _socket, _}, state) do
+    handle_tcp_message(message, state)
+  end
+
+  def handle_info({:connection_closed, worker, connection_key}, state) do
+    {:noreply, remove_worker_connection(connection_key, worker, state)}
   end
 
   # Unlike UDP, TCP connections can close
   def handle_info({:tcp_closed, socket}, state) do
-    %TCPOutConnection{address: address, port: port} = state.connections[socket]
-    spawn(TCPOutConnection, :connect, [["tcpout", address, port], self()])
+    reconnect_worker(state.connection_workers[socket])
     {:noreply, remove_connection(socket, state)}
   end
 
+  def handle_info({:connection_message, _worker, message = {:circuits_uart, _, raw}}, state)
+      when is_binary(raw) do
+    handle_serial_message(message, state)
+  end
+
   # Received data on serial connection
-  def handle_info(message = {:circuits_uart, port, raw}, state) when is_binary(raw) do
-    {
-      :noreply,
-      SerialConnection.handle_info(message, state.connections[port], state.dialect)
-      |> update_route_info(state)
-      |> route
-    }
+  def handle_info(message = {:circuits_uart, _port, raw}, state) when is_binary(raw) do
+    handle_serial_message(message, state)
   end
 
   # Received error on serial connection
   def handle_info({:circuits_uart, port, {:error, _reason}}, state) do
-    %SerialConnection{baud: baud, uart: uart} = state.connections[port]
-
-    spawn(SerialConnection, :connect, [
-      ["serial", port, baud, :poolboy.checkout(XMAVLink.UARTPool)],
-      self()
-    ])
-
-    :ok = UART.close(uart)
-    # After checkout to make sure we get a fresh UART, this one might be reused later
-    :poolboy.checkin(XMAVLink.UARTPool, uart)
+    reconnect_worker(state.connection_workers[port])
     {:noreply, remove_connection(port, state)}
   end
 
-  # A local subscribing Elixir process has crashed, remove them from our subscriber list
-  def handle_info({:DOWN, _, :process, pid, _}, state),
-    do:
-      {:noreply,
-       update_in(
-         state,
-         [Access.key!(:connections), :local],
-         &LocalConnection.subscriber_down(pid, &1)
-       )}
+  # A local subscribing Elixir process or a supervised connection worker has crashed.
+  def handle_info({:DOWN, ref, :process, pid, _}, state) do
+    case Map.pop(state.connection_worker_monitors, ref) do
+      {nil, _worker_monitors} ->
+        {:noreply,
+         update_in(
+           state,
+           [Access.key!(:connections), :local],
+           &LocalConnection.subscriber_down(pid, &1)
+         )}
+
+      {worker, worker_monitors} ->
+        {:noreply,
+         state
+         |> struct(connection_worker_monitors: worker_monitors)
+         |> remove_connections_for_worker(worker)}
+    end
+  end
 
   # A call to pack_and_send() from a local Elixir process, sent as a vanilla message for symmetry with other connection types
   def handle_info({:local, frame}, state) do
     {:noreply, route_local(frame, state)}
   end
 
-  # A spawned *Connection.connect() call has successfully got a
-  # connection, and wants to add it to our connection list.
+  # A supervised connection worker has successfully opened a connection and
+  # wants to add it to our connection list.
   def handle_info(
         {:add_connection, connection_key, connection},
         state = %Router{connections: connections}
@@ -607,33 +612,129 @@ defmodule XMAVLink.Router do
     }
   end
 
+  def handle_info(
+        {:add_connection, connection_key, connection, worker},
+        state = %Router{connections: connections}
+      ) do
+    {
+      :noreply,
+      state
+      |> monitor_connection_worker(worker)
+      |> struct(
+        connections: Map.put(connections, connection_key, connection),
+        connection_workers: Map.put(state.connection_workers, connection_key, worker)
+      )
+    }
+  end
+
   # Ignore weird messages
   def handle_info(_msg, state) do
     {:noreply, state}
+  end
+
+  defp handle_udp_message(
+         message = {:udp, socket, address, port, _},
+         worker,
+         state = %Router{connections: connections, dialect: dialect}
+       ) do
+    {
+      :noreply,
+      case connections[socket] do
+        # A `udpout:` connection is registered under the bare `socket` key
+        # (see UDPOutConnection.open/2). Any UDP packet arriving on that
+        # socket is a reply to our outbound traffic - attribute it to the
+        # UDPOut regardless of source IP. This is required behind NAT /
+        # masquerade / kube-proxy DNAT, where the reply's source IP is the
+        # NAT gateway rather than the address we sent to. Without this,
+        # we'd file the reply as a brand-new UDPInConnection under
+        # `{socket, reply_ip, reply_port}` and the broadcast `route/1`
+        # clause would forward subsequent inbound frames back out the
+        # original UDPOut - i.e. echo the host's traffic back to itself.
+        udpout = %UDPOutConnection{} ->
+          UDPOutConnection.handle_info(message, udpout, dialect)
+
+        _ ->
+          case connections[{socket, address, port}] do
+            connection = %UDPInConnection{} ->
+              UDPInConnection.handle_info(message, connection, dialect)
+
+            connection = %UDPOutConnection{} ->
+              UDPOutConnection.handle_info(message, connection, dialect)
+
+            nil ->
+              # New previously unseen UDPIn client
+              UDPInConnection.handle_info(message, nil, dialect, worker)
+          end
+      end
+      |> update_route_info(state)
+      |> route
+    }
+  end
+
+  defp handle_tcp_message(message = {:tcp, socket, _}, state) do
+    case state.connections[socket] do
+      nil ->
+        {:noreply, state}
+
+      connection ->
+        {
+          :noreply,
+          TCPOutConnection.handle_info(message, connection, state.dialect)
+          |> update_route_info(state)
+          |> route
+        }
+    end
+  end
+
+  defp handle_serial_message(message = {:circuits_uart, port, _raw}, state) do
+    case state.connections[port] do
+      nil ->
+        {:noreply, state}
+
+      connection ->
+        {
+          :noreply,
+          SerialConnection.handle_info(message, connection, state.dialect)
+          |> update_route_info(state)
+          |> route
+        }
+    end
   end
 
   ####################
   # Helper Functions #
   ####################
 
-  # Handle user configured connections by spawning a process to try to connect. If successful they will send
-  # us an :add_connection message with the details. The local connection gets added automatically.
-  defp connect(connection_string) when is_binary(connection_string),
-    do: connect(String.split(connection_string, [":", ","]))
+  # Handle user configured connections with supervised workers. If
+  # successful they send us an :add_connection message with the details. The
+  # local connection gets added automatically.
+  defp start_connection_worker(connection_supervisor, connection_spec, retry_ms) do
+    DynamicSupervisor.start_child(
+      connection_supervisor,
+      {ConnectionWorker,
+       Map.merge(connection_spec, %{
+         router: self(),
+         retry_ms: retry_ms
+       })}
+    )
+  end
 
-  defp connect(tokens = ["udpin" | _]),
-    do: spawn(UDPInConnection, :connect, [validate_address_and_port(tokens), self()])
+  defp connection_spec(connection_string) when is_binary(connection_string),
+    do: connection_spec(String.split(connection_string, [":", ","]))
 
-  defp connect(tokens = ["udpout" | _]),
-    do: spawn(UDPOutConnection, :connect, [validate_address_and_port(tokens), self()])
+  defp connection_spec(tokens = ["udpin" | _]),
+    do: %{transport: UDPInConnection, tokens: validate_address_and_port(tokens)}
 
-  defp connect(tokens = ["tcpout" | _]),
-    do: spawn(TCPOutConnection, :connect, [validate_address_and_port(tokens), self()])
+  defp connection_spec(tokens = ["udpout" | _]),
+    do: %{transport: UDPOutConnection, tokens: validate_address_and_port(tokens)}
 
-  defp connect(tokens = ["serial" | _]),
-    do: spawn(SerialConnection, :connect, [validate_port_and_baud(tokens), self()])
+  defp connection_spec(tokens = ["tcpout" | _]),
+    do: %{transport: TCPOutConnection, tokens: validate_address_and_port(tokens)}
 
-  defp connect([invalid_protocol | _]),
+  defp connection_spec(tokens = ["serial" | _]),
+    do: %{transport: SerialConnection, tokens: validate_port_and_baud(tokens)}
+
+  defp connection_spec([invalid_protocol | _]),
     do: raise(ArgumentError, message: "invalid protocol #{invalid_protocol}")
 
   # Parse network connection strings
@@ -661,19 +762,61 @@ defmodule XMAVLink.Router do
         raise ArgumentError, message: "invalid baud rate #{baud}"
 
       {true, parsed_baud} ->
-        # Have to checkout from uart pool in main process because
-        # poolboy monitors the process that calls checkout, and
-        # returns the UART to the pool when the caller dies. This
-        # happens immediately to our spawned connect() calls so we
-        # can't do this there, which would otherwise be a logical
-        # place to do it.
-        ["serial", port, parsed_baud, :poolboy.checkout(XMAVLink.UARTPool)]
+        ["serial", port, parsed_baud]
     end
   end
 
+  defp reconnect_worker(nil), do: :ok
+  defp reconnect_worker(worker), do: ConnectionWorker.reconnect(worker)
+
+  defp monitor_connection_worker(state, worker) do
+    if worker in Map.values(state.connection_worker_monitors) do
+      state
+    else
+      ref = Process.monitor(worker)
+      put_in(state.connection_worker_monitors[ref], worker)
+    end
+  end
+
+  defp track_connection_worker(state, connection_key, %{worker: worker}) when is_pid(worker) do
+    state
+    |> monitor_connection_worker(worker)
+    |> struct(connection_workers: Map.put(state.connection_workers, connection_key, worker))
+  end
+
+  defp track_connection_worker(state, _connection_key, _connection), do: state
+
+  defp remove_worker_connection(connection_key, worker, state) do
+    if state.connection_workers[connection_key] == worker do
+      remove_connection(connection_key, state)
+    else
+      state
+    end
+  end
+
+  defp remove_connections_for_worker(state, worker) do
+    state.connection_workers
+    |> Enum.filter(fn {_connection_key, connection_worker} -> connection_worker == worker end)
+    |> Enum.reduce(state, fn {connection_key, _worker}, updated_state ->
+      remove_connection(connection_key, updated_state)
+    end)
+  end
+
   # A handle_info() received an error and wants us to forget the borked connection
-  defp remove_connection(connection_key, state = %Router{connections: connections}) do
-    struct(state, connections: Map.delete(connections, connection_key))
+  defp remove_connection(
+         connection_key,
+         state = %Router{connections: connections, routes: routes, connection_workers: workers}
+       ) do
+    struct(state,
+      connections: Map.delete(connections, connection_key),
+      connection_workers: Map.delete(workers, connection_key),
+      routes:
+        routes
+        |> Enum.reject(fn {_mavlink_address, route_connection_key} ->
+          route_connection_key == connection_key
+        end)
+        |> Map.new()
+    )
   end
 
   # Map system/component ids to connections on which they have been seen for targeted messages
@@ -690,8 +833,8 @@ defmodule XMAVLink.Router do
       :ok,
       source_connection_key,
       frame,
-      struct(
-        state,
+      state
+      |> struct(
         # Don't add system/components from local connection to routes because local
         # automatically matches everything in matching_system_components() and we
         # don't want to receive messages twice
@@ -714,6 +857,7 @@ defmodule XMAVLink.Router do
             source_connection
           )
       )
+      |> track_connection_worker(source_connection_key, source_connection)
     }
   end
 
@@ -725,8 +869,8 @@ defmodule XMAVLink.Router do
     {
       :error,
       reason,
-      struct(
-        state,
+      state
+      |> struct(
         connections:
           Map.put(
             connections,
@@ -734,6 +878,7 @@ defmodule XMAVLink.Router do
             connection
           )
       )
+      |> track_connection_worker(connection_key, connection)
     }
   end
 

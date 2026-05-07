@@ -4,18 +4,25 @@ defmodule XMAVLink.SupervisorTest do
   test "falls back to the default router name when app config sets router_name to nil" do
     previous_router_name = Application.get_env(:xmavlink, :router_name)
     previous_heartbeat = Application.get_env(:xmavlink, :heartbeat)
+    previous_connection_retry_ms = Application.get_env(:xmavlink, :connection_retry_ms)
 
     Application.put_env(:xmavlink, :router_name, nil)
+    Application.put_env(:xmavlink, :connection_retry_ms, 250)
     Application.put_env(:xmavlink, :heartbeat, interval_ms: 1000, message: sample_heartbeat())
 
     on_exit(fn ->
       restore_env(:router_name, previous_router_name)
       restore_env(:heartbeat, previous_heartbeat)
+      restore_env(:connection_retry_ms, previous_connection_retry_ms)
     end)
 
     assert {:ok, {_supervisor_flags, children}} = XMAVLink.Supervisor.init([])
 
-    assert %{start: {XMAVLink.Router, :start_link, [%{name: XMAVLink.Router}]}} =
+    assert %{
+             start:
+               {XMAVLink.Router, :start_link,
+                [%{name: XMAVLink.Router, connection_retry_ms: 250}]}
+           } =
              Enum.find(children, &match?(%{id: XMAVLink.Router}, &1))
 
     assert %{start: {XMAVLink.Heartbeat, :start_link, [heartbeat_spec]}} =
