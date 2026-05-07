@@ -11,6 +11,10 @@ on MAVLink see https://mavlink.io.
 
 ## Installation
 
+XMAVLink currently supports Elixir 1.18 and later on Erlang/OTP 27 and later.
+CI tests the pinned repository toolchain in `.tool-versions` and a newer
+Elixir/OTP line.
+
 If [available in Hex](https://hex.pm/docs/publish), the package can be installed
 by adding `xmavlink` to your list of dependencies in `mix.exs`:
 
