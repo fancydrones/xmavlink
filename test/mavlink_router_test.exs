@@ -4,14 +4,16 @@ defmodule XMAVLink.Test.Router do
 
   describe "connection string parsing" do
     test "accepts IP address in udpout connection string" do
-      # This should work as it did before
+      {udp_socket, udp_port} = open_udp_socket()
+      on_exit(fn -> :gen_udp.close(udp_socket) end)
+
       assert {:ok, pid} =
                Router.start_link(
                  %{
                    system: 1,
                    component: 1,
                    dialect: APM.Dialect,
-                   connection_strings: ["udpout:127.0.0.1:14550"]
+                   connection_strings: ["udpout:127.0.0.1:#{udp_port}"]
                  },
                  []
                )
@@ -20,14 +22,16 @@ defmodule XMAVLink.Test.Router do
     end
 
     test "accepts DNS hostname in udpout connection string" do
-      # This should now work with DNS hostnames
+      {udp_socket, udp_port} = open_udp_socket()
+      on_exit(fn -> :gen_udp.close(udp_socket) end)
+
       assert {:ok, pid} =
                Router.start_link(
                  %{
                    system: 1,
                    component: 1,
                    dialect: APM.Dialect,
-                   connection_strings: ["udpout:localhost:14551"]
+                   connection_strings: ["udpout:localhost:#{udp_port}"]
                  },
                  []
                )
@@ -152,18 +156,22 @@ defmodule XMAVLink.Test.Router do
     # peer. Fixed by always attributing inbound on a UDPOut's socket to
     # that UDPOut, regardless of source IP.
     test "reply from a NAT'd source IP is attributed to the existing UDPOut, not filed as a phantom UDPInConnection" do
+      {udp_socket, udp_port} = open_udp_socket()
+
       {:ok, router_pid} =
         Router.start_link(
           %{
             system: 1,
             component: 1,
             dialect: Common,
-            connection_strings: ["udpout:127.0.0.1:14556"]
+            connection_strings: ["udpout:127.0.0.1:#{udp_port}"]
           },
           []
         )
 
       on_exit(fn ->
+        :gen_udp.close(udp_socket)
+
         if Process.whereis(XMAVLink.SubscriptionCache) do
           Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
         end
@@ -183,7 +191,7 @@ defmodule XMAVLink.Test.Router do
       # Reply arrives with a source IP different from the configured
       # target (127.0.0.1) — simulates NAT.
       fake_reply_ip = {10, 42, 0, 1}
-      fake_reply_port = 14556
+      fake_reply_port = udp_port
 
       send(router_pid, {:udp, socket, fake_reply_ip, fake_reply_port, raw_heartbeat})
 
@@ -295,13 +303,15 @@ defmodule XMAVLink.Test.Router do
 
   describe "subscribe/1" do
     test "is synchronous - subscription is committed when call returns" do
+      {udp_socket, udp_port} = open_udp_socket()
+
       {:ok, pid} =
         Router.start_link(
           %{
             system: 1,
             component: 1,
             dialect: APM.Dialect,
-            connection_strings: ["udpout:127.0.0.1:14555"]
+            connection_strings: ["udpout:127.0.0.1:#{udp_port}"]
           },
           []
         )
@@ -312,6 +322,8 @@ defmodule XMAVLink.Test.Router do
       # restores the cached subscription, monitors a now-dead pid, and crashes
       # on the resulting :DOWN before its :local connection is registered.
       on_exit(fn ->
+        :gen_udp.close(udp_socket)
+
         if Process.whereis(XMAVLink.SubscriptionCache) do
           Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
         end
@@ -483,6 +495,12 @@ defmodule XMAVLink.Test.Router do
       system_status: :mav_state_active,
       mavlink_version: 3
     }
+  end
+
+  defp open_udp_socket do
+    {:ok, socket} = :gen_udp.open(0, [:binary, active: false])
+    {:ok, port} = :inet.port(socket)
+    {socket, port}
   end
 
   defp open_tcp_listener do
