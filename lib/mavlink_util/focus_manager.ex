@@ -41,8 +41,7 @@ defmodule XMAVLink.Util.FocusManager do
     {:ok, {system_id, component_id, _}} =
       GenServer.call(XMAVLink.Util.FocusManager, {:focus, {system_id, component_id}})
 
-    # Only works for single IEx session
-    IEx.configure(default_prompt: "iex(%counter) vehicle #{system_id}.#{component_id}>")
+    configure_iex_prompt(system_id, component_id)
   end
 
   @impl true
@@ -80,6 +79,16 @@ defmodule XMAVLink.Util.FocusManager do
   end
 
   # TODO handle DOWN messages
+
+  defp configure_iex_prompt(system_id, component_id) do
+    if Code.ensure_loaded?(IEx) and function_exported?(IEx, :configure, 1) do
+      apply(IEx, :configure, [
+        [default_prompt: "iex(%counter) vehicle #{system_id}.#{component_id}>"]
+      ])
+    end
+
+    :ok
+  end
 
   defp format({s, c, _}), do: format({s, c})
   defp format({s, c}), do: "#{s}.#{c}"

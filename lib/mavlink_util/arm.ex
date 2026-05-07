@@ -61,7 +61,7 @@ defmodule XMAVLink.Util.Arm do
           arm(system_id, component_id, mavlink_version)
       end
     else
-      %Heartbeat{system_status: invalid_system_status} ->
+      {:ok, _, %Heartbeat{system_status: invalid_system_status}} ->
         Logger.warning(
           "Cannot arm vehicle #{system_id}.#{component_id}: #{Common.describe(invalid_system_status)}"
         )

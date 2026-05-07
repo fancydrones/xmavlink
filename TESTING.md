@@ -7,11 +7,11 @@ mix format --check-formatted
 mix compile --warnings-as-errors
 mix xref graph --label compile-connected --fail-above 0
 mix test --warnings-as-errors
+mix dialyzer
 ```
 
-`mix dialyzer` is not part of the required CI gate yet because the current code
-base still has a known warning tracked by v1.0.0 readiness issue #31. Add it to
-CI once that warning is resolved or formally excluded.
+Dialyzer runs on the pinned baseline Elixir/OTP toolchain and uses CI caching
+for PLTs and Mix build artifacts.
 
 # Testing locally with ArduPilot, MAVProxy, SITL, and X-Plane
 
