@@ -18,11 +18,11 @@ defmodule XMAVLink.Heartbeat do
   ### Static message
 
       config :xmavlink,
-      heartbeat: [
-        interval_ms: 1000,
-        source_system: 245,
-        source_component: 191,
-        message: %Common.Message.Heartbeat{
+        heartbeat: [
+          interval_ms: 1000,
+          source_system: 245,
+          source_component: 191,
+          message: %Common.Message.Heartbeat{
             type: :mav_type_gcs,
             autopilot: :mav_autopilot_invalid,
             base_mode: MapSet.new(),
@@ -38,12 +38,12 @@ defmodule XMAVLink.Heartbeat do
   ### Dynamic builder
 
       config :xmavlink,
-      heartbeat: [
-        interval_ms: 1000,
-        source_system: 1,
-        source_component: 100,
-        builder: {MyApp.Mavlink, :build_heartbeat, []}
-      ]
+        heartbeat: [
+          interval_ms: 1000,
+          source_system: 1,
+          source_component: 100,
+          builder: {MyApp.Mavlink, :build_heartbeat, []}
+        ]
 
   The `{module, function, args}` tuple is invoked on every tick to
   produce a fresh struct. Use this when `system_status`, `base_mode`,

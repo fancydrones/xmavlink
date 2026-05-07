@@ -367,5 +367,113 @@ defmodule XMAVLink.Test.Router do
       Router.unsubscribe()
       GenServer.stop(pid)
     end
+
+    test "keeps independent sequence numbers per local source identity" do
+      {:ok, pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 100,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn ->
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      assert :ok = Router.subscribe(message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = sample_heartbeat()
+
+      assert :ok = Router.pack_and_send(msg)
+
+      assert_receive %XMAVLink.Frame{
+                       source_system: 1,
+                       source_component: 100,
+                       sequence_number: 0
+                     },
+                     200
+
+      assert :ok = Router.pack_and_send(msg, 2, source_system: 245, source_component: 191)
+
+      assert_receive %XMAVLink.Frame{
+                       source_system: 245,
+                       source_component: 191,
+                       sequence_number: 0
+                     },
+                     200
+
+      assert :ok = Router.pack_and_send(msg)
+
+      assert_receive %XMAVLink.Frame{
+                       source_system: 1,
+                       source_component: 100,
+                       sequence_number: 1
+                     },
+                     200
+
+      assert :ok = Router.pack_and_send(msg, 2, source_system: 245, source_component: 191)
+
+      assert_receive %XMAVLink.Frame{
+                       source_system: 245,
+                       source_component: 191,
+                       sequence_number: 1
+                     },
+                     200
+
+      Router.unsubscribe()
+      GenServer.stop(pid)
+    end
+
+    test "keeps the legacy version argument for pack_and_send/2" do
+      {:ok, pid} =
+        Router.start_link(
+          %{
+            system: 1,
+            component: 100,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn ->
+        if Process.whereis(XMAVLink.SubscriptionCache) do
+          Agent.update(XMAVLink.SubscriptionCache, fn _ -> [] end)
+        end
+      end)
+
+      assert :ok = Router.subscribe(message: Common.Message.Heartbeat, as_frame: true)
+
+      msg = sample_heartbeat()
+
+      assert :ok = Router.pack_and_send(msg, 1)
+
+      assert_receive %XMAVLink.Frame{
+                       source_system: 1,
+                       source_component: 100,
+                       version: 1
+                     },
+                     200
+
+      Router.unsubscribe()
+      GenServer.stop(pid)
+    end
+  end
+
+  defp sample_heartbeat do
+    %Common.Message.Heartbeat{
+      type: :mav_type_gcs,
+      autopilot: :mav_autopilot_invalid,
+      base_mode: MapSet.new(),
+      custom_mode: 0,
+      system_status: :mav_state_active,
+      mavlink_version: 3
+    }
   end
 end

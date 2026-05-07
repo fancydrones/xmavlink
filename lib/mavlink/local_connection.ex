@@ -14,13 +14,15 @@ defmodule XMAVLink.LocalConnection do
   defstruct system: nil,
             component: nil,
             subscriptions: [],
-            sequence_number: 0
+            sequence_number: 0,
+            sequence_numbers: %{}
 
   @type t :: %LocalConnection{
           system: 1..255,
           component: 1..255,
           subscriptions: [],
-          sequence_number: 0..255
+          sequence_number: 0..255,
+          sequence_numbers: %{{1..255, 1..255} => 0..255}
         }
 
   # Handle message from Router.pack_and_send()
@@ -30,19 +32,22 @@ defmodule XMAVLink.LocalConnection do
         {:local, frame = %Frame{source_system: frame_system, source_component: frame_component}},
         receiving_connection = %LocalConnection{
           system: system,
-          component: component,
-          sequence_number: sequence_number
+          component: component
         },
         _dialect
       ) do
     # Fill in missing frame details source_system, source_component, sequence_number
     source_system = frame_system || system
     source_component = frame_component || component
+    source_identity = {source_system, source_component}
+
+    {sequence_number, updated_connection} =
+      next_sequence_number(receiving_connection, source_identity)
 
     {
       :ok,
       :local,
-      struct(receiving_connection, sequence_number: rem(sequence_number + 1, 255)),
+      updated_connection,
       struct(frame,
         source_system: source_system,
         source_component: source_component,
@@ -165,4 +170,47 @@ defmodule XMAVLink.LocalConnection do
     Agent.update(XMAVLink.SubscriptionCache, fn _ -> subscriptions end)
     subscriptions
   end
+
+  defp next_sequence_number(local_connection = %LocalConnection{}, source_identity) do
+    sequence_number =
+      Map.get(
+        local_connection.sequence_numbers,
+        source_identity,
+        initial_sequence_number(local_connection, source_identity)
+      )
+
+    next_sequence_number = rem(sequence_number + 1, 255)
+
+    updated_connection = %LocalConnection{
+      local_connection
+      | sequence_number:
+          default_sequence_number(local_connection, source_identity, next_sequence_number),
+        sequence_numbers:
+          Map.put(local_connection.sequence_numbers, source_identity, next_sequence_number)
+    }
+
+    {sequence_number, updated_connection}
+  end
+
+  defp initial_sequence_number(
+         %LocalConnection{system: system, component: component, sequence_number: sequence_number},
+         {system, component}
+       ),
+       do: sequence_number
+
+  defp initial_sequence_number(_local_connection, _source_identity), do: 0
+
+  defp default_sequence_number(
+         %LocalConnection{system: system, component: component},
+         {system, component},
+         next
+       ),
+       do: next
+
+  defp default_sequence_number(
+         %LocalConnection{sequence_number: sequence_number},
+         _source_identity,
+         _next
+       ),
+       do: sequence_number
 end
