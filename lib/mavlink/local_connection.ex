@@ -123,7 +123,7 @@ defmodule XMAVLink.LocalConnection do
   end
 
   # Subscription request from subscriber
-  def subscribe(query, pid, local_connection) do
+  def subscribe(query, pid, local_connection = %LocalConnection{}) do
     :ok = Logger.debug("Subscribe #{inspect(pid)} to query #{inspect(query)}")
     # Monitor so that we can unsubscribe dead processes
     Process.monitor(pid)
@@ -137,7 +137,7 @@ defmodule XMAVLink.LocalConnection do
   end
 
   # Unsubscribe request from subscriber
-  def unsubscribe(pid, local_connection) do
+  def unsubscribe(pid, local_connection = %LocalConnection{}) do
     :ok = Logger.debug("Unsubscribe #{inspect(pid)}")
 
     %LocalConnection{
@@ -149,7 +149,7 @@ defmodule XMAVLink.LocalConnection do
   end
 
   # Automatically unsubscribe a dead subscriber process
-  def subscriber_down(pid, local_connection) do
+  def subscriber_down(pid, local_connection = %LocalConnection{}) do
     :ok = Logger.debug("Subscriber #{inspect(pid)} exited")
 
     %LocalConnection{
