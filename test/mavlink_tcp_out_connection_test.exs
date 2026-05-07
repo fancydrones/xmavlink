@@ -35,26 +35,39 @@ defmodule XMAVLink.Test.TCPOutConnection do
 
     acceptor =
       Task.async(fn ->
-        {:ok, peer_socket} = :gen_tcp.accept(listen_socket)
-        send(parent, :tcp_peer_accepted)
+        case :gen_tcp.accept(listen_socket, 1_000) do
+          {:ok, peer_socket} ->
+            try do
+              send(parent, :tcp_peer_accepted)
+              :gen_tcp.recv(peer_socket, byte_size(expected_packet), 1_000)
+            after
+              :gen_tcp.close(peer_socket)
+            end
 
-        result = :gen_tcp.recv(peer_socket, byte_size(expected_packet), 1_000)
-        :gen_tcp.close(peer_socket)
-        result
+          other ->
+            other
+        end
       end)
 
-    {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
-
     try do
-      assert_receive :tcp_peer_accepted, 1_000
+      {:ok, socket} = :gen_tcp.connect({127, 0, 0, 1}, port, [:binary, active: false])
 
-      assert :ok =
-               TCPOutConnection.forward(%TCPOutConnection{socket: socket}, frame)
+      try do
+        assert_receive :tcp_peer_accepted, 1_000
 
-      assert {:ok, expected_packet} == Task.await(acceptor, 1_000)
+        assert :ok =
+                 TCPOutConnection.forward(%TCPOutConnection{socket: socket}, frame)
+
+        assert {:ok, expected_packet} == Task.await(acceptor, 1_000)
+      after
+        :gen_tcp.close(socket)
+      end
     after
-      :gen_tcp.close(socket)
       :gen_tcp.close(listen_socket)
+
+      if Process.alive?(acceptor.pid) do
+        Task.shutdown(acceptor, :brutal_kill)
+      end
     end
   end
 end
