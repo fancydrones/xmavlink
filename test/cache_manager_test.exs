@@ -38,6 +38,16 @@ defmodule XMAVLink.Util.CacheManager.Test do
     refute Map.has_key?(params, :sysid_thismav)
   end
 
+  test "msg/2 preserves not-started errors" do
+    assert {:error, :not_started} = CacheManager.msg({1, 1, 2}, Common.Message.Heartbeat)
+  end
+
+  test "params/2 preserves not-started errors" do
+    delete_table(:params)
+
+    assert {:error, :not_started} = CacheManager.params({1, 1, 2}, "")
+  end
+
   test "one second loop reschedules one second loop" do
     state = %CacheManager{one_second_interval_ms: 1}
 

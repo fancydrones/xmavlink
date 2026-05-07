@@ -72,10 +72,12 @@ defmodule XMAVLink.Util.SITL do
         destination_address
       )
     else
-      _ ->
+      {:error, reason} ->
         Logger.warning(
-          "Could not subscribe or open port to forward RC from vehicle #{system_id}.#{component_id}"
+          "Could not subscribe or open port to forward RC from vehicle #{system_id}.#{component_id}: #{inspect(reason)}"
         )
+
+        {:error, reason}
     end
   end
 
@@ -165,6 +167,13 @@ defmodule XMAVLink.Util.SITL do
     end
   end
 
-  defp resolve_destination_address(address) when is_tuple(address), do: {:ok, address}
+  defp resolve_destination_address({a, b, c, d} = address)
+       when a in 0..255 and b in 0..255 and c in 0..255 and d in 0..255,
+       do: {:ok, address}
+
+  defp resolve_destination_address(address) when is_tuple(address),
+    do: {:error, :invalid_destination_address}
+
   defp resolve_destination_address(address) when is_binary(address), do: resolve_address(address)
+  defp resolve_destination_address(_address), do: {:error, :invalid_destination_address}
 end

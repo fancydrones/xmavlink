@@ -5,6 +5,7 @@ defmodule XMAVLink.Util.CommandTest do
   alias XMAVLink.Util.Arm
   alias XMAVLink.Util.ParamRequest
   alias XMAVLink.Util.ParamSet
+  alias XMAVLink.Util.SITL
 
   setup do
     delete_utility_tables()
@@ -75,6 +76,14 @@ defmodule XMAVLink.Util.CommandTest do
              )
 
     assert_subscriptions(router, [])
+  end
+
+  test "SITL RC forwarding rejects invalid destination addresses", %{router: router} do
+    assert {:error, :invalid_destination_address} =
+             SITL._connect(1, 1, 2, 5501, router, %{bad: :address})
+
+    assert {:error, :invalid_destination_address} =
+             SITL._connect(1, 1, 2, 5501, router, {127, 0, 0, 999})
   end
 
   defp assert_subscriptions(router, subscriptions, attempts \\ 20)

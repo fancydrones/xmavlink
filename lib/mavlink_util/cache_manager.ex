@@ -92,6 +92,9 @@ defmodule XMAVLink.Util.CacheManager do
       Logger.info("Most recent \"#{dequalify_msg_type(msg_type)}\" message")
       {:ok, now() - received, message}
     else
+      {:error, :not_started} ->
+        {:error, :not_started}
+
       _ ->
         Logger.warning(
           "Error attempting to retrieve message of type \"#{dequalify_msg_type(msg_type)}\""
@@ -140,6 +143,9 @@ defmodule XMAVLink.Util.CacheManager do
       Logger.info("Listing #{param_map |> Map.keys() |> length} parameters matching \"#{match}\"")
       {:ok, param_map}
     else
+      {:error, :not_started} ->
+        {:error, :not_started}
+
       _ ->
         Logger.warning("Error attempting to query params matching \"#{match}\"")
         {:error, :query_failed}
