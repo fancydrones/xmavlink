@@ -1,5 +1,5 @@
 defmodule XMAVLink.Test.Parser do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import XMAVLink.Parser
 
   @root_dir File.cwd!()

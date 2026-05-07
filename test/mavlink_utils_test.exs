@@ -1,5 +1,5 @@
 defmodule XMAVLink.Test.Utils do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
   import XMAVLink.Utils
 
   test "x25 empty list" do

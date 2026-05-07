@@ -1,5 +1,5 @@
 defmodule XMAVLink.Test.TCPOutConnection do
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   alias XMAVLink.Frame
   alias XMAVLink.TCPOutConnection
