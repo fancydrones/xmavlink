@@ -26,7 +26,9 @@ defmodule XMAVLink.Util.CacheManager do
   @five_second_loop :five_second_loop
   @ten_second_loop :ten_second_loop
 
-  defstruct []
+  defstruct one_second_interval_ms: 1_000,
+            five_second_interval_ms: 5_000,
+            ten_second_interval_ms: 10_000
 
   # API
 
@@ -132,19 +134,21 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     :ets.new(@messages, [:named_table, :protected, {:read_concurrency, true}, :set])
     :ets.new(@systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
     :ets.new(@params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
 
     MAV.subscribe(as_frame: true)
 
+    state = struct(__MODULE__, opts)
+
     {
       :ok,
-      %XMAVLink.Util.CacheManager{}
-      |> one_second_loop
-      |> five_second_loop
-      |> ten_second_loop
+      state
+      |> schedule_one_second_loop()
+      |> schedule_five_second_loop()
+      |> schedule_ten_second_loop()
     }
   end
 
@@ -195,17 +199,17 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   def handle_info(@one_second_loop, state) do
-    :timer.send_after(1_000, @one_second_loop)
+    schedule_one_second_loop(state)
     {:noreply, one_second_loop(state)}
   end
 
   def handle_info(@five_second_loop, state) do
-    :timer.send_after(5_000, @one_second_loop)
+    schedule_five_second_loop(state)
     {:noreply, five_second_loop(state)}
   end
 
   def handle_info(@ten_second_loop, state) do
-    :timer.send_after(10_000, @one_second_loop)
+    schedule_ten_second_loop(state)
     {:noreply, ten_second_loop(state)}
   end
 
@@ -292,6 +296,21 @@ defmodule XMAVLink.Util.CacheManager do
   end
 
   defp ten_second_loop(state) do
+    state
+  end
+
+  defp schedule_one_second_loop(state) do
+    :timer.send_after(state.one_second_interval_ms, @one_second_loop)
+    state
+  end
+
+  defp schedule_five_second_loop(state) do
+    :timer.send_after(state.five_second_interval_ms, @five_second_loop)
+    state
+  end
+
+  defp schedule_ten_second_loop(state) do
+    :timer.send_after(state.ten_second_interval_ms, @ten_second_loop)
     state
   end
 

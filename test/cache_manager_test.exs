@@ -22,6 +22,29 @@ defmodule XMAVLink.Util.CacheManager.Test do
     assert Enum.sort(mavs) == [{1, 1}, {2, 1}]
   end
 
+  test "one second loop reschedules one second loop" do
+    state = %CacheManager{one_second_interval_ms: 1}
+
+    assert {:noreply, ^state} = CacheManager.handle_info(:one_second_loop, state)
+    assert_receive :one_second_loop, 50
+  end
+
+  test "five second loop reschedules five second loop" do
+    state = %CacheManager{five_second_interval_ms: 1}
+
+    assert {:noreply, ^state} = CacheManager.handle_info(:five_second_loop, state)
+    assert_receive :five_second_loop, 50
+    refute_received :one_second_loop
+  end
+
+  test "ten second loop reschedules ten second loop" do
+    state = %CacheManager{ten_second_interval_ms: 1}
+
+    assert {:noreply, ^state} = CacheManager.handle_info(:ten_second_loop, state)
+    assert_receive :ten_second_loop, 50
+    refute_received :one_second_loop
+  end
+
   defp create_systems_table do
     :ets.new(:systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
   end
