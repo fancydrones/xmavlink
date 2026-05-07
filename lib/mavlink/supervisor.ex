@@ -33,12 +33,33 @@ defmodule XMAVLink.Supervisor do
     Supervisor.init(children, strategy: :one_for_all)
   end
 
-  # Heartbeat is started only when configured, so existing apps that
-  # build their own heartbeats keep working unchanged.
   defp heartbeat_child_specs do
-    case Application.get_env(:xmavlink, :heartbeat) do
-      nil -> []
-      spec -> [{XMAVLink.Heartbeat, spec}]
-    end
+    specs = heartbeat_specs()
+    multi? = length(specs) > 1
+
+    specs
+    |> Enum.with_index()
+    |> Enum.map(fn {spec, index} ->
+      child_spec = if multi?, do: Keyword.put_new(spec, :name, nil), else: spec
+
+      %{
+        id: Keyword.get(spec, :id, {XMAVLink.Heartbeat, index}),
+        start: {XMAVLink.Heartbeat, :start_link, [child_spec]}
+      }
+    end)
+  end
+
+  # Heartbeats are started only when configured, so existing apps that
+  # build their own heartbeats keep working unchanged. `:heartbeat` keeps
+  # the original single-emitter contract; `:heartbeats` allows multiple
+  # local source identities to share one router.
+  defp heartbeat_specs do
+    legacy =
+      case Application.get_env(:xmavlink, :heartbeat) do
+        nil -> []
+        spec -> [spec]
+      end
+
+    legacy ++ (Application.get_env(:xmavlink, :heartbeats) || [])
   end
 end

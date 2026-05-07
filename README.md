@@ -17,7 +17,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.5.0"}
+     {:xmavlink, "~> 0.7.0"}
    ]
  end
  ```
@@ -120,6 +120,29 @@ config :xmavlink,
 
 The first heartbeat is sent immediately so peer-learning routers admit the node within milliseconds of startup. If `:heartbeat` is unset or `nil`, no heartbeats are emitted (backwards-compatible with versions ≤ 0.6.0; consumers that emit their own heartbeats are unaffected).
 
+When multiple local MAVLink identities share one BEAM and one router, use
+`:heartbeats` and set an explicit source identity per emitter:
+
+```elixir
+config :xmavlink,
+  heartbeats: [
+    [
+      id: :camera_heartbeat,
+      source_system: 1,
+      source_component: 100,
+      interval_ms: 1000,
+      builder: {CameraApp.Mavlink, :heartbeat_message, []}
+    ],
+    [
+      id: :gcs_heartbeat,
+      source_system: 245,
+      source_component: 191,
+      interval_ms: 1000,
+      builder: {GcsApp.Mavlink, :heartbeat_message, []}
+    ]
+  ]
+```
+
 ## Receive MAVLink messages
 
 With the configured MAVLink application running you can subscribe to particular MAVLink messages:
@@ -171,6 +194,13 @@ MAV.pack_and_send(
     chan18_raw: 0
   }
 )
+```
+
+Pass `source_system` and `source_component` when a process needs to emit a
+message from an identity other than the router's configured default:
+
+```elixir
+MAV.pack_and_send(message, 2, source_system: 245, source_component: 191)
 ```
 
 ## Router Architecture

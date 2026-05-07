@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.6.3",
+      version: "0.7.0",
       elixir: "~> 1.9",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -68,7 +68,7 @@ defmodule XMAVLink.Mixfile do
   defp package() do
     [
       name: "xmavlink",
-      files: ["lib", "priv", "mix.exs", "README.md", "LICENSE"],
+      files: ["lib", "priv", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE"],
       exclude_patterns: [".DS_Store"],
       licenses: ["MIT"],
       links: %{"Github" => "https://github.com/fancydrones/xmavlink"},
