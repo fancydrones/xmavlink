@@ -8,7 +8,7 @@ XMAVLink is an Elixir/Mix library and OTP application for MAVLink communication 
 
 ## Environment
 
-- Use the versions in `.tool-versions`: Elixir 1.18.4 and Erlang/OTP 27.3.4.3.
+- Use the Elixir and Erlang/OTP versions specified in `.tool-versions`.
 - Install dependencies with `mix deps.get`.
 - The Mix `test` alias runs `mix test --no-start`; tests should not assume the application supervision tree starts automatically.
 
