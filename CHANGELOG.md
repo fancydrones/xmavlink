@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.7.1 - 2026-05-07
+
+- Fixed TCP outbound forwarding to send MAVLink frames over the TCP socket
+  instead of attempting to use UDP send calls.
+- Added TCP forwarding regression coverage for MAVLink 1 and MAVLink 2 frames.
+- Reduced expected test-suite noise from generated task output and runtime logs.
+
 ## 0.7.0 - 2026-05-07
 
 - Added per-message `source_system` and `source_component` overrides to
