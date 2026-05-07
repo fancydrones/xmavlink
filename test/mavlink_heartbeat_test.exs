@@ -27,7 +27,7 @@ defmodule XMAVLink.HeartbeatTest do
   describe "with a static :message" do
     test "emits the configured heartbeat immediately and on every interval" do
       msg = sample_heartbeat()
-      {:ok, hb} = Heartbeat.start_link(interval_ms: 50, message: msg)
+      {:ok, hb} = Heartbeat.start_link(interval_ms: 10, message: msg)
 
       # First heartbeat fires ASAP so peer-learning routers admit us
       # without waiting a full interval.
@@ -42,7 +42,7 @@ defmodule XMAVLink.HeartbeatTest do
 
       {:ok, hb} =
         Heartbeat.start_link(
-          interval_ms: 50,
+          interval_ms: 10,
           message: msg,
           source_system: 245,
           source_component: 191
@@ -60,7 +60,7 @@ defmodule XMAVLink.HeartbeatTest do
 
       {:ok, hb} =
         Heartbeat.start_link(
-          interval_ms: 50,
+          interval_ms: 10,
           builder: {__MODULE__, :build_heartbeat_with_counter, []}
         )
 
@@ -104,12 +104,12 @@ defmodule XMAVLink.HeartbeatTest do
   test "logs but keeps ticking when the builder raises" do
     {:ok, hb} =
       Heartbeat.start_link(
-        interval_ms: 30,
+        interval_ms: 10,
         builder: fn -> raise "boom" end
       )
 
     # The GenServer must stay alive (the error is logged, not crashed).
-    Process.sleep(100)
+    Process.sleep(30)
     assert Process.alive?(hb)
 
     GenServer.stop(hb)
