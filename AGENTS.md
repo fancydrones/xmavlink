@@ -10,13 +10,13 @@ XMAVLink is an Elixir/Mix library and OTP application for MAVLink communication 
 
 - Use the Elixir and Erlang/OTP versions specified in `.tool-versions`.
 - Install dependencies with `mix deps.get`.
-- The Mix `test` alias runs `mix test --no-start`; tests should not assume the application supervision tree starts automatically.
+- Tests should not assume the application supervision tree starts automatically during test runs.
 
 ## Common Commands
 
 - `mix deps.get` - fetch dependencies.
 - `mix format` - format source according to `.formatter.exs`.
-- `mix test` - run the full test suite with the app not started.
+- `mix test` - run the full test suite.
 - `mix test test/path_to_test.exs` - run a focused test file.
 - `mix xmavlink path/to/dialect.xml output/path.ex ModuleName` - generate an Elixir dialect module from MAVLink XML.
 - `mix dialyzer` - run Dialyzer when type/spec changes warrant it and PLTs are available.
