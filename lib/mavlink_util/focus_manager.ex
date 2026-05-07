@@ -12,6 +12,8 @@ defmodule XMAVLink.Util.FocusManager do
   @sessions :sessions
   @systems :systems
 
+  defstruct monitors: %{}, sessions: %{}
+
   # API
   def start_link(state, opts \\ []) do
     GenServer.start_link(__MODULE__, state, [{:name, __MODULE__} | opts])
@@ -45,9 +47,9 @@ defmodule XMAVLink.Util.FocusManager do
   end
 
   @impl true
-  def init(_opts) do
+  def init(opts) do
     :ets.new(@sessions, [:named_table, :protected, {:read_concurrency, true}, :set])
-    {:ok, %{}}
+    {:ok, struct(__MODULE__, opts)}
   end
 
   @impl true
@@ -65,8 +67,9 @@ defmodule XMAVLink.Util.FocusManager do
              @systems
            ) do
       if mavlink_major_version > 0 do
-        :ets.insert(@sessions, {caller_pid, {system_id, component_id, mavlink_major_version}})
-        Process.monitor(caller_pid)
+        state =
+          put_focus_session(state, caller_pid, {system_id, component_id, mavlink_major_version})
+
         Logger.info("Set focus to #{format(scid)}")
         {:reply, {:ok, {system_id, component_id, mavlink_major_version}}, state}
       else
@@ -78,16 +81,61 @@ defmodule XMAVLink.Util.FocusManager do
     end
   end
 
-  # TODO handle DOWN messages
+  @impl true
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
+    case Map.pop(state.monitors, ref) do
+      {nil, _monitors} ->
+        {:noreply, state}
+
+      {monitored_pid, monitors} ->
+        :ets.delete(@sessions, monitored_pid)
+
+        {:noreply,
+         %{
+           state
+           | monitors: monitors,
+             sessions: Map.delete(state.sessions, monitored_pid)
+         }}
+    end
+  end
 
   defp configure_iex_prompt(system_id, component_id) do
-    if Code.ensure_loaded?(IEx) and function_exported?(IEx, :configure, 1) do
+    if Code.ensure_loaded?(IEx) and function_exported?(IEx, :configure, 1) and
+         Process.whereis(IEx.Config) do
       apply(IEx, :configure, [
         [default_prompt: "iex(%counter) vehicle #{system_id}.#{component_id}>"]
       ])
     end
 
     :ok
+  end
+
+  defp put_focus_session(state, pid, scid) do
+    state = drop_focus_monitor(state, pid)
+    ref = Process.monitor(pid)
+    :ets.insert(@sessions, {pid, scid})
+
+    %{
+      state
+      | monitors: Map.put(state.monitors, ref, pid),
+        sessions: Map.put(state.sessions, pid, ref)
+    }
+  end
+
+  defp drop_focus_monitor(state, pid) do
+    case Map.pop(state.sessions, pid) do
+      {nil, _sessions} ->
+        state
+
+      {ref, sessions} ->
+        Process.demonitor(ref, [:flush])
+
+        %{
+          state
+          | monitors: Map.delete(state.monitors, ref),
+            sessions: sessions
+        }
+    end
   end
 
   defp format({s, c, _}), do: format({s, c})
