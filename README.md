@@ -49,11 +49,15 @@ on the `hex-publish` environment. If a package-scoped key is not available,
 This library is not officially recognised or supported by MAVLink at this
 time.
 
-XMAVLink parses and emits MAVLink 1 frames and unsigned MAVLink 2 frames that
-do not set incompatible flags. MAVLink 2 signing is not implemented; inbound
-MAVLink 2 frames with incompatible flags are discarded. Supported configured
-transports are serial, UDP client (`udpout`), UDP server (`udpin`), and TCP
-client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
+XMAVLink parses and emits MAVLink 1 frames and unsigned MAVLink 2 frames.
+MAVLink 2 signing authentication is not implemented; inbound signed frames are
+parsed only far enough to preserve frame boundaries and expose the signature
+trailer, then rejected before unpacking or routing. A low-level
+`XMAVLink.Frame.sign_frame/4` helper can generate signed MAVLink 2 frame bytes
+for already packed frames, but router and connection signing policy is not wired
+yet. MAVLink 2 frames with other incompatible flags are discarded. Supported
+configured transports are serial, UDP client (`udpout`), UDP server (`udpin`),
+and TCP client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
 
 MAVLink 2 is the primary 1.0 compatibility target. MAVLink 1 remains supported
 for existing frame parsing, packing, and routing behavior while that support

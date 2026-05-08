@@ -7,6 +7,7 @@ Primary references:
 - MAVLink packet serialization: https://mavlink.io/en/guide/serialization.html
 - MAVLink routing: https://mavlink.io/en/guide/routing.html
 - MAVLink 2 overview: https://mavlink.io/en/guide/mavlink_2.html
+- MAVLink 2 signing: https://mavlink.io/en/guide/message_signing.html
 - MAVLink XML schema guide: https://mavlink.io/en/guide/xml_schema.html
 
 ## 1.0 Support Posture
@@ -20,13 +21,16 @@ investment, prefer an explicit support reduction over slowing MAVLink 2 work.
 Supported runtime scope:
 
 - MAVLink 2 unsigned frames without incompatible flags.
+- MAVLink 2 signed-frame boundary parsing and signature trailer
+  representation. Signed frames are rejected until authentication and replay
+  checks are implemented.
 - MAVLink 1 frames for existing users and legacy links.
 - Serial, `udpin`, `udpout`, and outbound TCP (`tcpout`) transports.
 - Generated dialect modules from trusted MAVLink XML build inputs.
 
 Known non-goals for 1.0 unless separately implemented:
 
-- MAVLink 2 packet signing/authentication.
+- Full MAVLink 2 packet signing/authentication.
 - TCP server (`tcpin`) transport.
 - Treating untrusted XML dialect files as safe input.
 - Full `mavgen` feature parity for XML validation, WIP filtering, and every
@@ -37,7 +41,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Area | Status | Notes |
 | --- | --- | --- |
 | MAVLink 2 frame shape | Supported | Parses and emits the v2 header, 24-bit message id, payload, checksum, and compatible flags. Unsupported incompatible flags are discarded. |
-| MAVLink 2 signing | Unsupported | Signed frames are not authenticated or routed as signed packets. Unsupported signed frames are consumed as complete signed frames where the signature length is known so stream buffers do not retain signature bytes. See #47. |
+| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Low-level frame signing can generate signed MAVLink 2 frame bytes for already packed frames. Signed frames are not authenticated, unpacked, routed, or emitted by router policy until validation, replay checks, and policy wiring land. See #47 and `MAVLINK2_SIGNING.md`. |
 | MAVLink 2 payload truncation | Supported | Outbound payloads trim trailing zero bytes while preserving a non-empty all-zero payload's first byte; inbound v2 payloads are padded back to known dialect length before unpacking. |
 | MAVLink 2 future extension bytes | Supported | Generated v2 unpack clauses now ignore trailing extension bytes that are unknown to the local dialect. This preserves extension-field forward compatibility. |
 | MAVLink 2 extension CRC behavior | Supported | `CRC_EXTRA` generation excludes extension fields, matching the serialization guide. |
@@ -69,6 +73,11 @@ Known non-goals for 1.0 unless separately implemented:
   packing, and unpacking.
 - Generated MAVLink 2 packers use zero-equivalent defaults for omitted known
   extension fields.
+- MAVLink 2 signed frames now parse the 13-byte signature trailer into frame
+  metadata while remaining rejected by validation until signing support lands.
+- Low-level MAVLink 2 frame signing can set the signed incompatibility flag,
+  recalculate checksum bytes, and append a generated signature trailer for an
+  already packed frame.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.
@@ -78,7 +87,8 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #47: Implement MAVLink 2 packet signing and signed-frame routing behavior.
+- #47: Continue MAVLink 2 packet signing with inbound validation, replay policy,
+  outbound signing, and signed-frame routing behavior.
 - #52: Add route invalidation when `SYSTEM_TIME.time_boot_ms` decreases for a
   known system/component.
 - #53: Align XML parser/generator validation with `mavgen` for missing
