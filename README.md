@@ -26,6 +26,24 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
  end
  ```
 
+## Publishing
+
+Hex publishing is automated through GitHub Actions after changes are merged to
+`main`. The publish job runs only when the package `version` in `mix.exs`
+changes from the previous `main` revision, waits for the normal CI and Dialyzer
+jobs to pass, skips reruns when the same version already exists on Hex, and then
+runs `mix hex.publish --yes`.
+
+To enable publishing, configure a `HEX_API_KEY` secret on the `hex-publish`
+GitHub Actions environment with a Hex API key that can publish the `xmavlink`
+package. With Hex 2.4 and later, create the key from the hex.pm web dashboard
+rather than `mix hex.user key generate`; the CLI now uses browser-based OAuth
+for local authentication. Enable 2FA on the publishing Hex account first,
+create a package-scoped key for `xmavlink` if the dashboard offers that scope
+(`package:xmavlink` in the older CLI permission naming), then store the key only
+on the `hex-publish` environment. If a package-scoped key is not available,
+`api:write` is the broader fallback Hex documents for CI publishing.
+
 ## Current Status
 
 This library is not officially recognised or supported by MAVLink at this

@@ -13,8 +13,77 @@ env:
   MIX_ENV: test
 
 jobs:
+  detect_hex_publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    outputs:
+      should_publish: ${{ steps.version.outputs.should_publish }}
+      package_version: ${{ steps.version.outputs.package_version }}
+      previous_version: ${{ steps.version.outputs.previous_version }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check package version change
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          write_outputs() {
+            local should_publish="$1"
+            local package_version="${2:-}"
+            local previous_version="${3:-}"
+
+            {
+              echo "should_publish=$should_publish"
+              echo "package_version=$package_version"
+              echo "previous_version=$previous_version"
+            } >> "$GITHUB_OUTPUT"
+          }
+
+          before="${{ github.event.before }}"
+          after="${{ github.sha }}"
+
+          if [[ -z "$before" || "$before" =~ ^0+$ ]]; then
+            echo "No previous main revision was available; skipping Hex publish."
+            write_outputs false
+            exit 0
+          fi
+
+          extract_version() {
+            local ref="$1"
+
+            git show "${ref}:mix.exs" \
+              | sed -nE 's/^[[:space:]]*version:[[:space:]]*"([^"]+)".*/\1/p' \
+              | head -n 1
+          }
+
+          previous_version="$(extract_version "$before")"
+          package_version="$(extract_version "$after")"
+
+          if [[ -z "$previous_version" || -z "$package_version" ]]; then
+            echo "Could not read package versions from mix.exs."
+            exit 1
+          fi
+
+          if [[ "$previous_version" == "$package_version" ]]; then
+            echo "Package version remained $package_version; skipping Hex publish."
+            write_outputs false "$package_version" "$previous_version"
+            exit 0
+          fi
+
+          echo "Package version changed from $previous_version to $package_version."
+          write_outputs true "$package_version" "$previous_version"
+
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     strategy:
       fail-fast: false
@@ -27,6 +96,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: erlef/setup-beam@v1
         with:
@@ -71,12 +142,15 @@ jobs:
 
   dialyzer:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     env:
       MIX_ENV: dev
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: erlef/setup-beam@v1
         with:
@@ -106,3 +180,100 @@ jobs:
 
       - name: Run Dialyzer
         run: mix dialyzer
+
+  publish_hex:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    needs:
+      - detect_hex_publish
+      - quality
+      - dialyzer
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect_hex_publish.outputs.should_publish == 'true'
+
+    environment:
+      name: hex-publish
+      url: https://hex.pm/packages/xmavlink
+
+    env:
+      MIX_ENV: dev
+      PACKAGE_NAME: xmavlink
+      PACKAGE_VERSION: ${{ needs.detect_hex_publish.outputs.package_version }}
+
+    concurrency:
+      group: hex-publish-main
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: 1.18.4
+          otp-version: 27.3.4.3
+
+      - name: Install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Cache Mix dependencies and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            deps
+            _build
+          key: ${{ runner.os }}-hex-publish-1.18.4-27.3.4.3-${{ hashFiles('mix.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-hex-publish-1.18.4-27.3.4.3-
+
+      - name: Install Mix tools and dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          mix deps.get
+
+      - name: Check whether package version is already published
+        id: published
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          status="$(curl --silent --output /dev/null --write-out "%{http_code}" "https://hex.pm/api/packages/${PACKAGE_NAME}/releases/${PACKAGE_VERSION}")"
+
+          case "$status" in
+            200)
+              echo "${PACKAGE_NAME} ${PACKAGE_VERSION} is already published on Hex; skipping."
+              echo "already_published=true" >> "$GITHUB_OUTPUT"
+              ;;
+            404)
+              echo "${PACKAGE_NAME} ${PACKAGE_VERSION} is not published on Hex yet."
+              echo "already_published=false" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unexpected Hex API status while checking ${PACKAGE_NAME} ${PACKAGE_VERSION}: ${status}"
+              exit 1
+              ;;
+          esac
+
+      - name: Verify Hex package
+        if: steps.published.outputs.already_published == 'false'
+        run: mix hex.publish --dry-run --yes
+
+      - name: Publish Hex package
+        if: steps.published.outputs.already_published == 'false'
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${HEX_API_KEY}" ]]; then
+            echo "HEX_API_KEY environment secret is required to publish to Hex."
+            exit 1
+          fi
+
+          mix hex.publish --yes
