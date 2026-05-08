@@ -5,6 +5,8 @@ defmodule XMAVLink.Signing do
   This module validates parsed signed frames against a shared key, tracks
   inbound replay state by `{source_system, source_component, link_id}`, and
   signs unsigned outbound MAVLink 2 frames with a per-connection timestamp.
+  Optional timestamp load/save callbacks let applications preserve the local
+  signing timestamp across restarts.
   """
 
   alias XMAVLink.Frame
@@ -17,16 +19,26 @@ defmodule XMAVLink.Signing do
   defstruct secret_key: nil,
             link_id: nil,
             timestamp: nil,
+            timestamp_load: nil,
+            timestamp_save: nil,
             accept_unsigned: false,
             stream_timestamps: %{}
 
+  @type timestamp :: 0..281_474_976_710_655
   @type stream_key :: {0..255, 0..255, 0..255}
+  @type timestamp_load_result ::
+          timestamp | {:ok, timestamp | nil} | nil | :error | {:error, term}
+  @type timestamp_save_result :: :ok | {:ok, term} | :error | {:error, term}
+  @type timestamp_load :: (-> timestamp_load_result) | {module, atom, [term]}
+  @type timestamp_save :: (timestamp -> timestamp_save_result) | {module, atom, [term]}
   @type t :: %Signing{
           secret_key: <<_::256>>,
           link_id: 0..255,
-          timestamp: 0..281_474_976_710_655,
+          timestamp: timestamp,
+          timestamp_load: timestamp_load | nil,
+          timestamp_save: timestamp_save | nil,
           accept_unsigned: boolean,
-          stream_timestamps: %{stream_key() => 0..281_474_976_710_655}
+          stream_timestamps: %{stream_key() => timestamp}
         }
 
   @type new_error ::
@@ -35,8 +47,11 @@ defmodule XMAVLink.Signing do
           | :invalid_link_id
           | :invalid_secret_key
           | :invalid_timestamp
+          | :invalid_timestamp_load
+          | :invalid_timestamp_save
           | :missing_link_id
           | :missing_secret_key
+          | :timestamp_load_failed
 
   @type validate_error ::
           :invalid_mavlink_2_frame
@@ -45,6 +60,7 @@ defmodule XMAVLink.Signing do
           | :signature_replay
           | :signature_too_old
           | :signed_frame_unsupported
+          | :timestamp_save_failed
           | :unsigned_frame
           | :unsigned_frame_rejected
 
@@ -59,6 +75,7 @@ defmodule XMAVLink.Signing do
           | :mavlink_1_not_signable
           | :missing_crc_extra
           | :missing_mavlink_2_raw
+          | :timestamp_save_failed
           | :timestamp_exhausted
           | :unsupported_incompatible_flags
 
@@ -78,7 +95,10 @@ defmodule XMAVLink.Signing do
   defp new_keyword(opts) do
     with {:ok, secret_key} <- fetch_secret_key(opts),
          {:ok, link_id} <- fetch_link_id(opts),
-         {:ok, timestamp} <- validate_timestamp(Keyword.get(opts, :timestamp, now_timestamp())),
+         {:ok, timestamp_load} <- validate_timestamp_load(Keyword.get(opts, :timestamp_load)),
+         {:ok, timestamp_save} <- validate_timestamp_save(Keyword.get(opts, :timestamp_save)),
+         {:ok, timestamp} <-
+           initial_timestamp(Keyword.get_lazy(opts, :timestamp, &now_timestamp/0), timestamp_load),
          {:ok, accept_unsigned} <-
            validate_accept_unsigned(Keyword.get(opts, :accept_unsigned, false)) do
       {:ok,
@@ -86,6 +106,8 @@ defmodule XMAVLink.Signing do
          secret_key: secret_key,
          link_id: link_id,
          timestamp: timestamp,
+         timestamp_load: timestamp_load,
+         timestamp_save: timestamp_save,
          accept_unsigned: accept_unsigned
        }}
     end
@@ -129,20 +151,30 @@ defmodule XMAVLink.Signing do
         signing = %Signing{}
       )
       when is_integer(timestamp) do
-    {:ok, frame, %Signing{signing | timestamp: max(signing.timestamp, timestamp)}}
+    signing
+    |> update_timestamp(max(signing.timestamp, timestamp))
+    |> persist_if_timestamp_changed(signing)
+    |> case do
+      {:ok, updated_signing} -> {:ok, frame, updated_signing}
+      {:error, reason} -> {:error, reason, signing}
+    end
   end
 
   def sign_outbound(frame = %Frame{version: 2}, signing = %Signing{}) do
     with {:ok, timestamp} <- next_outbound_timestamp(signing),
          {:ok, signed_frame} <-
-           Frame.sign_frame(frame, signing.secret_key, signing.link_id, timestamp) do
-      {:ok, signed_frame, %Signing{signing | timestamp: timestamp}}
+           Frame.sign_frame(frame, signing.secret_key, signing.link_id, timestamp),
+         {:ok, updated_signing} <-
+           signing
+           |> update_timestamp(timestamp)
+           |> persist_if_timestamp_changed(signing) do
+      {:ok, signed_frame, updated_signing}
     else
       {:error, reason} -> {:error, reason, signing}
     end
   end
 
-  @spec now_timestamp() :: 0..281_474_976_710_655
+  @spec now_timestamp() :: timestamp
   def now_timestamp do
     timestamp =
       (System.os_time(:microsecond) - @mavlink_epoch_unix_microseconds)
@@ -155,8 +187,10 @@ defmodule XMAVLink.Signing do
 
   defp validate_signed_inbound(frame, signing) do
     with :ok <- Frame.validate_signature(frame, signing.secret_key),
-         :ok <- validate_inbound_timestamp(frame, signing) do
-      {:ok, frame, record_inbound_timestamp(frame, signing)}
+         :ok <- validate_inbound_timestamp(frame, signing),
+         updated_signing = record_inbound_timestamp(frame, signing),
+         {:ok, persisted_signing} <- persist_if_timestamp_changed(updated_signing, signing) do
+      {:ok, frame, persisted_signing}
     else
       {:error, reason} -> {:error, reason, signing}
     end
@@ -192,6 +226,20 @@ defmodule XMAVLink.Signing do
     do: {:error, :timestamp_exhausted}
 
   defp next_outbound_timestamp(%Signing{timestamp: timestamp}), do: {:ok, timestamp + 1}
+
+  defp update_timestamp(signing = %Signing{}, timestamp),
+    do: %Signing{signing | timestamp: timestamp}
+
+  defp persist_if_timestamp_changed(updated_signing, %Signing{timestamp: same_timestamp})
+       when updated_signing.timestamp == same_timestamp,
+       do: {:ok, updated_signing}
+
+  defp persist_if_timestamp_changed(updated_signing, _previous_signing) do
+    case save_timestamp(updated_signing.timestamp_save, updated_signing.timestamp) do
+      :ok -> {:ok, updated_signing}
+      {:error, reason} -> {:error, reason}
+    end
+  end
 
   defp record_inbound_timestamp(
          frame = %Frame{signature: %{timestamp: timestamp}},
@@ -238,6 +286,77 @@ defmodule XMAVLink.Signing do
     end
   end
 
+  defp initial_timestamp(configured_timestamp, timestamp_load) do
+    with {:ok, configured_timestamp} <- validate_timestamp(configured_timestamp),
+         {:ok, loaded_timestamp} <- load_timestamp(timestamp_load),
+         {:ok, timestamp} <- resolve_initial_timestamp(configured_timestamp, loaded_timestamp) do
+      {:ok, timestamp}
+    end
+  end
+
+  defp resolve_initial_timestamp(configured_timestamp, nil), do: {:ok, configured_timestamp}
+
+  defp resolve_initial_timestamp(configured_timestamp, loaded_timestamp) do
+    case validate_timestamp(loaded_timestamp) do
+      {:ok, loaded_timestamp} -> {:ok, max(configured_timestamp, loaded_timestamp)}
+      {:error, :invalid_timestamp} -> {:error, :timestamp_load_failed}
+    end
+  end
+
+  defp load_timestamp(nil), do: {:ok, nil}
+
+  defp load_timestamp(timestamp_load) do
+    timestamp_load
+    |> call_timestamp_load()
+    |> normalize_timestamp_load_result()
+  end
+
+  defp call_timestamp_load(timestamp_load) when is_function(timestamp_load, 0) do
+    safe_call(fn -> timestamp_load.() end)
+  end
+
+  defp call_timestamp_load({module, function, args}) do
+    safe_call(fn -> apply(module, function, args) end)
+  end
+
+  defp save_timestamp(nil, _timestamp), do: :ok
+
+  defp save_timestamp(timestamp_save, timestamp) do
+    timestamp_save
+    |> call_timestamp_save(timestamp)
+    |> normalize_timestamp_save_result()
+  end
+
+  defp call_timestamp_save(timestamp_save, timestamp) when is_function(timestamp_save, 1) do
+    safe_call(fn -> timestamp_save.(timestamp) end)
+  end
+
+  defp call_timestamp_save({module, function, args}, timestamp) do
+    safe_call(fn -> apply(module, function, args ++ [timestamp]) end)
+  end
+
+  defp safe_call(fun) do
+    try do
+      {:ok, fun.()}
+    rescue
+      _exception -> {:error, :callback_failed}
+    catch
+      _kind, _reason -> {:error, :callback_failed}
+    end
+  end
+
+  defp normalize_timestamp_load_result({:ok, nil}), do: {:ok, nil}
+  defp normalize_timestamp_load_result({:ok, {:ok, timestamp}}), do: {:ok, timestamp}
+
+  defp normalize_timestamp_load_result({:ok, timestamp}) when is_integer(timestamp),
+    do: {:ok, timestamp}
+
+  defp normalize_timestamp_load_result(_result), do: {:error, :timestamp_load_failed}
+
+  defp normalize_timestamp_save_result({:ok, :ok}), do: :ok
+  defp normalize_timestamp_save_result({:ok, {:ok, _result}}), do: :ok
+  defp normalize_timestamp_save_result(_result), do: {:error, :timestamp_save_failed}
+
   defp validate_timestamp(timestamp)
        when is_integer(timestamp) and timestamp in 0..@signature_timestamp_max,
        do: {:ok, timestamp}
@@ -248,4 +367,26 @@ defmodule XMAVLink.Signing do
     do: {:ok, accept_unsigned}
 
   defp validate_accept_unsigned(_accept_unsigned), do: {:error, :invalid_accept_unsigned}
+
+  defp validate_timestamp_load(nil), do: {:ok, nil}
+
+  defp validate_timestamp_load(timestamp_load) when is_function(timestamp_load, 0),
+    do: {:ok, timestamp_load}
+
+  defp validate_timestamp_load({module, function, args} = timestamp_load)
+       when is_atom(module) and is_atom(function) and is_list(args),
+       do: {:ok, timestamp_load}
+
+  defp validate_timestamp_load(_timestamp_load), do: {:error, :invalid_timestamp_load}
+
+  defp validate_timestamp_save(nil), do: {:ok, nil}
+
+  defp validate_timestamp_save(timestamp_save) when is_function(timestamp_save, 1),
+    do: {:ok, timestamp_save}
+
+  defp validate_timestamp_save({module, function, args} = timestamp_save)
+       when is_atom(module) and is_atom(function) and is_list(args),
+       do: {:ok, timestamp_save}
+
+  defp validate_timestamp_save(_timestamp_save), do: {:error, :invalid_timestamp_save}
 end

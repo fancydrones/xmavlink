@@ -729,12 +729,83 @@ defmodule XMAVLink.Test.Router do
       state = :sys.get_state(router_pid)
       refute Map.has_key?(state.routes, {1, 1})
     end
+
+    test "signed SETUP_SIGNING frames are delivered locally but not forwarded between links" do
+      {:ok, trap_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, trap_port} = :inet.port(trap_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:#{trap_port}"],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp
+            ]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(trap_socket)
+        stop_router(router_pid)
+      end)
+
+      udpout_socket = wait_for_udpout_socket(router_pid)
+
+      send(
+        router_pid,
+        {:udp, udpout_socket, {10, 42, 0, 1}, trap_port,
+         signed_heartbeat_frame(@valid_timestamp, 2, 1).mavlink_2_raw}
+      )
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{2, 1}] == udpout_socket
+
+      assert :ok =
+               Router.subscribe(router_pid,
+                 message: Common.Message.SetupSigning,
+                 as_frame: true
+               )
+
+      setup_signing_frame =
+        signed_setup_signing_frame(
+          source_system: 3,
+          source_component: 1,
+          target_system: 2,
+          target_component: 1,
+          timestamp: @valid_timestamp + 1
+        )
+
+      send(
+        router_pid,
+        {:udp, :setup_signing_socket, {127, 0, 0, 1}, 14_551, setup_signing_frame.mavlink_2_raw}
+      )
+
+      assert_receive %Frame{
+                       source_system: 3,
+                       source_component: 1,
+                       message: %Common.Message.SetupSigning{
+                         target_system: 2,
+                         target_component: 1
+                       }
+                     },
+                     200
+
+      refute_receive {:udp, ^trap_socket, _, _, _}, 50
+    end
   end
 
   describe "outbound signing policy" do
     test "signs outbound MAVLink 2 frames on signing-enabled UDP connections" do
       {udp_socket, udp_port} = open_udp_socket()
       :ok = :inet.setopts(udp_socket, active: true)
+      parent = self()
 
       {:ok, router_pid} =
         Router.start_link(
@@ -747,7 +818,11 @@ defmodule XMAVLink.Test.Router do
             signing: [
               secret_key: @secret_key,
               link_id: @link_id,
-              timestamp: @local_timestamp
+              timestamp: @local_timestamp,
+              timestamp_save: fn timestamp ->
+                send(parent, {:saved_router_timestamp, timestamp})
+                :ok
+              end
             ]
           },
           []
@@ -768,6 +843,8 @@ defmodule XMAVLink.Test.Router do
       assert frame.signature.link_id == @link_id
       assert frame.signature.timestamp == @local_timestamp + 1
       assert :ok = Frame.validate_signature(frame, @secret_key)
+      next_timestamp = @local_timestamp + 1
+      assert_receive {:saved_router_timestamp, ^next_timestamp}
 
       state = :sys.get_state(router_pid)
       assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 1
@@ -777,6 +854,8 @@ defmodule XMAVLink.Test.Router do
       assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, raw}, 500
       assert {%Frame{} = frame, <<>>} = Frame.binary_to_frame_and_tail(raw)
       assert frame.signature.timestamp == @local_timestamp + 2
+      next_timestamp = @local_timestamp + 2
+      assert_receive {:saved_router_timestamp, ^next_timestamp}
 
       state = :sys.get_state(router_pid)
       assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 2
@@ -1016,20 +1095,67 @@ defmodule XMAVLink.Test.Router do
     }
   end
 
-  defp signed_heartbeat_frame(timestamp \\ @valid_timestamp) do
-    {:ok, frame} = Frame.sign_frame(unsigned_heartbeat_frame(), @secret_key, @link_id, timestamp)
+  defp signed_heartbeat_frame(
+         timestamp \\ @valid_timestamp,
+         source_system \\ 1,
+         source_component \\ 1
+       ) do
+    {:ok, frame} =
+      Frame.sign_frame(
+        unsigned_heartbeat_frame(source_system, source_component),
+        @secret_key,
+        @link_id,
+        timestamp
+      )
+
     frame
   end
 
-  defp unsigned_heartbeat_frame do
+  defp unsigned_heartbeat_frame(source_system \\ 1, source_component \\ 1) do
     {:ok, message_id, {:ok, crc_extra, _expected_length, _target}, payload} =
       XMAVLink.Message.pack(sample_heartbeat(), 2)
 
     Frame.pack_frame(%Frame{
       version: 2,
       sequence_number: 7,
-      source_system: 1,
-      source_component: 1,
+      source_system: source_system,
+      source_component: source_component,
+      message_id: message_id,
+      payload: payload,
+      crc_extra: crc_extra
+    })
+  end
+
+  defp signed_setup_signing_frame(opts) do
+    timestamp = Keyword.fetch!(opts, :timestamp)
+
+    {:ok, frame} =
+      Frame.sign_frame(
+        setup_signing_frame(opts),
+        @secret_key,
+        @link_id,
+        timestamp
+      )
+
+    frame
+  end
+
+  defp setup_signing_frame(opts) do
+    message = %Common.Message.SetupSigning{
+      target_system: Keyword.fetch!(opts, :target_system),
+      target_component: Keyword.fetch!(opts, :target_component),
+      secret_key: :binary.bin_to_list(@secret_key),
+      initial_timestamp: Keyword.fetch!(opts, :timestamp)
+    }
+
+    {:ok, message_id, {:ok, crc_extra, _expected_length, _target}, payload} =
+      XMAVLink.Message.pack(message, 2)
+
+    Frame.pack_frame(%Frame{
+      version: 2,
+      sequence_number: 8,
+      source_system: Keyword.fetch!(opts, :source_system),
+      source_component: Keyword.fetch!(opts, :source_component),
       message_id: message_id,
       payload: payload,
       crc_extra: crc_extra

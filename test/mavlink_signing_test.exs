@@ -4,6 +4,11 @@ defmodule XMAVLink.Test.Signing do
   alias XMAVLink.Frame
   alias XMAVLink.Signing
 
+  defmodule TimestampStore do
+    def load(agent), do: Agent.get(agent, & &1)
+    def save(agent, timestamp), do: Agent.update(agent, fn _stored_timestamp -> timestamp end)
+  end
+
   @secret_key :binary.copy(<<42>>, 32)
   @wrong_secret_key :binary.copy(<<43>>, 32)
   @link_id 9
@@ -19,6 +24,8 @@ defmodule XMAVLink.Test.Signing do
                 secret_key: @secret_key,
                 link_id: @link_id,
                 timestamp: @local_timestamp,
+                timestamp_load: nil,
+                timestamp_save: nil,
                 accept_unsigned: true,
                 stream_timestamps: %{}
               }} =
@@ -28,6 +35,46 @@ defmodule XMAVLink.Test.Signing do
                  timestamp: @local_timestamp,
                  accept_unsigned: true
                )
+    end
+
+    test "loads persisted signing timestamp when configured" do
+      assert {:ok, %Signing{timestamp: @valid_timestamp}} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp: @local_timestamp,
+                 timestamp_load: fn -> {:ok, @valid_timestamp} end
+               )
+
+      assert {:ok, %Signing{timestamp: @valid_timestamp}} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp: @valid_timestamp,
+                 timestamp_load: fn -> @local_timestamp end
+               )
+    end
+
+    test "supports MFA timestamp load and save callbacks" do
+      {:ok, agent} = Agent.start(fn -> @valid_timestamp end)
+      on_exit(fn -> Agent.stop(agent) end)
+
+      assert {:ok, signing} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp: @local_timestamp,
+                 timestamp_load: {TimestampStore, :load, [agent]},
+                 timestamp_save: {TimestampStore, :save, [agent]}
+               )
+
+      assert signing.timestamp == @valid_timestamp
+
+      assert {:ok, _signed_frame, updated_signing} =
+               Signing.sign_outbound(unsigned_frame(), signing)
+
+      assert updated_signing.timestamp == @valid_timestamp + 1
+      assert Agent.get(agent, & &1) == @valid_timestamp + 1
     end
 
     test "rejects invalid signing policy inputs" do
@@ -46,6 +93,34 @@ defmodule XMAVLink.Test.Signing do
                  accept_unsigned: :sometimes
                )
 
+      assert {:error, :invalid_timestamp_load} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp_load: fn _timestamp -> @local_timestamp end
+               )
+
+      assert {:error, :invalid_timestamp_save} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp_save: fn -> :ok end
+               )
+
+      assert {:error, :timestamp_load_failed} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp_load: fn -> -1 end
+               )
+
+      assert {:error, :timestamp_load_failed} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 timestamp_load: fn -> raise "failed" end
+               )
+
       assert {:error, :invalid_options} = Signing.new([1, 2])
       assert {:error, :invalid_options} = Signing.new(:invalid)
     end
@@ -53,7 +128,16 @@ defmodule XMAVLink.Test.Signing do
 
   describe "validate_inbound/2" do
     test "accepts valid signed frames and records replay state" do
-      signing = signing()
+      parent = self()
+
+      signing =
+        signing(
+          timestamp_save: fn timestamp ->
+            send(parent, {:saved_timestamp, timestamp})
+            :ok
+          end
+        )
+
       frame = signed_frame(@valid_timestamp)
 
       assert {:ok, ^frame, updated_signing} = Signing.validate_inbound(frame, signing)
@@ -63,6 +147,15 @@ defmodule XMAVLink.Test.Signing do
       assert updated_signing.stream_timestamps[
                {frame.source_system, frame.source_component, @link_id}
              ] == @valid_timestamp
+
+      assert_receive {:saved_timestamp, @valid_timestamp}
+    end
+
+    test "rejects valid signed frames when advanced timestamp save fails" do
+      signing = signing(timestamp_save: fn _timestamp -> {:error, :disk_full} end)
+
+      assert {:error, :timestamp_save_failed, ^signing} =
+               Signing.validate_inbound(signed_frame(@valid_timestamp), signing)
     end
 
     test "rejects repeated or older timestamps for the same signed stream" do
@@ -152,7 +245,15 @@ defmodule XMAVLink.Test.Signing do
   describe "sign_outbound/2" do
     test "signs unsigned MAVLink 2 frames with the next local timestamp" do
       frame = unsigned_frame()
-      signing = signing()
+      parent = self()
+
+      signing =
+        signing(
+          timestamp_save: fn timestamp ->
+            send(parent, {:saved_timestamp, timestamp})
+            :ok
+          end
+        )
 
       assert {:ok, signed_frame, updated_signing} = Signing.sign_outbound(frame, signing)
       assert Frame.signed?(signed_frame)
@@ -160,12 +261,16 @@ defmodule XMAVLink.Test.Signing do
       assert signed_frame.signature.timestamp == @local_timestamp + 1
       assert updated_signing.timestamp == @local_timestamp + 1
       assert :ok = Frame.validate_signature(signed_frame, @secret_key)
+      next_timestamp = @local_timestamp + 1
+      assert_receive {:saved_timestamp, ^next_timestamp}
 
       assert {:ok, newer_frame, newer_signing} =
                Signing.sign_outbound(unsigned_frame(), updated_signing)
 
       assert newer_frame.signature.timestamp == @local_timestamp + 2
       assert newer_signing.timestamp == @local_timestamp + 2
+      next_timestamp = @local_timestamp + 2
+      assert_receive {:saved_timestamp, ^next_timestamp}
     end
 
     test "leaves MAVLink 1 frames unsigned and unchanged" do
@@ -186,18 +291,37 @@ defmodule XMAVLink.Test.Signing do
     end
 
     test "leaves already signed frames unchanged and catches up local timestamp" do
-      signing = signing()
+      parent = self()
+
+      signing =
+        signing(
+          timestamp_save: fn timestamp ->
+            send(parent, {:saved_timestamp, timestamp})
+            :ok
+          end
+        )
+
       signed_frame = signed_frame(@valid_timestamp)
 
       assert {:ok, ^signed_frame, updated_signing} =
                Signing.sign_outbound(signed_frame, signing)
 
       assert updated_signing.timestamp == @valid_timestamp
+      assert_receive {:saved_timestamp, @valid_timestamp}
 
       newer_signing = %{signing | timestamp: @valid_timestamp + 1}
 
       assert {:ok, ^signed_frame, ^newer_signing} =
                Signing.sign_outbound(signed_frame, newer_signing)
+
+      refute_receive {:saved_timestamp, _timestamp}, 50
+    end
+
+    test "rejects outbound signing when advanced timestamp save fails" do
+      signing = signing(timestamp_save: fn _timestamp -> :error end)
+
+      assert {:error, :timestamp_save_failed, ^signing} =
+               Signing.sign_outbound(unsigned_frame(), signing)
     end
 
     test "rejects outbound signing when the timestamp space is exhausted" do
@@ -208,12 +332,17 @@ defmodule XMAVLink.Test.Signing do
     end
   end
 
-  defp signing do
+  defp signing(opts \\ []) do
     {:ok, signing} =
       Signing.new(
-        secret_key: @secret_key,
-        link_id: @link_id,
-        timestamp: @local_timestamp
+        Keyword.merge(
+          [
+            secret_key: @secret_key,
+            link_id: @link_id,
+            timestamp: @local_timestamp
+          ],
+          opts
+        )
       )
 
     signing

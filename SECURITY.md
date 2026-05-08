@@ -29,9 +29,12 @@ Current trust boundaries:
   while signing is enabled unless `accept_unsigned: true` is set. MAVLink 1
   inbound frames remain accepted under a signing policy. Unsigned outbound
   MAVLink 2 frames sent over signing-enabled connections are signed with a
-  monotonically incremented per-connection timestamp. Timestamp persistence
-  hooks are not wired yet. Frames with other incompatible MAVLink 2 flags are
-  discarded.
+  monotonically incremented per-connection timestamp. Applications can configure
+  timestamp load/save hooks to preserve local signing timestamps across
+  restarts. Frames with other incompatible MAVLink 2 flags are discarded.
+- `SETUP_SIGNING` frames carry key material. Inbound `SETUP_SIGNING` frames are
+  delivered locally for application handling but are not forwarded from one
+  MAVLink connection to another by the generic router.
 - UDP listeners should be exposed only to trusted networks unless the application
   adds network-level filtering or validates peers at a higher layer.
 - Utility processes are opt-in. When enabled, `CacheManager` subscribes to
