@@ -166,6 +166,14 @@ defmodule XMAVLink.Test.Frame do
                @timestamp
              )
 
+    assert {:error, :invalid_crc_extra} =
+             Frame.sign_frame(
+               %Frame{unsigned_frame | crc_extra: 256},
+               @secret_key,
+               @link_id,
+               @timestamp
+             )
+
     assert {:error, :missing_mavlink_2_raw} =
              Frame.sign_frame(
                %Frame{unsigned_frame | mavlink_2_raw: nil},
@@ -183,6 +191,14 @@ defmodule XMAVLink.Test.Frame do
 
     assert {:error, :unsupported_incompatible_flags} =
              Frame.sign_frame(unsupported_incompatible_frame, @secret_key, @link_id, @timestamp)
+
+    assert {:error, :checksum_invalid} =
+             Frame.sign_frame(
+               corrupt_mavlink_2_checksum(unsigned_frame),
+               @secret_key,
+               @link_id,
+               @timestamp
+             )
 
     assert {:ok, signed_frame} =
              Frame.sign_frame(unsigned_frame, @secret_key, @link_id, @timestamp)
@@ -203,5 +219,17 @@ defmodule XMAVLink.Test.Frame do
       |> XMAVLink.Utils.x25_crc([crc_extra])
 
     <<checksum::little-unsigned-integer-size(16)>>
+  end
+
+  defp corrupt_mavlink_2_checksum(%Frame{mavlink_2_raw: raw} = frame) do
+    checksum_offset = byte_size(raw) - 2
+
+    <<prefix::binary-size(checksum_offset), checksum::little-unsigned-integer-size(16)>> = raw
+
+    %Frame{
+      frame
+      | mavlink_2_raw:
+          prefix <> <<Bitwise.bxor(checksum, 0xFFFF)::little-unsigned-integer-size(16)>>
+    }
   end
 end

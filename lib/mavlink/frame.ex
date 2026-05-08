@@ -295,12 +295,15 @@ defmodule XMAVLink.Frame do
   This is a low-level frame utility. It sets `MAVLINK_IFLAG_SIGNED`,
   recalculates the checksum for the signed header, and appends the 13-byte
   MAVLink 2 signature trailer. It does not manage link timestamp state or
-  router/connection signing policy.
+  router/connection signing policy. The existing packed frame checksum must
+  already match the frame's `crc_extra`.
   """
   @spec sign_frame(XMAVLink.Frame.t(), <<_::256>>, 0..255, 0..281_474_976_710_655) ::
           {:ok, XMAVLink.Frame.t()}
           | {:error,
              :already_signed
+             | :checksum_invalid
+             | :invalid_crc_extra
              | :invalid_link_id
              | :invalid_mavlink_2_frame
              | :invalid_secret_key
@@ -318,20 +321,14 @@ defmodule XMAVLink.Frame do
          :ok <- validate_timestamp(timestamp),
          :ok <- validate_crc_extra(frame.crc_extra),
          {:ok, attrs} <- parse_mavlink_2_raw(frame.mavlink_2_raw),
-         :ok <- validate_signable_frame_attrs(attrs) do
+         :ok <- validate_signable_frame_attrs(attrs),
+         :ok <- validate_unsigned_checksum(attrs, frame.crc_extra) do
       signature_prefix =
         <<link_id::unsigned-integer-size(8), timestamp::little-unsigned-integer-size(48)>>
 
       incompatible_flags = attrs.incompatible_flags ||| @mavlink_2_signature_flag
 
-      signed_body =
-        <<attrs.payload_length::unsigned-integer-size(8),
-          incompatible_flags::unsigned-integer-size(8),
-          attrs.compatible_flags::unsigned-integer-size(8),
-          attrs.sequence_number::unsigned-integer-size(8),
-          attrs.source_system::unsigned-integer-size(8),
-          attrs.source_component::unsigned-integer-size(8),
-          attrs.message_id::little-unsigned-integer-size(24), attrs.payload::binary>>
+      signed_body = mavlink_2_body(attrs, incompatible_flags)
 
       checksum = checksum(signed_body, frame.crc_extra)
 
@@ -375,8 +372,9 @@ defmodule XMAVLink.Frame do
 
   defp validate_timestamp(_timestamp), do: {:error, :invalid_timestamp}
 
+  defp validate_crc_extra(nil), do: {:error, :missing_crc_extra}
   defp validate_crc_extra(crc_extra) when is_integer(crc_extra) and crc_extra in 0..255, do: :ok
-  defp validate_crc_extra(_crc_extra), do: {:error, :missing_crc_extra}
+  defp validate_crc_extra(_crc_extra), do: {:error, :invalid_crc_extra}
 
   defp parse_mavlink_2_raw(nil), do: {:error, :missing_mavlink_2_raw}
 
@@ -415,6 +413,27 @@ defmodule XMAVLink.Frame do
 
   defp validate_signable_frame_attrs(%{rest: <<>>}), do: :ok
   defp validate_signable_frame_attrs(_attrs), do: {:error, :invalid_mavlink_2_frame}
+
+  defp validate_unsigned_checksum(attrs, crc_extra) do
+    if checksum(mavlink_2_body(attrs), crc_extra) ==
+         <<attrs.checksum::little-unsigned-integer-size(16)>> do
+      :ok
+    else
+      {:error, :checksum_invalid}
+    end
+  end
+
+  defp mavlink_2_body(attrs), do: mavlink_2_body(attrs, attrs.incompatible_flags)
+
+  defp mavlink_2_body(attrs, incompatible_flags) do
+    <<attrs.payload_length::unsigned-integer-size(8),
+      incompatible_flags::unsigned-integer-size(8),
+      attrs.compatible_flags::unsigned-integer-size(8),
+      attrs.sequence_number::unsigned-integer-size(8),
+      attrs.source_system::unsigned-integer-size(8),
+      attrs.source_component::unsigned-integer-size(8),
+      attrs.message_id::little-unsigned-integer-size(24), attrs.payload::binary>>
+  end
 
   defp signature_hash(secret_key, signed_frame_without_signature, signature_prefix) do
     :crypto.hash(:sha256, secret_key <> signed_frame_without_signature <> signature_prefix)
