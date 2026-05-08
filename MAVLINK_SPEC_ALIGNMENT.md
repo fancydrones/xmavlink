@@ -41,7 +41,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Area | Status | Notes |
 | --- | --- | --- |
 | MAVLink 2 frame shape | Supported | Parses and emits the v2 header, 24-bit message id, payload, checksum, and compatible flags. Unsupported incompatible flags are discarded. |
-| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Signed frames are not authenticated, unpacked, routed, or emitted until signing policy, validation, and replay checks land. See #47 and `MAVLINK2_SIGNING.md`. |
+| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Low-level frame signing can generate signed MAVLink 2 frame bytes for already packed frames. Signed frames are not authenticated, unpacked, routed, or emitted by router policy until validation, replay checks, and policy wiring land. See #47 and `MAVLINK2_SIGNING.md`. |
 | MAVLink 2 payload truncation | Supported | Outbound payloads trim trailing zero bytes while preserving a non-empty all-zero payload's first byte; inbound v2 payloads are padded back to known dialect length before unpacking. |
 | MAVLink 2 future extension bytes | Supported | Generated v2 unpack clauses now ignore trailing extension bytes that are unknown to the local dialect. This preserves extension-field forward compatibility. |
 | MAVLink 2 extension CRC behavior | Supported | `CRC_EXTRA` generation excludes extension fields, matching the serialization guide. |
@@ -75,6 +75,9 @@ Known non-goals for 1.0 unless separately implemented:
   extension fields.
 - MAVLink 2 signed frames now parse the 13-byte signature trailer into frame
   metadata while remaining rejected by validation until signing support lands.
+- Low-level MAVLink 2 frame signing can set the signed incompatibility flag,
+  recalculate checksum bytes, and append a generated signature trailer for an
+  already packed frame.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.

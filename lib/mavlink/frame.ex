@@ -30,6 +30,7 @@ defmodule XMAVLink.Frame do
   @mavlink_2_signature_flag 0x01
   @mavlink_2_signature_length 13
   @mavlink_2_supported_incompatible_flags @mavlink_2_signature_flag
+  @mavlink_2_signature_timestamp_max 0xFFFF_FFFF_FFFF
 
   defstruct [
     # Which raw attributes are populated?
@@ -288,8 +289,137 @@ defmodule XMAVLink.Frame do
   def signed?(incompatible_flags) when is_integer(incompatible_flags),
     do: (incompatible_flags &&& @mavlink_2_signature_flag) != 0
 
+  @doc """
+  Sign an already packed MAVLink 2 frame.
+
+  This is a low-level frame utility. It sets `MAVLINK_IFLAG_SIGNED`,
+  recalculates the checksum for the signed header, and appends the 13-byte
+  MAVLink 2 signature trailer. It does not manage link timestamp state or
+  router/connection signing policy.
+  """
+  @spec sign_frame(XMAVLink.Frame.t(), <<_::256>>, 0..255, 0..281_474_976_710_655) ::
+          {:ok, XMAVLink.Frame.t()}
+          | {:error,
+             :already_signed
+             | :invalid_link_id
+             | :invalid_mavlink_2_frame
+             | :invalid_secret_key
+             | :invalid_timestamp
+             | :mavlink_1_not_signable
+             | :missing_crc_extra
+             | :missing_mavlink_2_raw
+             | :unsupported_incompatible_flags}
+  def sign_frame(%XMAVLink.Frame{version: 1}, _secret_key, _link_id, _timestamp),
+    do: {:error, :mavlink_1_not_signable}
+
+  def sign_frame(frame = %XMAVLink.Frame{version: 2}, secret_key, link_id, timestamp) do
+    with :ok <- validate_secret_key(secret_key),
+         :ok <- validate_link_id(link_id),
+         :ok <- validate_timestamp(timestamp),
+         :ok <- validate_crc_extra(frame.crc_extra),
+         {:ok, attrs} <- parse_mavlink_2_raw(frame.mavlink_2_raw),
+         :ok <- validate_signable_frame_attrs(attrs) do
+      signature_prefix =
+        <<link_id::unsigned-integer-size(8), timestamp::little-unsigned-integer-size(48)>>
+
+      incompatible_flags = attrs.incompatible_flags ||| @mavlink_2_signature_flag
+
+      signed_body =
+        <<attrs.payload_length::unsigned-integer-size(8),
+          incompatible_flags::unsigned-integer-size(8),
+          attrs.compatible_flags::unsigned-integer-size(8),
+          attrs.sequence_number::unsigned-integer-size(8),
+          attrs.source_system::unsigned-integer-size(8),
+          attrs.source_component::unsigned-integer-size(8),
+          attrs.message_id::little-unsigned-integer-size(24), attrs.payload::binary>>
+
+      checksum = checksum(signed_body, frame.crc_extra)
+
+      signature_hash =
+        signature_hash(secret_key, <<0xFD>> <> signed_body <> checksum, signature_prefix)
+
+      signature_raw = signature_prefix <> signature_hash
+      signed_raw = <<0xFD>> <> signed_body <> checksum <> signature_raw
+
+      {:ok,
+       struct(frame,
+         payload_length: attrs.payload_length,
+         incompatible_flags: incompatible_flags,
+         compatible_flags: attrs.compatible_flags,
+         sequence_number: attrs.sequence_number,
+         source_system: attrs.source_system,
+         source_component: attrs.source_component,
+         message_id: attrs.message_id,
+         payload: attrs.payload,
+         checksum: :binary.decode_unsigned(checksum, :little),
+         signature: parse_signature(signature_raw),
+         mavlink_2_raw: signed_raw
+       )}
+    end
+  end
+
   defp unsupported_incompatible_flags?(incompatible_flags),
     do: (incompatible_flags &&& @mavlink_2_supported_incompatible_flags) != incompatible_flags
+
+  defp validate_secret_key(secret_key) when is_binary(secret_key) and byte_size(secret_key) == 32,
+    do: :ok
+
+  defp validate_secret_key(_secret_key), do: {:error, :invalid_secret_key}
+
+  defp validate_link_id(link_id) when is_integer(link_id) and link_id in 0..255, do: :ok
+  defp validate_link_id(_link_id), do: {:error, :invalid_link_id}
+
+  defp validate_timestamp(timestamp)
+       when is_integer(timestamp) and timestamp in 0..@mavlink_2_signature_timestamp_max,
+       do: :ok
+
+  defp validate_timestamp(_timestamp), do: {:error, :invalid_timestamp}
+
+  defp validate_crc_extra(crc_extra) when is_integer(crc_extra) and crc_extra in 0..255, do: :ok
+  defp validate_crc_extra(_crc_extra), do: {:error, :missing_crc_extra}
+
+  defp parse_mavlink_2_raw(nil), do: {:error, :missing_mavlink_2_raw}
+
+  defp parse_mavlink_2_raw(
+         <<0xFD, payload_length::unsigned-integer-size(8),
+           incompatible_flags::unsigned-integer-size(8),
+           compatible_flags::unsigned-integer-size(8), sequence_number::unsigned-integer-size(8),
+           source_system::unsigned-integer-size(8), source_component::unsigned-integer-size(8),
+           message_id::little-unsigned-integer-size(24), payload::binary-size(payload_length),
+           checksum::little-unsigned-integer-size(16), rest::binary>>
+       ) do
+    {:ok,
+     %{
+       payload_length: payload_length,
+       incompatible_flags: incompatible_flags,
+       compatible_flags: compatible_flags,
+       sequence_number: sequence_number,
+       source_system: source_system,
+       source_component: source_component,
+       message_id: message_id,
+       payload: payload,
+       checksum: checksum,
+       rest: rest
+     }}
+  end
+
+  defp parse_mavlink_2_raw(_raw), do: {:error, :invalid_mavlink_2_frame}
+
+  defp validate_signable_frame_attrs(%{incompatible_flags: incompatible_flags})
+       when (incompatible_flags &&& @mavlink_2_signature_flag) != 0,
+       do: {:error, :already_signed}
+
+  defp validate_signable_frame_attrs(%{incompatible_flags: incompatible_flags})
+       when incompatible_flags != 0,
+       do: {:error, :unsupported_incompatible_flags}
+
+  defp validate_signable_frame_attrs(%{rest: <<>>}), do: :ok
+  defp validate_signable_frame_attrs(_attrs), do: {:error, :invalid_mavlink_2_frame}
+
+  defp signature_hash(secret_key, signed_frame_without_signature, signature_prefix) do
+    :crypto.hash(:sha256, secret_key <> signed_frame_without_signature <> signature_prefix)
+    |> binary_part(0, 6)
+  end
 
   defp signed_frame_and_tail(raw_and_rest, frame, rest) do
     case rest do

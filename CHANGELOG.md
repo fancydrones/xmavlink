@@ -5,6 +5,8 @@
 - Added MAVLink 2 signed-frame parsing and signature trailer representation
   while continuing to reject signed frames before unpacking or routing until
   signature validation and replay checks are implemented.
+- Added a low-level MAVLink 2 frame signing helper for already packed frames;
+  router and connection signing policy is still pending.
 
 ## 0.11.1 - 2026-05-08
 

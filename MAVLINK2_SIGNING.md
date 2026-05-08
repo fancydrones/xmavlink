@@ -11,6 +11,11 @@ XMAVLink parses the MAVLink 2 signing incompatibility flag (`0x01`) as a known
 frame-shape feature and extracts the 13-byte signing trailer into
 `XMAVLink.Frame.Signature`.
 
+`XMAVLink.Frame.sign_frame/4` can sign an already packed MAVLink 2 frame when
+given a 32-byte key, link id, and timestamp. This is a low-level utility for the
+remaining signing implementation; router and connection configuration do not
+use it yet.
+
 Signed frames are still not authenticated, unpacked, delivered to subscribers,
 or forwarded by the router. Until key configuration, signature validation, and
 replay checks exist, `XMAVLink.Frame.validate_and_unpack/2` returns
@@ -31,7 +36,8 @@ The MAVLink 2 signed trailer is 13 bytes:
 - `signature`: 48-bit signature value.
 
 The signature is defined as the first 48 bits of SHA-256 over the 32-byte shared
-secret key followed by `header + payload + CRC + link_id + timestamp`.
+secret key followed by the wire header including the magic byte, payload, CRC,
+link id, and timestamp.
 
 ## Intended Public Policy Shape
 
@@ -61,9 +67,8 @@ shape is:
    - decide where per-link timestamp state lives;
    - make unsigned-frame acceptance explicit;
    - avoid forwarding `SETUP_SIGNING` from a secure link to other links.
-3. Outbound signing:
-   - append the signature trailer only to MAVLink 2 frames;
-   - set `MAVLINK_IFLAG_SIGNED`;
+3. Outbound signing policy:
+   - call the low-level frame signing utility from router/connection send paths;
    - monotonically increment timestamps per outbound link;
    - keep MAVLink 1 behavior unsigned and unchanged.
 4. Persistence hooks:
