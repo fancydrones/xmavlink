@@ -1,0 +1,38 @@
+<?xml version="1.0"?>
+<mavlink>
+  <version>2</version>
+  <dialect>0</dialect>
+  <enums>
+    <enum name="TEST_MODE">
+      <description>Mode enum without a symbolic zero value.</description>
+      <entry value="1" name="TEST_MODE_ACTIVE">
+        <description>Active mode.</description>
+      </entry>
+    </enum>
+    <enum name="TEST_FLAGS" bitmask="true">
+      <description>Flags enum.</description>
+      <entry value="1" name="TEST_FLAG_ONE">
+        <description>First flag.</description>
+      </entry>
+      <entry value="2" name="TEST_FLAG_TWO">
+        <description>Second flag.</description>
+      </entry>
+    </enum>
+  </enums>
+  <messages>
+    <message id="200" name="EXTENSION_DEFAULTS">
+      <description>Message used to verify omitted MAVLink 2 extension field defaults.</description>
+      <field type="uint8_t" name="base_value">Base value.</field>
+      <extensions/>
+      <field type="uint16_t" name="scalar_value">Scalar integer extension.</field>
+      <field type="float" name="float_value">Scalar float extension.</field>
+      <field type="double" name="double_value">Scalar double extension.</field>
+      <field type="char[4]" name="label">Character array extension.</field>
+      <field type="uint16_t[3]" name="counts">Integer array extension.</field>
+      <field type="float[2]" name="ratios">Float array extension.</field>
+      <field type="double[2]" name="precisions">Double array extension.</field>
+      <field type="uint8_t" name="mode" enum="TEST_MODE">Enum extension.</field>
+      <field type="uint8_t" name="flags" enum="TEST_FLAGS">Bitmask enum extension.</field>
+    </message>
+  </messages>
+</mavlink>

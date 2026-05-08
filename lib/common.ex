@@ -2559,17 +2559,17 @@ defmodule Common.Message.SysStatus do
            msg.errors_count3::little-integer-size(16), msg.errors_count4::little-integer-size(16),
            msg.battery_remaining::signed-integer-size(8),
            Common.pack_bitmask(
-             msg.onboard_control_sensors_present_extended,
+             msg.onboard_control_sensors_present_extended || MapSet.new(),
              :mav_sys_status_sensor_extended,
              &Common.encode/2
            )::little-integer-size(32),
            Common.pack_bitmask(
-             msg.onboard_control_sensors_enabled_extended,
+             msg.onboard_control_sensors_enabled_extended || MapSet.new(),
              :mav_sys_status_sensor_extended,
              &Common.encode/2
            )::little-integer-size(32),
            Common.pack_bitmask(
-             msg.onboard_control_sensors_health_extended,
+             msg.onboard_control_sensors_health_extended || MapSet.new(),
              :mav_sys_status_sensor_extended,
              &Common.encode/2
            )::little-integer-size(32)>>}
@@ -2895,9 +2895,10 @@ defmodule Common.Message.GpsRawInt do
            msg.vel::little-integer-size(16), msg.cog::little-integer-size(16),
            Common.encode(msg.fix_type, :gps_fix_type)::integer-size(8),
            msg.satellites_visible::integer-size(8),
-           msg.alt_ellipsoid::little-signed-integer-size(32), msg.h_acc::little-integer-size(32),
-           msg.v_acc::little-integer-size(32), msg.vel_acc::little-integer-size(32),
-           msg.hdg_acc::little-integer-size(32), msg.yaw::little-integer-size(16)>>}
+           msg.alt_ellipsoid || 0::little-signed-integer-size(32),
+           msg.h_acc || 0::little-integer-size(32), msg.v_acc || 0::little-integer-size(32),
+           msg.vel_acc || 0::little-integer-size(32), msg.hdg_acc || 0::little-integer-size(32),
+           msg.yaw || 0::little-integer-size(16)>>}
   end
 end
 
@@ -2999,7 +3000,7 @@ defmodule Common.Message.ScaledImu do
            msg.xgyro::little-signed-integer-size(16), msg.ygyro::little-signed-integer-size(16),
            msg.zgyro::little-signed-integer-size(16), msg.xmag::little-signed-integer-size(16),
            msg.ymag::little-signed-integer-size(16), msg.zmag::little-signed-integer-size(16),
-           msg.temperature::little-signed-integer-size(16)>>}
+           msg.temperature || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -3053,7 +3054,7 @@ defmodule Common.Message.RawImu do
            msg.xgyro::little-signed-integer-size(16), msg.ygyro::little-signed-integer-size(16),
            msg.zgyro::little-signed-integer-size(16), msg.xmag::little-signed-integer-size(16),
            msg.ymag::little-signed-integer-size(16), msg.zmag::little-signed-integer-size(16),
-           msg.id::integer-size(8), msg.temperature::little-signed-integer-size(16)>>}
+           msg.id || 0::integer-size(8), msg.temperature || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -3108,7 +3109,7 @@ defmodule Common.Message.ScaledPressure do
            XMAVLink.Utils.pack_float(msg.press_abs)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.press_diff)::binary-size(4),
            msg.temperature::little-signed-integer-size(16),
-           msg.temperature_press_diff::little-signed-integer-size(16)>>}
+           msg.temperature_press_diff || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -3190,9 +3191,11 @@ defmodule Common.Message.AttitudeQuaternion do
            XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitchspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yawspeed)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.repr_offset_q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           )>>}
+           XMAVLink.Utils.pack_array(
+             msg.repr_offset_q || List.duplicate(0.0, 4),
+             4,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(16)>>}
   end
 end
 
@@ -3439,10 +3442,14 @@ defmodule Common.Message.ServoOutputRaw do
            msg.servo4_raw::little-integer-size(16), msg.servo5_raw::little-integer-size(16),
            msg.servo6_raw::little-integer-size(16), msg.servo7_raw::little-integer-size(16),
            msg.servo8_raw::little-integer-size(16), msg.port::integer-size(8),
-           msg.servo9_raw::little-integer-size(16), msg.servo10_raw::little-integer-size(16),
-           msg.servo11_raw::little-integer-size(16), msg.servo12_raw::little-integer-size(16),
-           msg.servo13_raw::little-integer-size(16), msg.servo14_raw::little-integer-size(16),
-           msg.servo15_raw::little-integer-size(16), msg.servo16_raw::little-integer-size(16)>>}
+           msg.servo9_raw || 0::little-integer-size(16),
+           msg.servo10_raw || 0::little-integer-size(16),
+           msg.servo11_raw || 0::little-integer-size(16),
+           msg.servo12_raw || 0::little-integer-size(16),
+           msg.servo13_raw || 0::little-integer-size(16),
+           msg.servo14_raw || 0::little-integer-size(16),
+           msg.servo15_raw || 0::little-integer-size(16),
+           msg.servo16_raw || 0::little-integer-size(16)>>}
   end
 end
 
@@ -3472,7 +3479,7 @@ defmodule Common.Message.MissionRequestPartialList do
          <<msg.start_index::little-signed-integer-size(16),
            msg.end_index::little-signed-integer-size(16), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3502,7 +3509,7 @@ defmodule Common.Message.MissionWritePartialList do
          <<msg.start_index::little-signed-integer-size(16),
            msg.end_index::little-signed-integer-size(16), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3589,7 +3596,7 @@ defmodule Common.Message.MissionItem do
            msg.target_system::integer-size(8), msg.target_component::integer-size(8),
            Common.encode(msg.frame, :mav_frame)::integer-size(8), msg.current::integer-size(8),
            msg.autocontinue::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3616,7 +3623,7 @@ defmodule Common.Message.MissionRequest do
         {:ok, 40, Common.msg_attributes(40),
          <<msg.seq::little-integer-size(16), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3657,9 +3664,9 @@ defmodule Common.Message.MissionCurrent do
     def pack(msg, 2),
       do:
         {:ok, 42, Common.msg_attributes(42),
-         <<msg.seq::little-integer-size(16), msg.total::little-integer-size(16),
-           Common.encode(msg.mission_state, :mission_state)::integer-size(8),
-           msg.mission_mode::integer-size(8)>>}
+         <<msg.seq::little-integer-size(16), msg.total || 0::little-integer-size(16),
+           Common.encode(msg.mission_state || 0, :mission_state)::integer-size(8),
+           msg.mission_mode || 0::integer-size(8)>>}
   end
 end
 
@@ -3682,7 +3689,7 @@ defmodule Common.Message.MissionRequestList do
       do:
         {:ok, 43, Common.msg_attributes(43),
          <<msg.target_system::integer-size(8), msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3709,7 +3716,7 @@ defmodule Common.Message.MissionCount do
         {:ok, 44, Common.msg_attributes(44),
          <<msg.count::little-integer-size(16), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3732,7 +3739,7 @@ defmodule Common.Message.MissionClearAll do
       do:
         {:ok, 45, Common.msg_attributes(45),
          <<msg.target_system::integer-size(8), msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3771,7 +3778,7 @@ defmodule Common.Message.MissionAck do
         {:ok, 47, Common.msg_attributes(47),
          <<msg.target_system::integer-size(8), msg.target_component::integer-size(8),
            Common.encode(msg.type, :mav_mission_result)::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3801,7 +3808,7 @@ defmodule Common.Message.SetGpsGlobalOrigin do
          <<msg.latitude::little-signed-integer-size(32),
            msg.longitude::little-signed-integer-size(32),
            msg.altitude::little-signed-integer-size(32), msg.target_system::integer-size(8),
-           msg.time_usec::little-integer-size(64)>>}
+           msg.time_usec || 0::little-integer-size(64)>>}
   end
 end
 
@@ -3829,7 +3836,8 @@ defmodule Common.Message.GpsGlobalOrigin do
         {:ok, 49, Common.msg_attributes(49),
          <<msg.latitude::little-signed-integer-size(32),
            msg.longitude::little-signed-integer-size(32),
-           msg.altitude::little-signed-integer-size(32), msg.time_usec::little-integer-size(64)>>}
+           msg.altitude::little-signed-integer-size(32),
+           msg.time_usec || 0::little-integer-size(64)>>}
   end
 end
 
@@ -3907,7 +3915,7 @@ defmodule Common.Message.MissionRequestInt do
         {:ok, 51, Common.msg_attributes(51),
          <<msg.seq::little-integer-size(16), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -3987,12 +3995,11 @@ defmodule Common.Message.AttitudeQuaternionCov do
       do:
         {:ok, 61, Common.msg_attributes(61),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitchspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yawspeed)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 9, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.covariance, 9, &XMAVLink.Utils.pack_float/1)::binary-size(
              36
            )>>}
   end
@@ -4095,7 +4102,7 @@ defmodule Common.Message.GlobalPositionIntCov do
            XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vy)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vz)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 36, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.covariance, 36, &XMAVLink.Utils.pack_float/1)::binary-size(
              144
            ), Common.encode(msg.estimator_type, :mav_estimator_type)::integer-size(8)>>}
   end
@@ -4147,7 +4154,7 @@ defmodule Common.Message.LocalPositionNedCov do
            XMAVLink.Utils.pack_float(msg.ax)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.ay)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.az)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 45, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.covariance, 45, &XMAVLink.Utils.pack_float/1)::binary-size(
              180
            ), Common.encode(msg.estimator_type, :mav_estimator_type)::integer-size(8)>>}
   end
@@ -4319,8 +4326,10 @@ defmodule Common.Message.ManualControl do
          <<msg.x::little-signed-integer-size(16), msg.y::little-signed-integer-size(16),
            msg.z::little-signed-integer-size(16), msg.r::little-signed-integer-size(16),
            msg.buttons::little-integer-size(16), msg.target::integer-size(8),
-           msg.buttons2::little-integer-size(16), msg.enabled_extensions::integer-size(8),
-           msg.s::little-signed-integer-size(16), msg.t::little-signed-integer-size(16)>>}
+           msg.buttons2 || 0::little-integer-size(16),
+           msg.enabled_extensions || 0::integer-size(8),
+           msg.s || 0::little-signed-integer-size(16),
+           msg.t || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -4401,11 +4410,16 @@ defmodule Common.Message.RcChannelsOverride do
            msg.chan5_raw::little-integer-size(16), msg.chan6_raw::little-integer-size(16),
            msg.chan7_raw::little-integer-size(16), msg.chan8_raw::little-integer-size(16),
            msg.target_system::integer-size(8), msg.target_component::integer-size(8),
-           msg.chan9_raw::little-integer-size(16), msg.chan10_raw::little-integer-size(16),
-           msg.chan11_raw::little-integer-size(16), msg.chan12_raw::little-integer-size(16),
-           msg.chan13_raw::little-integer-size(16), msg.chan14_raw::little-integer-size(16),
-           msg.chan15_raw::little-integer-size(16), msg.chan16_raw::little-integer-size(16),
-           msg.chan17_raw::little-integer-size(16), msg.chan18_raw::little-integer-size(16)>>}
+           msg.chan9_raw || 0::little-integer-size(16),
+           msg.chan10_raw || 0::little-integer-size(16),
+           msg.chan11_raw || 0::little-integer-size(16),
+           msg.chan12_raw || 0::little-integer-size(16),
+           msg.chan13_raw || 0::little-integer-size(16),
+           msg.chan14_raw || 0::little-integer-size(16),
+           msg.chan15_raw || 0::little-integer-size(16),
+           msg.chan16_raw || 0::little-integer-size(16),
+           msg.chan17_raw || 0::little-integer-size(16),
+           msg.chan18_raw || 0::little-integer-size(16)>>}
   end
 end
 
@@ -4490,7 +4504,7 @@ defmodule Common.Message.MissionItemInt do
            msg.target_system::integer-size(8), msg.target_component::integer-size(8),
            Common.encode(msg.frame, :mav_frame)::integer-size(8), msg.current::integer-size(8),
            msg.autocontinue::integer-size(8),
-           Common.encode(msg.mission_type, :mav_mission_type)::integer-size(8)>>}
+           Common.encode(msg.mission_type || 0, :mav_mission_type)::integer-size(8)>>}
   end
 end
 
@@ -4666,9 +4680,10 @@ defmodule Common.Message.CommandAck do
       do:
         {:ok, 77, Common.msg_attributes(77),
          <<Common.encode(msg.command, :mav_cmd)::little-integer-size(16),
-           Common.encode(msg.result, :mav_result)::integer-size(8), msg.progress::integer-size(8),
-           msg.result_param2::little-signed-integer-size(32), msg.target_system::integer-size(8),
-           msg.target_component::integer-size(8)>>}
+           Common.encode(msg.result, :mav_result)::integer-size(8),
+           msg.progress || 0::integer-size(8),
+           msg.result_param2 || 0::little-signed-integer-size(32),
+           msg.target_system || 0::integer-size(8), msg.target_component || 0::integer-size(8)>>}
   end
 end
 
@@ -4768,9 +4783,8 @@ defmodule Common.Message.SetAttitudeTarget do
       do:
         {:ok, 82, Common.msg_attributes(82),
          <<msg.time_boot_ms::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_pitch_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_yaw_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.thrust)::binary-size(4),
@@ -4783,9 +4797,8 @@ defmodule Common.Message.SetAttitudeTarget do
       do:
         {:ok, 82, Common.msg_attributes(82),
          <<msg.time_boot_ms::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_pitch_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_yaw_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.thrust)::binary-size(4),
@@ -4793,9 +4806,11 @@ defmodule Common.Message.SetAttitudeTarget do
            Common.pack_bitmask(msg.type_mask, :attitude_target_typemask, &Common.encode/2)::integer-size(
              8
            ),
-           XMAVLink.Utils.pack_array(msg.thrust_body, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             12
-           )>>}
+           XMAVLink.Utils.pack_array(
+             msg.thrust_body || List.duplicate(0.0, 3),
+             3,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(12)>>}
   end
 end
 
@@ -4834,9 +4849,8 @@ defmodule Common.Message.AttitudeTarget do
       do:
         {:ok, 83, Common.msg_attributes(83),
          <<msg.time_boot_ms::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.body_roll_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_pitch_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.body_yaw_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.thrust)::binary-size(4),
@@ -5394,7 +5408,7 @@ defmodule Common.Message.HilActuatorControls do
       do:
         {:ok, 93, Common.msg_attributes(93),
          <<msg.time_usec::little-integer-size(64), msg.flags::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.controls, 16, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.controls, 16, &XMAVLink.Utils.pack_float/1)::binary-size(
              64
            ), Common.pack_bitmask(msg.mode, :mav_mode_flag, &Common.encode/2)::integer-size(8)>>}
   end
@@ -5457,8 +5471,8 @@ defmodule Common.Message.OpticalFlow do
            XMAVLink.Utils.pack_float(msg.ground_distance)::binary-size(4),
            msg.flow_x::little-signed-integer-size(16), msg.flow_y::little-signed-integer-size(16),
            msg.sensor_id::integer-size(8), msg.quality::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.flow_rate_x)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.flow_rate_y)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.flow_rate_x || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.flow_rate_y || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -5497,9 +5511,11 @@ defmodule Common.Message.GlobalVisionPositionEstimate do
            XMAVLink.Utils.pack_float(msg.roll)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitch)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yaw)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 21, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             84
-           ), msg.reset_counter::integer-size(8)>>}
+           XMAVLink.Utils.pack_array(
+             msg.covariance || List.duplicate(0.0, 21),
+             21,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(84), msg.reset_counter || 0::integer-size(8)>>}
   end
 end
 
@@ -5538,9 +5554,11 @@ defmodule Common.Message.VisionPositionEstimate do
            XMAVLink.Utils.pack_float(msg.roll)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitch)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yaw)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 21, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             84
-           ), msg.reset_counter::integer-size(8)>>}
+           XMAVLink.Utils.pack_array(
+             msg.covariance || List.duplicate(0.0, 21),
+             21,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(84), msg.reset_counter || 0::integer-size(8)>>}
   end
 end
 
@@ -5570,9 +5588,11 @@ defmodule Common.Message.VisionSpeedEstimate do
          <<msg.usec::little-integer-size(64), XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 9, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             36
-           ), msg.reset_counter::integer-size(8)>>}
+           XMAVLink.Utils.pack_array(
+             msg.covariance || List.duplicate(0.0, 9),
+             9,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(36), msg.reset_counter || 0::integer-size(8)>>}
   end
 end
 
@@ -5610,9 +5630,11 @@ defmodule Common.Message.ViconPositionEstimate do
            XMAVLink.Utils.pack_float(msg.roll)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitch)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yaw)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 21, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             84
-           )>>}
+           XMAVLink.Utils.pack_array(
+             msg.covariance || List.duplicate(0.0, 21),
+             21,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(84)>>}
   end
 end
 
@@ -5713,7 +5735,7 @@ defmodule Common.Message.HighresImu do
            XMAVLink.Utils.pack_float(msg.temperature)::binary-size(4),
            Common.pack_bitmask(msg.fields_updated, :highres_imu_updated_flags, &Common.encode/2)::little-integer-size(
              16
-           ), msg.id::integer-size(8)>>}
+           ), msg.id || 0::integer-size(8)>>}
   end
 end
 
@@ -5877,7 +5899,7 @@ defmodule Common.Message.HilSensor do
            XMAVLink.Utils.pack_float(msg.temperature)::binary-size(4),
            Common.pack_bitmask(msg.fields_updated, :hil_sensor_updated_flags, &Common.encode/2)::little-integer-size(
              32
-           ), msg.id::integer-size(8)>>}
+           ), msg.id || 0::integer-size(8)>>}
   end
 end
 
@@ -6007,8 +6029,8 @@ defmodule Common.Message.SimState do
            XMAVLink.Utils.pack_float(msg.vn)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.ve)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vd)::binary-size(4),
-           msg.lat_int::little-signed-integer-size(32),
-           msg.lon_int::little-signed-integer-size(32)>>}
+           msg.lat_int || 0::little-signed-integer-size(32),
+           msg.lon_int || 0::little-signed-integer-size(32)>>}
   end
 end
 
@@ -6078,7 +6100,7 @@ defmodule Common.Message.Timesync do
       do:
         {:ok, 111, Common.msg_attributes(111),
          <<msg.tc1::little-signed-integer-size(64), msg.ts1::little-signed-integer-size(64),
-           msg.target_system::integer-size(8), msg.target_component::integer-size(8)>>}
+           msg.target_system || 0::integer-size(8), msg.target_component || 0::integer-size(8)>>}
   end
 end
 
@@ -6171,8 +6193,8 @@ defmodule Common.Message.HilGps do
            msg.vel::little-integer-size(16), msg.vn::little-signed-integer-size(16),
            msg.ve::little-signed-integer-size(16), msg.vd::little-signed-integer-size(16),
            msg.cog::little-integer-size(16), msg.fix_type::integer-size(8),
-           msg.satellites_visible::integer-size(8), msg.id::integer-size(8),
-           msg.yaw::little-integer-size(16)>>}
+           msg.satellites_visible::integer-size(8), msg.id || 0::integer-size(8),
+           msg.yaw || 0::little-integer-size(16)>>}
   end
 end
 
@@ -6301,9 +6323,9 @@ defmodule Common.Message.HilStateQuaternion do
       do:
         {:ok, 115, Common.msg_attributes(115),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.attitude_quaternion, 4, fn elem ->
-             <<elem::binary-size(4)>>
-           end)::binary-size(16), XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.attitude_quaternion, 4, &XMAVLink.Utils.pack_float/1)::binary-size(
+             16
+           ), XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitchspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yawspeed)::binary-size(4),
            msg.lat::little-signed-integer-size(32), msg.lon::little-signed-integer-size(32),
@@ -6363,7 +6385,7 @@ defmodule Common.Message.ScaledImu2 do
            msg.xgyro::little-signed-integer-size(16), msg.ygyro::little-signed-integer-size(16),
            msg.zgyro::little-signed-integer-size(16), msg.xmag::little-signed-integer-size(16),
            msg.ymag::little-signed-integer-size(16), msg.zmag::little-signed-integer-size(16),
-           msg.temperature::little-signed-integer-size(16)>>}
+           msg.temperature || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -6584,9 +6606,10 @@ defmodule Common.Message.Gps2Raw do
            msg.cog::little-integer-size(16),
            Common.encode(msg.fix_type, :gps_fix_type)::integer-size(8),
            msg.satellites_visible::integer-size(8), msg.dgps_numch::integer-size(8),
-           msg.yaw::little-integer-size(16), msg.alt_ellipsoid::little-signed-integer-size(32),
-           msg.h_acc::little-integer-size(32), msg.v_acc::little-integer-size(32),
-           msg.vel_acc::little-integer-size(32), msg.hdg_acc::little-integer-size(32)>>}
+           msg.yaw || 0::little-integer-size(16),
+           msg.alt_ellipsoid || 0::little-signed-integer-size(32),
+           msg.h_acc || 0::little-integer-size(32), msg.v_acc || 0::little-integer-size(32),
+           msg.vel_acc || 0::little-integer-size(32), msg.hdg_acc || 0::little-integer-size(32)>>}
   end
 end
 
@@ -6657,7 +6680,8 @@ defmodule Common.Message.SerialControl do
            ), msg.count::integer-size(8),
            XMAVLink.Utils.pack_array(msg.data, 70, fn elem -> <<elem::integer-size(8)>> end)::binary-size(
              70
-           ), msg.target_system::integer-size(8), msg.target_component::integer-size(8)>>}
+           ), msg.target_system || 0::integer-size(8),
+           msg.target_component || 0::integer-size(8)>>}
   end
 end
 
@@ -6843,7 +6867,7 @@ defmodule Common.Message.ScaledImu3 do
            msg.xgyro::little-signed-integer-size(16), msg.ygyro::little-signed-integer-size(16),
            msg.zgyro::little-signed-integer-size(16), msg.xmag::little-signed-integer-size(16),
            msg.ymag::little-signed-integer-size(16), msg.zmag::little-signed-integer-size(16),
-           msg.temperature::little-signed-integer-size(16)>>}
+           msg.temperature || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -6955,11 +6979,13 @@ defmodule Common.Message.DistanceSensor do
            msg.id::integer-size(8),
            Common.encode(msg.orientation, :mav_sensor_orientation)::integer-size(8),
            msg.covariance::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.horizontal_fov)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.vertical_fov)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.quaternion, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), msg.signal_quality::integer-size(8)>>}
+           XMAVLink.Utils.pack_float(msg.horizontal_fov || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.vertical_fov || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_array(
+             msg.quaternion || List.duplicate(0.0, 4),
+             4,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(16), msg.signal_quality || 0::integer-size(8)>>}
   end
 end
 
@@ -7077,7 +7103,7 @@ defmodule Common.Message.ScaledPressure2 do
            XMAVLink.Utils.pack_float(msg.press_abs)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.press_diff)::binary-size(4),
            msg.temperature::little-signed-integer-size(16),
-           msg.temperature_press_diff::little-signed-integer-size(16)>>}
+           msg.temperature_press_diff || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -7098,9 +7124,8 @@ defmodule Common.Message.AttPosMocap do
       do:
         {:ok, 138, Common.msg_attributes(138),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4)>>}
 
@@ -7108,14 +7133,15 @@ defmodule Common.Message.AttPosMocap do
       do:
         {:ok, 138, Common.msg_attributes(138),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.covariance, 21, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             84
-           )>>}
+           XMAVLink.Utils.pack_array(
+             msg.covariance || List.duplicate(0.0, 21),
+             21,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(84)>>}
   end
 end
 
@@ -7135,7 +7161,7 @@ defmodule Common.Message.SetActuatorControlTarget do
       do:
         {:ok, 139, Common.msg_attributes(139),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.controls, 8, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.controls, 8, &XMAVLink.Utils.pack_float/1)::binary-size(
              32
            ), msg.group_mlx::integer-size(8), msg.target_system::integer-size(8),
            msg.target_component::integer-size(8)>>}
@@ -7156,7 +7182,7 @@ defmodule Common.Message.ActuatorControlTarget do
       do:
         {:ok, 140, Common.msg_attributes(140),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.controls, 8, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.controls, 8, &XMAVLink.Utils.pack_float/1)::binary-size(
              32
            ), msg.group_mlx::integer-size(8)>>}
   end
@@ -7258,7 +7284,7 @@ defmodule Common.Message.ScaledPressure3 do
            XMAVLink.Utils.pack_float(msg.press_abs)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.press_diff)::binary-size(4),
            msg.temperature::little-signed-integer-size(16),
-           msg.temperature_press_diff::little-signed-integer-size(16)>>}
+           msg.temperature_press_diff || 0::little-signed-integer-size(16)>>}
   end
 end
 
@@ -7311,19 +7337,13 @@ defmodule Common.Message.FollowTarget do
          <<msg.timestamp::little-integer-size(64), msg.custom_state::little-integer-size(64),
            msg.lat::little-signed-integer-size(32), msg.lon::little-signed-integer-size(32),
            XMAVLink.Utils.pack_float(msg.alt)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.vel, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             12
-           ),
-           XMAVLink.Utils.pack_array(msg.acc, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             12
-           ),
-           XMAVLink.Utils.pack_array(msg.attitude_q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.vel, 3, &XMAVLink.Utils.pack_float/1)::binary-size(12),
+           XMAVLink.Utils.pack_array(msg.acc, 3, &XMAVLink.Utils.pack_float/1)::binary-size(12),
+           XMAVLink.Utils.pack_array(msg.attitude_q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(
              16
            ),
-           XMAVLink.Utils.pack_array(msg.rates, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             12
-           ),
-           XMAVLink.Utils.pack_array(msg.position_cov, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.rates, 3, &XMAVLink.Utils.pack_float/1)::binary-size(12),
+           XMAVLink.Utils.pack_array(msg.position_cov, 3, &XMAVLink.Utils.pack_float/1)::binary-size(
              12
            ), msg.est_capabilities::integer-size(8)>>}
   end
@@ -7404,15 +7424,13 @@ defmodule Common.Message.ControlSystemState do
            XMAVLink.Utils.pack_float(msg.y_pos)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z_pos)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.airspeed)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.vel_variance, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.vel_variance, 3, &XMAVLink.Utils.pack_float/1)::binary-size(
              12
            ),
-           XMAVLink.Utils.pack_array(msg.pos_variance, 3, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.pos_variance, 3, &XMAVLink.Utils.pack_float/1)::binary-size(
              12
-           ),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.roll_rate)::binary-size(4),
+           ), XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.roll_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitch_rate)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yaw_rate)::binary-size(4)>>}
   end
@@ -7492,14 +7510,16 @@ defmodule Common.Message.BatteryStatus do
            Common.encode(msg.battery_function, :mav_battery_function)::integer-size(8),
            Common.encode(msg.type, :mav_battery_type)::integer-size(8),
            msg.battery_remaining::signed-integer-size(8),
-           msg.time_remaining::little-signed-integer-size(32),
-           Common.encode(msg.charge_state, :mav_battery_charge_state)::integer-size(8),
-           XMAVLink.Utils.pack_array(msg.voltages_ext, 4, fn elem ->
+           msg.time_remaining || 0::little-signed-integer-size(32),
+           Common.encode(msg.charge_state || 0, :mav_battery_charge_state)::integer-size(8),
+           XMAVLink.Utils.pack_array(msg.voltages_ext || List.duplicate(0, 4), 4, fn elem ->
              <<elem::little-integer-size(16)>>
-           end)::binary-size(8), Common.encode(msg.mode, :mav_battery_mode)::integer-size(8),
-           Common.pack_bitmask(msg.fault_bitmask, :mav_battery_fault, &Common.encode/2)::little-integer-size(
-             32
-           )>>}
+           end)::binary-size(8), Common.encode(msg.mode || 0, :mav_battery_mode)::integer-size(8),
+           Common.pack_bitmask(
+             msg.fault_bitmask || MapSet.new(),
+             :mav_battery_fault,
+             &Common.encode/2
+           )::little-integer-size(32)>>}
   end
 end
 
@@ -7585,9 +7605,9 @@ defmodule Common.Message.AutopilotVersion do
            XMAVLink.Utils.pack_array(msg.os_custom_version, 8, fn elem ->
              <<elem::integer-size(8)>>
            end)::binary-size(8),
-           XMAVLink.Utils.pack_array(msg.uid2, 18, fn elem -> <<elem::integer-size(8)>> end)::binary-size(
-             18
-           )>>}
+           XMAVLink.Utils.pack_array(msg.uid2 || List.duplicate(0, 18), 18, fn elem ->
+             <<elem::integer-size(8)>>
+           end)::binary-size(18)>>}
   end
 end
 
@@ -7649,13 +7669,16 @@ defmodule Common.Message.LandingTarget do
            XMAVLink.Utils.pack_float(msg.size_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.size_y)::binary-size(4), msg.target_num::integer-size(8),
            Common.encode(msg.frame, :mav_frame)::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), Common.encode(msg.type, :landing_target_type)::integer-size(8),
-           msg.position_valid::integer-size(8)>>}
+           XMAVLink.Utils.pack_float(msg.x || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.y || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.z || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_array(
+             msg.q || List.duplicate(0.0, 4),
+             4,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(16),
+           Common.encode(msg.type || 0, :landing_target_type)::integer-size(8),
+           msg.position_valid || 0::integer-size(8)>>}
   end
 end
 
@@ -7684,7 +7707,7 @@ defmodule Common.Message.FenceStatus do
          <<msg.breach_time::little-integer-size(32), msg.breach_count::little-integer-size(16),
            msg.breach_status::integer-size(8),
            Common.encode(msg.breach_type, :fence_breach)::integer-size(8),
-           Common.encode(msg.breach_mitigation, :fence_mitigate)::integer-size(8)>>}
+           Common.encode(msg.breach_mitigation || 0, :fence_mitigate)::integer-size(8)>>}
   end
 end
 
@@ -7781,10 +7804,10 @@ defmodule Common.Message.MagCalReport do
            msg.compass_id::integer-size(8), msg.cal_mask::integer-size(8),
            Common.encode(msg.cal_status, :mag_cal_status)::integer-size(8),
            msg.autosaved::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.orientation_confidence)::binary-size(4),
-           Common.encode(msg.old_orientation, :mav_sensor_orientation)::integer-size(8),
-           Common.encode(msg.new_orientation, :mav_sensor_orientation)::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.scale_factor)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.orientation_confidence || 0.0)::binary-size(4),
+           Common.encode(msg.old_orientation || 0, :mav_sensor_orientation)::integer-size(8),
+           Common.encode(msg.new_orientation || 0, :mav_sensor_orientation)::integer-size(8),
+           XMAVLink.Utils.pack_float(msg.scale_factor || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -7892,7 +7915,7 @@ defmodule Common.Message.EfiStatus do
            XMAVLink.Utils.pack_float(msg.throttle_out)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pt_compensation)::binary-size(4),
            msg.health::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.ignition_voltage)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.ignition_voltage || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -8109,7 +8132,7 @@ defmodule Common.Message.GpsInput do
              16
            ), msg.time_week::little-integer-size(16), msg.gps_id::integer-size(8),
            msg.fix_type::integer-size(8), msg.satellites_visible::integer-size(8),
-           msg.yaw::little-integer-size(16)>>}
+           msg.yaw || 0::little-integer-size(16)>>}
   end
 end
 
@@ -8445,9 +8468,8 @@ defmodule Common.Message.HomePosition do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_z)::binary-size(4)>>}
 
@@ -8460,12 +8482,11 @@ defmodule Common.Message.HomePosition do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_z)::binary-size(4),
-           msg.time_usec::little-integer-size(64)>>}
+           msg.time_usec || 0::little-integer-size(64)>>}
   end
 end
 
@@ -8523,9 +8544,8 @@ defmodule Common.Message.SetHomePosition do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_z)::binary-size(4),
            msg.target_system::integer-size(8)>>}
@@ -8539,12 +8559,11 @@ defmodule Common.Message.SetHomePosition do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.approach_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.approach_z)::binary-size(4),
-           msg.target_system::integer-size(8), msg.time_usec::little-integer-size(64)>>}
+           msg.target_system::integer-size(8), msg.time_usec || 0::little-integer-size(64)>>}
   end
 end
 
@@ -8824,7 +8843,7 @@ defmodule Common.Message.Statustext do
         {:ok, 253, Common.msg_attributes(253),
          <<Common.encode(msg.severity, :mav_severity)::integer-size(8),
            XMAVLink.Utils.pack_string(msg.text, 50)::binary-size(50),
-           msg.id::little-integer-size(16), msg.chunk_seq::integer-size(8)>>}
+           msg.id || 0::little-integer-size(16), msg.chunk_seq || 0::integer-size(8)>>}
   end
 end
 
@@ -8910,7 +8929,7 @@ defmodule Common.Message.PlayTune do
         {:ok, 258, Common.msg_attributes(258),
          <<msg.target_system::integer-size(8), msg.target_component::integer-size(8),
            XMAVLink.Utils.pack_string(msg.tune, 30)::binary-size(30),
-           XMAVLink.Utils.pack_string(msg.tune2, 200)::binary-size(200)>>}
+           XMAVLink.Utils.pack_string(msg.tune2 || "", 200)::binary-size(200)>>}
   end
 end
 
@@ -9008,8 +9027,8 @@ defmodule Common.Message.CameraSettings do
         {:ok, 260, Common.msg_attributes(260),
          <<msg.time_boot_ms::little-integer-size(32),
            Common.encode(msg.mode_id, :camera_mode)::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.zoomlevel)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.focuslevel)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.zoomlevel || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.focuslevel || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -9079,11 +9098,13 @@ defmodule Common.Message.StorageInformation do
            XMAVLink.Utils.pack_float(msg.write_speed)::binary-size(4),
            msg.storage_id::integer-size(8), msg.storage_count::integer-size(8),
            Common.encode(msg.status, :storage_status)::integer-size(8),
-           Common.encode(msg.type, :storage_type)::integer-size(8),
-           XMAVLink.Utils.pack_string(msg.name, 32)::binary-size(32),
-           Common.pack_bitmask(msg.storage_usage, :storage_usage_flag, &Common.encode/2)::integer-size(
-             8
-           )>>}
+           Common.encode(msg.type || 0, :storage_type)::integer-size(8),
+           XMAVLink.Utils.pack_string(msg.name || "", 32)::binary-size(32),
+           Common.pack_bitmask(
+             msg.storage_usage || MapSet.new(),
+             :storage_usage_flag,
+             &Common.encode/2
+           )::integer-size(8)>>}
   end
 end
 
@@ -9134,7 +9155,7 @@ defmodule Common.Message.CameraCaptureStatus do
            msg.recording_time_ms::little-integer-size(32),
            XMAVLink.Utils.pack_float(msg.available_capacity)::binary-size(4),
            msg.image_status::integer-size(8), msg.video_status::integer-size(8),
-           msg.image_count::little-signed-integer-size(32)>>}
+           msg.image_count || 0::little-signed-integer-size(32)>>}
   end
 end
 
@@ -9188,9 +9209,8 @@ defmodule Common.Message.CameraImageCaptured do
            msg.lat::little-signed-integer-size(32), msg.lon::little-signed-integer-size(32),
            msg.alt::little-signed-integer-size(32),
            msg.relative_alt::little-signed-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), msg.image_index::little-signed-integer-size(32), msg.camera_id::integer-size(8),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           msg.image_index::little-signed-integer-size(32), msg.camera_id::integer-size(8),
            msg.capture_result::signed-integer-size(8),
            XMAVLink.Utils.pack_string(msg.file_url, 205)::binary-size(205)>>}
   end
@@ -9244,7 +9264,7 @@ defmodule Common.Message.MountOrientation do
            XMAVLink.Utils.pack_float(msg.roll)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitch)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yaw)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.yaw_absolute)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.yaw_absolute || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -9490,9 +9510,8 @@ defmodule Common.Message.CameraFovStatus do
            msg.lat_image::little-signed-integer-size(32),
            msg.lon_image::little-signed-integer-size(32),
            msg.alt_image::little-signed-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.hfov)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.hfov)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vfov)::binary-size(4)>>}
   end
 end
@@ -9758,10 +9777,8 @@ defmodule Common.Message.GimbalManagerSetAttitude do
         {:ok, 282, Common.msg_attributes(282),
          <<Common.pack_bitmask(msg.flags, :gimbal_manager_flags, &Common.encode/2)::little-integer-size(
              32
-           ),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
+           ), XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_z)::binary-size(4),
            msg.target_system::integer-size(8), msg.target_component::integer-size(8),
@@ -9879,9 +9896,8 @@ defmodule Common.Message.GimbalDeviceSetAttitude do
     def pack(msg, _),
       do:
         {:ok, 284, Common.msg_attributes(284),
-         <<XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
+         <<XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_z)::binary-size(4),
            Common.pack_bitmask(msg.flags, :gimbal_device_flags, &Common.encode/2)::little-integer-size(
@@ -9935,9 +9951,8 @@ defmodule Common.Message.GimbalDeviceAttitudeStatus do
       do:
         {:ok, 285, Common.msg_attributes(285),
          <<msg.time_boot_ms::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_z)::binary-size(4),
            Common.pack_bitmask(msg.failure_flags, :gimbal_device_error_flags, &Common.encode/2)::little-integer-size(
@@ -9951,9 +9966,8 @@ defmodule Common.Message.GimbalDeviceAttitudeStatus do
       do:
         {:ok, 285, Common.msg_attributes(285),
          <<msg.time_boot_ms::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.angular_velocity_x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.angular_velocity_z)::binary-size(4),
            Common.pack_bitmask(msg.failure_flags, :gimbal_device_error_flags, &Common.encode/2)::little-integer-size(
@@ -9962,8 +9976,8 @@ defmodule Common.Message.GimbalDeviceAttitudeStatus do
            Common.pack_bitmask(msg.flags, :gimbal_device_flags, &Common.encode/2)::little-integer-size(
              16
            ), msg.target_system::integer-size(8), msg.target_component::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.delta_yaw)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.delta_yaw_velocity)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.delta_yaw || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.delta_yaw_velocity || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -10019,9 +10033,8 @@ defmodule Common.Message.AutopilotStateForGimbalDevice do
       do:
         {:ok, 286, Common.msg_attributes(286),
          <<msg.time_boot_us::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), msg.q_estimated_delay_us::little-integer-size(32),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           msg.q_estimated_delay_us::little-integer-size(32),
            XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vy)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vz)::binary-size(4),
@@ -10036,9 +10049,8 @@ defmodule Common.Message.AutopilotStateForGimbalDevice do
       do:
         {:ok, 286, Common.msg_attributes(286),
          <<msg.time_boot_us::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), msg.q_estimated_delay_us::little-integer-size(32),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           msg.q_estimated_delay_us::little-integer-size(32),
            XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vy)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vz)::binary-size(4),
@@ -10048,7 +10060,7 @@ defmodule Common.Message.AutopilotStateForGimbalDevice do
              16
            ), msg.target_system::integer-size(8), msg.target_component::integer-size(8),
            Common.encode(msg.landed_state, :mav_landed_state)::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.angular_velocity_z)::binary-size(4)>>}
+           XMAVLink.Utils.pack_float(msg.angular_velocity_z || 0.0)::binary-size(4)>>}
   end
 end
 
@@ -10223,10 +10235,10 @@ defmodule Common.Message.EscStatus do
            XMAVLink.Utils.pack_array(msg.rpm, 4, fn elem ->
              <<elem::little-signed-integer-size(32)>>
            end)::binary-size(16),
-           XMAVLink.Utils.pack_array(msg.voltage, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.voltage, 4, &XMAVLink.Utils.pack_float/1)::binary-size(
              16
            ),
-           XMAVLink.Utils.pack_array(msg.current, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.current, 4, &XMAVLink.Utils.pack_float/1)::binary-size(
              16
            ), msg.index::integer-size(8)>>}
   end
@@ -10255,8 +10267,8 @@ defmodule Common.Message.WifiConfigAp do
         {:ok, 299, Common.msg_attributes(299),
          <<XMAVLink.Utils.pack_string(msg.ssid, 32)::binary-size(32),
            XMAVLink.Utils.pack_string(msg.password, 64)::binary-size(64),
-           Common.encode(msg.mode, :wifi_config_ap_mode)::signed-integer-size(8),
-           Common.encode(msg.response, :wifi_config_ap_response)::signed-integer-size(8)>>}
+           Common.encode(msg.mode || 0, :wifi_config_ap_mode)::signed-integer-size(8),
+           Common.encode(msg.response || 0, :wifi_config_ap_response)::signed-integer-size(8)>>}
   end
 end
 
@@ -10595,9 +10607,9 @@ defmodule Common.Message.ObstacleDistance do
            msg.max_distance::little-integer-size(16),
            Common.encode(msg.sensor_type, :mav_distance_sensor)::integer-size(8),
            msg.increment::integer-size(8),
-           XMAVLink.Utils.pack_float(msg.increment_f)::binary-size(4),
-           XMAVLink.Utils.pack_float(msg.angle_offset)::binary-size(4),
-           Common.encode(msg.frame, :mav_frame)::integer-size(8)>>}
+           XMAVLink.Utils.pack_float(msg.increment_f || 0.0)::binary-size(4),
+           XMAVLink.Utils.pack_float(msg.angle_offset || 0.0)::binary-size(4),
+           Common.encode(msg.frame || 0, :mav_frame)::integer-size(8)>>}
   end
 end
 
@@ -10669,20 +10681,19 @@ defmodule Common.Message.Odometry do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vy)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vz)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitchspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yawspeed)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.pose_covariance, 21, fn elem ->
-             <<elem::binary-size(4)>>
-           end)::binary-size(84),
-           XMAVLink.Utils.pack_array(msg.velocity_covariance, 21, fn elem ->
-             <<elem::binary-size(4)>>
-           end)::binary-size(84), Common.encode(msg.frame_id, :mav_frame)::integer-size(8),
+           XMAVLink.Utils.pack_array(msg.pose_covariance, 21, &XMAVLink.Utils.pack_float/1)::binary-size(
+             84
+           ),
+           XMAVLink.Utils.pack_array(msg.velocity_covariance, 21, &XMAVLink.Utils.pack_float/1)::binary-size(
+             84
+           ), Common.encode(msg.frame_id, :mav_frame)::integer-size(8),
            Common.encode(msg.child_frame_id, :mav_frame)::integer-size(8)>>}
 
     def pack(msg, 2),
@@ -10692,24 +10703,23 @@ defmodule Common.Message.Odometry do
            XMAVLink.Utils.pack_float(msg.x)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.y)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.z)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.q, 4, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             16
-           ), XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
+           XMAVLink.Utils.pack_array(msg.q, 4, &XMAVLink.Utils.pack_float/1)::binary-size(16),
+           XMAVLink.Utils.pack_float(msg.vx)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vy)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.vz)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.rollspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.pitchspeed)::binary-size(4),
            XMAVLink.Utils.pack_float(msg.yawspeed)::binary-size(4),
-           XMAVLink.Utils.pack_array(msg.pose_covariance, 21, fn elem ->
-             <<elem::binary-size(4)>>
-           end)::binary-size(84),
-           XMAVLink.Utils.pack_array(msg.velocity_covariance, 21, fn elem ->
-             <<elem::binary-size(4)>>
-           end)::binary-size(84), Common.encode(msg.frame_id, :mav_frame)::integer-size(8),
+           XMAVLink.Utils.pack_array(msg.pose_covariance, 21, &XMAVLink.Utils.pack_float/1)::binary-size(
+             84
+           ),
+           XMAVLink.Utils.pack_array(msg.velocity_covariance, 21, &XMAVLink.Utils.pack_float/1)::binary-size(
+             84
+           ), Common.encode(msg.frame_id, :mav_frame)::integer-size(8),
            Common.encode(msg.child_frame_id, :mav_frame)::integer-size(8),
-           msg.reset_counter::integer-size(8),
-           Common.encode(msg.estimator_type, :mav_estimator_type)::integer-size(8),
-           msg.quality::signed-integer-size(8)>>}
+           msg.reset_counter || 0::integer-size(8),
+           Common.encode(msg.estimator_type || 0, :mav_estimator_type)::integer-size(8),
+           msg.quality || 0::signed-integer-size(8)>>}
   end
 end
 
@@ -10769,37 +10779,19 @@ defmodule Common.Message.TrajectoryRepresentationWaypoints do
       do:
         {:ok, 332, Common.msg_attributes(332),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.pos_x, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.pos_x, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_y, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_z, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.vel_x, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.vel_y, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.vel_z, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.acc_x, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.acc_y, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.acc_z, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_yaw, 5, &XMAVLink.Utils.pack_float/1)::binary-size(
              20
            ),
-           XMAVLink.Utils.pack_array(msg.pos_y, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.pos_z, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.vel_x, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.vel_y, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.vel_z, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.acc_x, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.acc_y, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.acc_z, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.pos_yaw, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.vel_yaw, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.vel_yaw, 5, &XMAVLink.Utils.pack_float/1)::binary-size(
              20
            ),
            XMAVLink.Utils.pack_array(msg.command, 5, fn elem ->
@@ -10827,19 +10819,11 @@ defmodule Common.Message.TrajectoryRepresentationBezier do
       do:
         {:ok, 333, Common.msg_attributes(333),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.pos_x, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.pos_y, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.pos_z, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.delta, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             20
-           ),
-           XMAVLink.Utils.pack_array(msg.pos_yaw, 5, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.pos_x, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_y, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_z, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.delta, 5, &XMAVLink.Utils.pack_float/1)::binary-size(20),
+           XMAVLink.Utils.pack_array(msg.pos_yaw, 5, &XMAVLink.Utils.pack_float/1)::binary-size(
              20
            ), msg.valid_points::integer-size(8)>>}
   end
@@ -11065,9 +11049,11 @@ defmodule Common.Message.DebugFloatArray do
         {:ok, 350, Common.msg_attributes(350),
          <<msg.time_usec::little-integer-size(64), msg.array_id::little-integer-size(16),
            XMAVLink.Utils.pack_string(msg.name, 10)::binary-size(10),
-           XMAVLink.Utils.pack_array(msg.data, 58, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
-             232
-           )>>}
+           XMAVLink.Utils.pack_array(
+             msg.data || List.duplicate(0.0, 58),
+             58,
+             &XMAVLink.Utils.pack_float/1
+           )::binary-size(232)>>}
   end
 end
 
@@ -11179,11 +11165,11 @@ defmodule Common.Message.SmartBatteryInfo do
            Common.encode(msg.type, :mav_battery_type)::integer-size(8),
            XMAVLink.Utils.pack_string(msg.serial_number, 16)::binary-size(16),
            XMAVLink.Utils.pack_string(msg.device_name, 50)::binary-size(50),
-           msg.charging_maximum_voltage::little-integer-size(16),
-           msg.cells_in_series::integer-size(8),
-           msg.discharge_maximum_current::little-integer-size(32),
-           msg.discharge_maximum_burst_current::little-integer-size(32),
-           XMAVLink.Utils.pack_string(msg.manufacture_date, 11)::binary-size(11)>>}
+           msg.charging_maximum_voltage || 0::little-integer-size(16),
+           msg.cells_in_series || 0::integer-size(8),
+           msg.discharge_maximum_current || 0::little-integer-size(32),
+           msg.discharge_maximum_burst_current || 0::little-integer-size(32),
+           XMAVLink.Utils.pack_string(msg.manufacture_date || "", 11)::binary-size(11)>>}
   end
 end
 
@@ -11263,7 +11249,7 @@ defmodule Common.Message.ActuatorOutputStatus do
       do:
         {:ok, 375, Common.msg_attributes(375),
          <<msg.time_usec::little-integer-size(64), msg.active::little-integer-size(32),
-           XMAVLink.Utils.pack_array(msg.actuator, 32, fn elem -> <<elem::binary-size(4)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.actuator, 32, &XMAVLink.Utils.pack_float/1)::binary-size(
              128
            )>>}
   end
@@ -11738,7 +11724,7 @@ defmodule Common.Message.WheelDistance do
       do:
         {:ok, 9000, Common.msg_attributes(9000),
          <<msg.time_usec::little-integer-size(64),
-           XMAVLink.Utils.pack_array(msg.distance, 16, fn elem -> <<elem::binary-size(8)>> end)::binary-size(
+           XMAVLink.Utils.pack_array(msg.distance, 16, &XMAVLink.Utils.pack_double/1)::binary-size(
              128
            ), msg.count::integer-size(8)>>}
   end
@@ -23803,7 +23789,7 @@ defmodule Common do
            yawspeed: unpack_float(yawspeed_f),
            repr_offset_q:
              unpack_array(repr_offset_q_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -24604,13 +24590,16 @@ defmodule Common do
         {:ok,
          %Common.Message.AttitudeQuaternionCov{
            time_usec: time_usec_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            rollspeed: unpack_float(rollspeed_f),
            pitchspeed: unpack_float(pitchspeed_f),
            yawspeed: unpack_float(yawspeed_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -24625,13 +24614,16 @@ defmodule Common do
         {:ok,
          %Common.Message.AttitudeQuaternionCov{
            time_usec: time_usec_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            rollspeed: unpack_float(rollspeed_f),
            pitchspeed: unpack_float(pitchspeed_f),
            yawspeed: unpack_float(yawspeed_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -24700,7 +24692,7 @@ defmodule Common do
            vz: unpack_float(vz_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            estimator_type: decode(estimator_type_f, :mav_estimator_type)
          }}
@@ -24727,7 +24719,7 @@ defmodule Common do
            vz: unpack_float(vz_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            estimator_type: decode(estimator_type_f, :mav_estimator_type)
          }}
@@ -24755,7 +24747,7 @@ defmodule Common do
            az: unpack_float(az_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            estimator_type: decode(estimator_type_f, :mav_estimator_type)
          }}
@@ -24784,7 +24776,7 @@ defmodule Common do
            az: unpack_float(az_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            estimator_type: decode(estimator_type_f, :mav_estimator_type)
          }}
@@ -25350,7 +25342,10 @@ defmodule Common do
         {:ok,
          %Common.Message.SetAttitudeTarget{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            body_roll_rate: unpack_float(body_roll_rate_f),
            body_pitch_rate: unpack_float(body_pitch_rate_f),
            body_yaw_rate: unpack_float(body_yaw_rate_f),
@@ -25374,7 +25369,10 @@ defmodule Common do
         {:ok,
          %Common.Message.SetAttitudeTarget{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            body_roll_rate: unpack_float(body_roll_rate_f),
            body_pitch_rate: unpack_float(body_pitch_rate_f),
            body_yaw_rate: unpack_float(body_yaw_rate_f),
@@ -25384,7 +25382,7 @@ defmodule Common do
            type_mask: unpack_bitmask(type_mask_f, :attitude_target_typemask, &decode/2),
            thrust_body:
              unpack_array(thrust_body_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -25400,7 +25398,10 @@ defmodule Common do
         {:ok,
          %Common.Message.AttitudeTarget{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            body_roll_rate: unpack_float(body_roll_rate_f),
            body_pitch_rate: unpack_float(body_pitch_rate_f),
            body_yaw_rate: unpack_float(body_yaw_rate_f),
@@ -25420,7 +25421,10 @@ defmodule Common do
         {:ok,
          %Common.Message.AttitudeTarget{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            body_roll_rate: unpack_float(body_roll_rate_f),
            body_pitch_rate: unpack_float(body_pitch_rate_f),
            body_yaw_rate: unpack_float(body_yaw_rate_f),
@@ -25895,7 +25899,7 @@ defmodule Common do
            flags: flags_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            mode: unpack_bitmask(mode_f, :mav_mode_flag, &decode/2)
          }}
@@ -25913,7 +25917,7 @@ defmodule Common do
            flags: flags_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            mode: unpack_bitmask(mode_f, :mav_mode_flag, &decode/2)
          }}
@@ -26002,7 +26006,7 @@ defmodule Common do
            yaw: unpack_float(yaw_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            reset_counter: reset_counter_f
          }}
@@ -26046,7 +26050,7 @@ defmodule Common do
            yaw: unpack_float(yaw_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            reset_counter: reset_counter_f
          }}
@@ -26082,7 +26086,7 @@ defmodule Common do
            z: unpack_float(z_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            reset_counter: reset_counter_f
          }}
@@ -26125,7 +26129,7 @@ defmodule Common do
            yaw: unpack_float(yaw_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -26630,7 +26634,7 @@ defmodule Common do
            time_usec: time_usec_f,
            attitude_quaternion:
              unpack_array(attitude_quaternion_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            rollspeed: unpack_float(rollspeed_f),
            pitchspeed: unpack_float(pitchspeed_f),
@@ -26666,7 +26670,7 @@ defmodule Common do
            time_usec: time_usec_f,
            attitude_quaternion:
              unpack_array(attitude_quaternion_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            rollspeed: unpack_float(rollspeed_f),
            pitchspeed: unpack_float(pitchspeed_f),
@@ -27350,7 +27354,7 @@ defmodule Common do
            vertical_fov: unpack_float(vertical_fov_f),
            quaternion:
              unpack_array(quaternion_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            signal_quality: signal_quality_f
          }}
@@ -27524,7 +27528,10 @@ defmodule Common do
         {:ok,
          %Common.Message.AttPosMocap{
            time_usec: time_usec_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f)
@@ -27541,13 +27548,16 @@ defmodule Common do
         {:ok,
          %Common.Message.AttPosMocap{
            time_usec: time_usec_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
            covariance:
              unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -27564,7 +27574,7 @@ defmodule Common do
            time_usec: time_usec_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            group_mlx: group_mlx_f,
            target_system: target_system_f,
@@ -27584,7 +27594,7 @@ defmodule Common do
            time_usec: time_usec_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            group_mlx: group_mlx_f,
            target_system: target_system_f,
@@ -27603,7 +27613,7 @@ defmodule Common do
            time_usec: time_usec_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            group_mlx: group_mlx_f
          }}
@@ -27620,7 +27630,7 @@ defmodule Common do
            time_usec: time_usec_f,
            controls:
              unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            group_mlx: group_mlx_f
          }}
@@ -27757,18 +27767,24 @@ defmodule Common do
            lon: lon_f,
            alt: unpack_float(alt_f),
            vel:
-             unpack_array(vel_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc:
-             unpack_array(acc_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            attitude_q:
              unpack_array(attitude_q_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            rates:
-             unpack_array(rates_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(rates_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            position_cov:
              unpack_array(position_cov_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            est_capabilities: est_capabilities_f
          }}
@@ -27792,18 +27808,24 @@ defmodule Common do
            lon: lon_f,
            alt: unpack_float(alt_f),
            vel:
-             unpack_array(vel_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc:
-             unpack_array(acc_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            attitude_q:
              unpack_array(attitude_q_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            rates:
-             unpack_array(rates_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(rates_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            position_cov:
              unpack_array(position_cov_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            est_capabilities: est_capabilities_f
          }}
@@ -27834,13 +27856,16 @@ defmodule Common do
            airspeed: unpack_float(airspeed_f),
            vel_variance:
              unpack_array(vel_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            pos_variance:
              unpack_array(pos_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            roll_rate: unpack_float(roll_rate_f),
            pitch_rate: unpack_float(pitch_rate_f),
            yaw_rate: unpack_float(yaw_rate_f)
@@ -27873,13 +27898,16 @@ defmodule Common do
            airspeed: unpack_float(airspeed_f),
            vel_variance:
              unpack_array(vel_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            pos_variance:
              unpack_array(pos_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            roll_rate: unpack_float(roll_rate_f),
            pitch_rate: unpack_float(pitch_rate_f),
            yaw_rate: unpack_float(yaw_rate_f)
@@ -28069,7 +28097,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            type: decode(type_f, :landing_target_type),
            position_valid: position_valid_f
          }}
@@ -28686,7 +28717,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            approach_x: unpack_float(approach_x_f),
            approach_y: unpack_float(approach_y_f),
            approach_z: unpack_float(approach_z_f)
@@ -28710,7 +28744,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            approach_x: unpack_float(approach_x_f),
            approach_y: unpack_float(approach_y_f),
            approach_z: unpack_float(approach_z_f),
@@ -28735,7 +28772,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            approach_x: unpack_float(approach_x_f),
            approach_y: unpack_float(approach_y_f),
            approach_z: unpack_float(approach_z_f),
@@ -28761,7 +28801,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            approach_x: unpack_float(approach_x_f),
            approach_y: unpack_float(approach_y_f),
            approach_z: unpack_float(approach_z_f),
@@ -29415,7 +29458,10 @@ defmodule Common do
            lon: lon_f,
            alt: alt_f,
            relative_alt: relative_alt_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            image_index: image_index_f,
            camera_id: camera_id_f,
            capture_result: capture_result_f,
@@ -29441,7 +29487,10 @@ defmodule Common do
            lon: lon_f,
            alt: alt_f,
            relative_alt: relative_alt_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            image_index: image_index_f,
            camera_id: camera_id_f,
            capture_result: capture_result_f,
@@ -29734,7 +29783,10 @@ defmodule Common do
            lat_image: lat_image_f,
            lon_image: lon_image_f,
            alt_image: alt_image_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            hfov: unpack_float(hfov_f),
            vfov: unpack_float(vfov_f)
          }}
@@ -29760,7 +29812,10 @@ defmodule Common do
            lat_image: lat_image_f,
            lon_image: lon_image_f,
            alt_image: alt_image_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            hfov: unpack_float(hfov_f),
            vfov: unpack_float(vfov_f)
          }}
@@ -29964,7 +30019,10 @@ defmodule Common do
         {:ok,
          %Common.Message.GimbalManagerSetAttitude{
            flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -29986,7 +30044,10 @@ defmodule Common do
         {:ok,
          %Common.Message.GimbalManagerSetAttitude{
            flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -30070,7 +30131,10 @@ defmodule Common do
       do:
         {:ok,
          %Common.Message.GimbalDeviceSetAttitude{
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -30090,7 +30154,10 @@ defmodule Common do
       do:
         {:ok,
          %Common.Message.GimbalDeviceSetAttitude{
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -30112,7 +30179,10 @@ defmodule Common do
         {:ok,
          %Common.Message.GimbalDeviceAttitudeStatus{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -30136,7 +30206,10 @@ defmodule Common do
         {:ok,
          %Common.Message.GimbalDeviceAttitudeStatus{
            time_boot_ms: time_boot_ms_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            angular_velocity_x: unpack_float(angular_velocity_x_f),
            angular_velocity_y: unpack_float(angular_velocity_y_f),
            angular_velocity_z: unpack_float(angular_velocity_z_f),
@@ -30163,7 +30236,10 @@ defmodule Common do
         {:ok,
          %Common.Message.AutopilotStateForGimbalDevice{
            time_boot_us: time_boot_us_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            q_estimated_delay_us: q_estimated_delay_us_f,
            vx: unpack_float(vx_f),
            vy: unpack_float(vy_f),
@@ -30193,7 +30269,10 @@ defmodule Common do
         {:ok,
          %Common.Message.AutopilotStateForGimbalDevice{
            time_boot_us: time_boot_us_f,
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            q_estimated_delay_us: q_estimated_delay_us_f,
            vx: unpack_float(vx_f),
            vy: unpack_float(vy_f),
@@ -30370,9 +30449,13 @@ defmodule Common do
                {elem, rest}
              end),
            voltage:
-             unpack_array(voltage_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(voltage_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            current:
-             unpack_array(current_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(current_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            index: index_f
          }}
 
@@ -30392,9 +30475,13 @@ defmodule Common do
                {elem, rest}
              end),
            voltage:
-             unpack_array(voltage_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(voltage_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            current:
-             unpack_array(current_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(current_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            index: index_f
          }}
 
@@ -30840,7 +30927,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vx: unpack_float(vx_f),
            vy: unpack_float(vy_f),
            vz: unpack_float(vz_f),
@@ -30849,11 +30939,11 @@ defmodule Common do
            yawspeed: unpack_float(yawspeed_f),
            pose_covariance:
              unpack_array(pose_covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            velocity_covariance:
              unpack_array(velocity_covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            frame_id: decode(frame_id_f, :mav_frame),
            child_frame_id: decode(child_frame_id_f, :mav_frame)
@@ -30878,7 +30968,10 @@ defmodule Common do
            x: unpack_float(x_f),
            y: unpack_float(y_f),
            z: unpack_float(z_f),
-           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           q:
+             unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vx: unpack_float(vx_f),
            vy: unpack_float(vy_f),
            vz: unpack_float(vz_f),
@@ -30887,11 +30980,11 @@ defmodule Common do
            yawspeed: unpack_float(yawspeed_f),
            pose_covariance:
              unpack_array(pose_covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            velocity_covariance:
              unpack_array(velocity_covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end),
            frame_id: decode(frame_id_f, :mav_frame),
            child_frame_id: decode(child_frame_id_f, :mav_frame),
@@ -30915,27 +31008,49 @@ defmodule Common do
          %Common.Message.TrajectoryRepresentationWaypoints{
            time_usec: time_usec_f,
            pos_x:
-             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_y:
-             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_z:
-             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_x:
-             unpack_array(vel_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_y:
-             unpack_array(vel_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_z:
-             unpack_array(vel_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_x:
-             unpack_array(acc_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_y:
-             unpack_array(acc_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_z:
-             unpack_array(acc_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_yaw:
-             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_yaw:
-             unpack_array(vel_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            command:
              unpack_array(command_f, fn <<elem::little-integer-size(16), rest::binary>> ->
                {elem, rest}
@@ -30958,27 +31073,49 @@ defmodule Common do
          %Common.Message.TrajectoryRepresentationWaypoints{
            time_usec: time_usec_f,
            pos_x:
-             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_y:
-             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_z:
-             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_x:
-             unpack_array(vel_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_y:
-             unpack_array(vel_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_z:
-             unpack_array(vel_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_x:
-             unpack_array(acc_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_y:
-             unpack_array(acc_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            acc_z:
-             unpack_array(acc_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(acc_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_yaw:
-             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            vel_yaw:
-             unpack_array(vel_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(vel_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            command:
              unpack_array(command_f, fn <<elem::little-integer-size(16), rest::binary>> ->
                {elem, rest}
@@ -30998,15 +31135,25 @@ defmodule Common do
          %Common.Message.TrajectoryRepresentationBezier{
            time_usec: time_usec_f,
            pos_x:
-             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_y:
-             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_z:
-             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            delta:
-             unpack_array(delta_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(delta_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_yaw:
-             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            valid_points: valid_points_f
          }}
 
@@ -31023,15 +31170,25 @@ defmodule Common do
          %Common.Message.TrajectoryRepresentationBezier{
            time_usec: time_usec_f,
            pos_x:
-             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_y:
-             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_z:
-             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            delta:
-             unpack_array(delta_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(delta_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            pos_yaw:
-             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end),
            valid_points: valid_points_f
          }}
 
@@ -31272,7 +31429,9 @@ defmodule Common do
            array_id: array_id_f,
            name: replace_trailing(name_f, <<0>>, ""),
            data:
-             unpack_array(data_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end)
+             unpack_array(data_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {unpack_float(elem), rest}
+             end)
          }}
 
   def unpack(
@@ -31446,7 +31605,7 @@ defmodule Common do
            active: active_f,
            actuator:
              unpack_array(actuator_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -31463,7 +31622,7 @@ defmodule Common do
            active: active_f,
            actuator:
              unpack_array(actuator_f, fn <<elem::binary-size(4), rest::binary>> ->
-               {elem, rest}
+               {unpack_float(elem), rest}
              end)
          }}
 
@@ -32093,7 +32252,7 @@ defmodule Common do
            time_usec: time_usec_f,
            distance:
              unpack_array(distance_f, fn <<elem::binary-size(8), rest::binary>> ->
-               {elem, rest}
+               {XMAVLink.Utils.unpack_double(elem), rest}
              end),
            count: count_f
          }}
@@ -32110,7 +32269,7 @@ defmodule Common do
            time_usec: time_usec_f,
            distance:
              unpack_array(distance_f, fn <<elem::binary-size(8), rest::binary>> ->
-               {elem, rest}
+               {XMAVLink.Utils.unpack_double(elem), rest}
              end),
            count: count_f
          }}
