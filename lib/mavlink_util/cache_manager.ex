@@ -28,7 +28,8 @@ defmodule XMAVLink.Util.CacheManager do
   defstruct one_second_interval_ms: 1_000,
             five_second_interval_ms: 5_000,
             ten_second_interval_ms: 10_000,
-            router: nil
+            router: nil,
+            auto_param_request: true
 
   # API
 
@@ -262,12 +263,14 @@ defmodule XMAVLink.Util.CacheManager do
       "First sighting of vehicle #{source_system_id}.#{source_component_id}: #{Common.describe(type)}"
     )
 
-    spawn_link(ParamRequest, :param_request_list, [
-      source_system_id,
-      source_component_id,
-      mavlink_major_version,
-      [router: state.router]
-    ])
+    if state.auto_param_request do
+      spawn_link(ParamRequest, :param_request_list, [
+        source_system_id,
+        source_component_id,
+        mavlink_major_version,
+        [router: state.router]
+      ])
+    end
 
     state
   end

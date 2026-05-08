@@ -36,6 +36,11 @@ defmodule XMAVLink.UDPOutConnection do
         :ok = Logger.debug("UDPOutConnection.handle_info: Not a frame #{inspect(raw)}")
         {:error, :not_a_frame, socket, receiving_connection}
 
+      {nil, _rest} ->
+        # MAVLink 2 frames with incompatible flags are intentionally unsupported.
+        :ok = Logger.debug("UDPOutConnection.handle_info: Incompatible MAVLink 2 frame")
+        {:error, :incompatible_flags, socket, receiving_connection}
+
       # UDP sends frame per packet, so ignore rest
       {received_frame, _rest} ->
         case validate_and_unpack(received_frame, dialect) do

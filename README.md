@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.10.1"}
+     {:xmavlink, "~> 0.10.2"}
    ]
  end
  ```
@@ -54,6 +54,9 @@ MAVLink Common dialect. Treat generated dialect modules as build artifacts:
 change the generator or XML input and regenerate them rather than editing or
 formatting generated files by hand. The generator emits deterministic,
 formatter-compatible source for repeatable diffs.
+
+Treat MAVLink XML dialect files as trusted build inputs. The generator is meant
+for upstream or application-owned dialect files, not arbitrary untrusted XML.
 
 ## Configuring the XMAVLink Application
 
@@ -310,6 +313,16 @@ config :xmavlink,
   utilities: true
 ```
 
+MAVLink transports are commonly deployed on trusted local links. If an
+application exposes a UDP listener to a less trusted network, disable automatic
+parameter-list requests and start them deliberately after deciding a vehicle is
+trusted:
+
+```elixir
+config :xmavlink,
+  utilities: [auto_param_request: false]
+```
+
 or supervise it explicitly when using a named router:
 
 ```elixir
@@ -325,6 +338,9 @@ children = [
   {XMAVLink.Util.Supervisor, router: MyApp.VehicleRouter}
 ]
 ```
+
+Pass `auto_param_request: false` to `XMAVLink.Util.Supervisor` for the same
+behavior when supervising utilities explicitly.
 
 The current utility API is scoped to one configured router per VM. It uses
 global process names and ETS tables for IEx-friendly helpers, so applications

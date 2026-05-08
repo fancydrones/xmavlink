@@ -15,8 +15,14 @@ defmodule XMAVLink.Application do
 
   defp utility_child_specs(router_name) do
     case Application.get_env(:xmavlink, :utilities, false) do
-      true -> [{XMAVLink.Util.Supervisor, router: router_name}]
-      _ -> []
+      true ->
+        [{XMAVLink.Util.Supervisor, router: router_name}]
+
+      opts when is_list(opts) ->
+        [{XMAVLink.Util.Supervisor, Keyword.put_new(opts, :router, router_name)}]
+
+      _ ->
+        []
     end
   end
 end

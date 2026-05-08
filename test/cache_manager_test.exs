@@ -48,6 +48,40 @@ defmodule XMAVLink.Util.CacheManager.Test do
     assert {:error, :not_started} = CacheManager.params({1, 1, 2}, "")
   end
 
+  test "does not request parameters for a first heartbeat when auto_param_request is disabled" do
+    create_messages_table()
+
+    heartbeat = %Common.Message.Heartbeat{
+      type: :mav_type_quadrotor,
+      autopilot: :mav_autopilot_ardupilotmega,
+      base_mode: MapSet.new(),
+      custom_mode: 0,
+      system_status: :mav_state_active,
+      mavlink_version: 3
+    }
+
+    frame = %XMAVLink.Frame{
+      message: heartbeat,
+      source_system: 1,
+      source_component: 1,
+      version: 2
+    }
+
+    state = %CacheManager{router: XMAVLink.Router, auto_param_request: false}
+
+    assert {:noreply, ^state} = CacheManager.handle_info(frame, state)
+
+    assert [
+             {{1, 1},
+              %{
+                mavlink_major_version: 2,
+                mavlink_minor_version: 3,
+                param_count: 0,
+                param_count_loaded: 0
+              }}
+           ] = :ets.lookup(:systems, {1, 1})
+  end
+
   test "one second loop reschedules one second loop" do
     state = %CacheManager{one_second_interval_ms: 1}
 
@@ -73,6 +107,10 @@ defmodule XMAVLink.Util.CacheManager.Test do
 
   defp create_systems_table do
     :ets.new(:systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+  end
+
+  defp create_messages_table do
+    :ets.new(:messages, [:named_table, :protected, {:read_concurrency, true}, :set])
   end
 
   defp create_params_table do

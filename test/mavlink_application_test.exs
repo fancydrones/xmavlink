@@ -27,6 +27,30 @@ defmodule XMAVLink.ApplicationTest do
     assert XMAVLink.Util.CacheManager.router() == XMAVLink.Router
   end
 
+  test "passes utility options to utility processes" do
+    previous_env =
+      save_env([:dialect, :router_name, :connections, :utilities, :heartbeat, :heartbeats])
+
+    Application.put_env(:xmavlink, :dialect, Common)
+    Application.put_env(:xmavlink, :router_name, XMAVLink.Router)
+    Application.put_env(:xmavlink, :connections, [])
+    Application.put_env(:xmavlink, :utilities, auto_param_request: false)
+    Application.delete_env(:xmavlink, :heartbeat)
+    Application.delete_env(:xmavlink, :heartbeats)
+
+    assert {:ok, supervisor} = XMAVLink.Application.start(:normal, [])
+
+    on_exit(fn ->
+      stop_supervisor(supervisor)
+      cleanup_process(XMAVLink.SubscriptionCache)
+      delete_utility_tables()
+      restore_env(previous_env)
+    end)
+
+    cache_manager = Process.whereis(XMAVLink.Util.CacheManager)
+    assert %XMAVLink.Util.CacheManager{auto_param_request: false} = :sys.get_state(cache_manager)
+  end
+
   defp save_env(keys) do
     Map.new(keys, &{&1, Application.fetch_env(:xmavlink, &1)})
   end

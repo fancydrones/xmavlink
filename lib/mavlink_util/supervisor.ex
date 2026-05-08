@@ -10,10 +10,11 @@ defmodule XMAVLink.Util.Supervisor do
   @impl true
   def init(opts) do
     router = Keyword.get(opts, :router, XMAVLink.Router)
+    auto_param_request = Keyword.get(opts, :auto_param_request, true)
 
     children = [
       {XMAVLink.Util.FocusManager, %{}},
-      {XMAVLink.Util.CacheManager, %{router: router}}
+      {XMAVLink.Util.CacheManager, %{router: router, auto_param_request: auto_param_request}}
     ]
 
     Supervisor.init(children, strategy: :one_for_one)
