@@ -174,7 +174,8 @@ defmodule XMAVLink.Parser do
       for name <- filter(Map.keys(a_index), &Map.has_key?(b_index, &1)) do
         %{
           a_index[name]
-          | entries: sort_by(a_index[name].entries ++ b_index[name].entries, & &1.value)
+          | bitmask: a_index[name].bitmask or b_index[name].bitmask,
+            entries: sort_by(a_index[name].entries ++ b_index[name].entries, & &1.value)
         }
       end
 
@@ -183,6 +184,7 @@ defmodule XMAVLink.Parser do
 
   @type enum_description :: %{
           name: atom,
+          bitmask: boolean,
           description: String.t(),
           entries: [entry_description]
         }
@@ -191,6 +193,7 @@ defmodule XMAVLink.Parser do
   defp parse_enum(element) do
     %{
       name: :xmerl_xpath.string(~c"@name", element) |> extract_text |> downcase |> to_atom,
+      bitmask: :xmerl_xpath.string(~c"@bitmask", element) |> extract_text |> true_string?,
       description:
         :xmerl_xpath.string(~c"/enum/description/text()", element)
         |> extract_text
@@ -363,4 +366,7 @@ defmodule XMAVLink.Parser do
   defp to_atom_or_nil(nil), do: nil
   defp to_atom_or_nil(""), do: nil
   defp to_atom_or_nil(value) when is_binary(value), do: to_atom(value)
+
+  defp true_string?("true"), do: true
+  defp true_string?(_), do: false
 end

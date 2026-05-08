@@ -5,6 +5,7 @@ defmodule XMAVLink.Test.Tasks do
   import Mix.Tasks.Xmavlink
 
   @input "#{File.cwd!()}/test/input/test_mavlink.xml"
+  @extensions_input "#{File.cwd!()}/test/input/test_extensions.xml"
   @output_dir "#{Mix.Project.build_path()}/generated"
   @output "#{@output_dir}/test_mavlink.ex"
   @output_module "TestMavlink"
@@ -25,34 +26,28 @@ defmodule XMAVLink.Test.Tasks do
     assert output =~ "Generated #{@output_module}"
     assert File.exists?(@output)
 
-    # We don't care if we redefine MAVLink modules while running the following test
-    previous_compiler_options = Code.compiler_options()
-    Code.compiler_options(ignore_module_conflict: true)
-
-    on_exit(fn ->
-      Code.compiler_options(previous_compiler_options)
-    end)
-
     # Confirm the list of modules generated from common.xml and its includes
     pairs =
-      Enum.zip(
-        [
-          XMAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
-          XMAVLink.Message.TestMavlink.Message.Data16,
-          XMAVLink.Message.TestMavlink.Message.Heartbeat,
-          XMAVLink.Message.TestMavlink.Message.VfrHud,
-          TestMavlink,
-          TestMavlink.Message.ChangeOperatorControl,
-          TestMavlink.Message.Data16,
-          TestMavlink.Message.Heartbeat,
-          TestMavlink.Message.VfrHud,
-          TestMavlink.Types
-        ]
-        |> Enum.sort(),
-        Code.compile_file(@output)
-        |> Keyword.keys()
-        |> Enum.sort()
-      )
+      with_module_conflict_ignored(fn ->
+        Enum.zip(
+          [
+            XMAVLink.Message.TestMavlink.Message.ChangeOperatorControl,
+            XMAVLink.Message.TestMavlink.Message.Data16,
+            XMAVLink.Message.TestMavlink.Message.Heartbeat,
+            XMAVLink.Message.TestMavlink.Message.VfrHud,
+            TestMavlink,
+            TestMavlink.Message.ChangeOperatorControl,
+            TestMavlink.Message.Data16,
+            TestMavlink.Message.Heartbeat,
+            TestMavlink.Message.VfrHud,
+            TestMavlink.Types
+          ]
+          |> Enum.sort(),
+          Code.compile_file(@output)
+          |> Keyword.keys()
+          |> Enum.sort()
+        )
+      end)
 
     for {expected, actual} <- pairs do
       assert expected == actual
@@ -87,11 +82,76 @@ defmodule XMAVLink.Test.Tasks do
     assert File.exists?(@output)
   end
 
+  test "generated MAVLink 2 unpack ignores future extension bytes" do
+    output = Path.join(@output_dir, "test_extensions.ex")
+
+    capture_io(fn ->
+      assert :ok = run([@extensions_input, output, "TestExtensions"])
+    end)
+
+    with_module_conflict_ignored(fn -> Code.compile_file(output) end)
+
+    payload =
+      XMAVLink.Utils.pack_float(12.5) <>
+        <<200>> <> XMAVLink.Utils.pack_float(1.25) <> XMAVLink.Utils.pack_float(-2.5) <> <<9, 8>>
+
+    {:ok, crc_extra, _expected_length, _target} = apply(TestExtensions, :msg_attributes, [100])
+    assert {:ok, frame} = frame_from_mavlink_2_packet(100, payload, crc_extra)
+    assert {:ok, %{message: message}} = XMAVLink.Frame.validate_and_unpack(frame, TestExtensions)
+
+    assert message.quality == 200
+    assert_in_delta message.ground_distance, 12.5, 0.0001
+    assert_in_delta message.flow_rate_x, 1.25, 0.0001
+    assert_in_delta message.flow_rate_y, -2.5, 0.0001
+  end
+
+  test "generated MAVLink 2 unpack ignores future extension bytes for messages without known extensions" do
+    output = Path.join(@output_dir, "test_no_known_extensions.ex")
+
+    capture_io(fn ->
+      assert :ok = run([@input, output, "TestNoKnownExtensions"])
+    end)
+
+    with_module_conflict_ignored(fn -> Code.compile_file(output) end)
+
+    assert {:ok, message} = apply(TestNoKnownExtensions, :unpack, [0, 2, <<0, 9, 8, 7>>])
+    assert message.type == :mav_type_generic
+  end
+
   defp formatted(source) do
     source
     |> Code.format_string!()
     |> IO.iodata_to_binary()
     |> String.trim_trailing()
     |> Kernel.<>("\n")
+  end
+
+  defp with_module_conflict_ignored(fun) do
+    previous_compiler_options = Code.compiler_options()
+    Code.compiler_options(ignore_module_conflict: true)
+
+    try do
+      fun.()
+    after
+      Code.compiler_options(previous_compiler_options)
+    end
+  end
+
+  defp frame_from_mavlink_2_packet(message_id, payload, crc_extra) do
+    mavlink_2_frame =
+      <<byte_size(payload), 0, 0, 7, 1, 1, message_id::little-unsigned-integer-size(24),
+        payload::binary>>
+
+    checksum =
+      mavlink_2_frame
+      |> XMAVLink.Utils.x25_crc()
+      |> XMAVLink.Utils.x25_crc([crc_extra])
+
+    case XMAVLink.Frame.binary_to_frame_and_tail(
+           <<0xFD>> <> mavlink_2_frame <> <<checksum::little-unsigned-integer-size(16)>>
+         ) do
+      {frame, <<>>} -> {:ok, frame}
+      other -> other
+    end
   end
 end

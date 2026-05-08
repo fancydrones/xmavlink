@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.11.0 - 2026-05-08
+
+- Added the MAVLink 1.0 spec alignment checklist and support statement, with
+  MAVLink 2 as the primary compatibility target.
+- Made generated MAVLink 2 unpackers ignore future extension bytes for forward
+  compatibility with dialects that append extension fields.
+- Preserved MAVLink 2 zero-length payloads, consumed unsupported signed-frame
+  signature trailers on stream transports, and aligned generated bitmask fields
+  with XML `bitmask="true"` declarations.
+
 ## 0.10.2 - 2026-05-08
 
 - Dropped unsupported MAVLink 2 frames with incompatible flags on UDP receive

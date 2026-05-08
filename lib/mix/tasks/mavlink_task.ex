@@ -90,19 +90,19 @@ defmodule Mix.Tasks.Xmavlink do
     defmodule #{module_name}.Types do
 
       @typedoc "A MAVLink message"
-      @type message :: #{map(messages, &"#{module_name}.Message.#{&1[:name] |> module_case}") |> join(" | ")}
+      @type message :: #{map(messages, &"#{module_name}.Message.#{&1[:name] |> module_case}") |> type_union}
 
 
       @typedoc "An atom representing a MAVLink enumeration type"
-      @type enum_type :: #{map(enums, &":#{&1[:name]}") |> join(" | ")}
+      @type enum_type :: #{map(enums, &":#{&1[:name]}") |> type_union}
 
 
       @typedoc "An atom representing a MAVLink enumeration type value"
-      @type enum_value :: #{map(enums, &"#{&1[:name]}") |> join(" | ")}
+      @type enum_value :: #{map(enums, &"#{&1[:name]}") |> type_union}
 
 
       @typedoc "Measurement unit of field value"
-      @type field_unit :: #{unit_code_fragments |> join(~s( | )) |> trim}
+      @type field_unit :: #{unit_code_fragments |> type_union}
 
 
       #{enum_code_fragments |> map(& &1[:type]) |> join("\n\n  ")}
@@ -136,16 +136,19 @@ defmodule Mix.Tasks.Xmavlink do
       @doc "Return a String description of a MAVLink enumeration"
       @spec describe(#{module_name}.Types.enum_type | #{module_name}.Types.enum_value) :: String.t
       #{enum_code_fragments |> map(& &1[:describe]) |> join("\n  ") |> trim}
+      def describe(_), do: ""
 
 
-      @doc "Return keyword list of mav_cmd parameters"
-      @spec describe_params(#{module_name}.Types.mav_cmd) :: XMAVLink.Types.param_description_list
+      @doc "Return keyword list of parameter descriptions for enum entries that define them"
+      @spec describe_params(#{module_name}.Types.enum_value) :: XMAVLink.Types.param_description_list
       #{enum_code_fragments |> map(& &1[:describe_params]) |> join("\n  ") |> trim}
+      def describe_params(_), do: []
 
 
       @doc "Return encoded integer value used in a MAVLink message for an enumeration value"
       #{enum_code_fragments |> map(& &1[:encode_spec]) |> join("\n  ") |> trim}
       #{enum_code_fragments |> map(& &1[:encode]) |> join("\n  ") |> trim}
+      def encode(value, _enum), do: value
 
 
       @doc "Return the atom representation of a MAVLink enumeration value from the enumeration type and encoded integer"
@@ -180,10 +183,10 @@ defmodule Mix.Tasks.Xmavlink do
       end
 
 
-      @doc "Unpack a MAVLink message given a MAVLink frame's message id and payload"
-      @spec unpack(XMAVLink.Types.message_id, binary) :: #{module_name}.Types.message | {:error, :unknown_message}
+      @doc "Unpack a MAVLink message given a MAVLink frame's message id, version, and payload"
+      @spec unpack(XMAVLink.Types.message_id, XMAVLink.Types.version, binary) :: {:ok, #{module_name}.Types.message} | {:error, :unknown_message}
       #{message_code_fragments |> map(& &1.unpack) |> join("") |> trim}
-      def unpack(_, _), do: {:error, :unknown_message}
+      def unpack(_, _, _), do: {:error, :unknown_message}
 
     end
     """
@@ -199,6 +202,9 @@ defmodule Mix.Tasks.Xmavlink do
   end
 
   defp dialect_source_name(dialect_xml_path), do: basename(dialect_xml_path)
+
+  defp type_union([]), do: "none()"
+  defp type_union(fragments), do: fragments |> join(" | ") |> trim
 
   defp generated_source_current?(output_ex_source_path, source) do
     case File.read(output_ex_source_path) do
@@ -264,7 +270,7 @@ defmodule Mix.Tasks.Xmavlink do
         }
   @spec get_entry_code_fragments(XMAVLink.Parser.enum_description()) :: [entry_detail]
   defp get_entry_code_fragments(enum = %{name: enum_name, entries: entries}) do
-    bitmask? = looks_like_a_bitmask?(enum)
+    bitmask? = enum_bitmask?(enum) or looks_like_a_bitmask?(enum)
 
     {details, _} =
       reduce(
@@ -347,7 +353,7 @@ defmodule Mix.Tasks.Xmavlink do
 
       field_types =
         message.fields
-        |> map(&(downcase(&1.name) <> ": " <> field_type(&1, module_name)))
+        |> map(&(downcase(&1.name) <> ": " <> field_type(&1, module_name, enums_by_name)))
         |> join(", ")
 
       wire_order = message.fields |> wire_order
@@ -416,7 +422,7 @@ defmodule Mix.Tasks.Xmavlink do
           """,
           unpack: """
             def unpack(#{message.id}, 1, <<#{unpack_binary_pattern}>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields}}}
-            def unpack(#{message.id}, 2, <<#{unpack_binary_pattern},#{unpack_binary_pattern_ext}>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields},#{unpack_struct_fields_ext}}}
+            def unpack(#{message.id}, 2, <<#{unpack_binary_pattern},#{unpack_binary_pattern_ext}, _future_extension_fields::binary>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields},#{unpack_struct_fields_ext}}}
           """,
           module: """
           defmodule #{module_name}.Message.#{message_module_name} do
@@ -437,7 +443,8 @@ defmodule Mix.Tasks.Xmavlink do
             def msg_attributes(#{message.id}), do: {:ok, #{crc_extra}, #{expected_payload_size}, :#{target}}
           """,
           unpack: """
-            def unpack(#{message.id}, _, <<#{unpack_binary_pattern}>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields}}}
+            def unpack(#{message.id}, 1, <<#{unpack_binary_pattern}>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields}}}
+            def unpack(#{message.id}, 2, <<#{unpack_binary_pattern}, _future_extension_fields::binary>>), do: {:ok, %#{module_name}.Message.#{message_module_name}{#{unpack_struct_fields}}}
           """,
           module: """
           defmodule #{module_name}.Message.#{message_module_name} do
@@ -497,12 +504,17 @@ defmodule Mix.Tasks.Xmavlink do
   end
 
   defp unpack_field_code_fragment(%{name: name, ordinality: 1, enum: enum}, enums_by_name) do
-    case looks_like_a_bitmask?(enums_by_name[enum]) do
-      true ->
+    enum_definition = enums_by_name[enum]
+
+    cond do
+      enum_bitmask?(enum_definition) ->
+        "unpack_bitmask(#{downcase(name)}_f, :#{enum}, &decode/2)"
+
+      looks_like_a_bitmask?(enum_definition) ->
         IO.puts(~s[Warning: assuming #{enum} is a bitmask although display="bitmask" not set])
         "unpack_bitmask(#{downcase(name)}_f, :#{enum}, &decode/2)"
 
-      false ->
+      true ->
         "decode(#{downcase(name)}_f, :#{enum})"
     end
   end
@@ -543,11 +555,16 @@ defmodule Mix.Tasks.Xmavlink do
          enums_by_name,
          module_name
        ) do
-    case looks_like_a_bitmask?(enums_by_name[enum]) do
-      true ->
+    enum_definition = enums_by_name[enum]
+
+    cond do
+      enum_bitmask?(enum_definition) ->
         "#{module_name}.pack_bitmask(msg.#{downcase(name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
 
-      false ->
+      looks_like_a_bitmask?(enum_definition) ->
+        "#{module_name}.pack_bitmask(msg.#{downcase(name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
+
+      true ->
         "#{module_name}.encode(msg.#{downcase(name)}, :#{enum})::#{type_to_binary(type).pattern}"
     end
   end
@@ -601,24 +618,35 @@ defmodule Mix.Tasks.Xmavlink do
   defp looks_like_a_bitmask?(%{entries: entries}),
     do: looks_like_a_bitmask?(entries |> map(& &1.value) |> sort)
 
+  defp looks_like_a_bitmask?(nil), do: false
   defp looks_like_a_bitmask?([1, 2, 4 | rest]), do: looks_like_a_bitmask?(rest)
   defp looks_like_a_bitmask?([8 | rest]), do: looks_like_a_bitmask?(rest |> map(&(&1 >>> 1)))
   defp looks_like_a_bitmask?([]), do: true
   defp looks_like_a_bitmask?(_), do: false
 
-  # Have to deal with some overlap between MAVLink and Elixir types
-  defp field_type(%{type: type, ordinality: ordinality, enum: enum}, module_name)
-       when ordinality > 1,
-       do: "[ #{field_type(%{type: type, ordinality: 1, enum: enum}, module_name)} ]"
+  defp enum_bitmask?(%{bitmask: true}), do: true
+  defp enum_bitmask?(_), do: false
 
-  defp field_type(%{enum: enum, display: :bitmask}, module_name) when enum != "",
+  # Have to deal with some overlap between MAVLink and Elixir types
+  defp field_type(field = %{ordinality: ordinality}, module_name, enums_by_name)
+       when ordinality > 1,
+       do: "[ #{field_type(%{field | ordinality: 1}, module_name, enums_by_name)} ]"
+
+  defp field_type(%{enum: enum, display: :bitmask}, module_name, _enums_by_name) when enum != "",
     do: "MapSet.t(#{module_name}.Types.#{enum})"
 
-  defp field_type(%{enum: enum}, module_name) when enum != "", do: "#{module_name}.Types.#{enum}"
-  defp field_type(%{type: "char"}, _), do: "char"
-  defp field_type(%{type: "float"}, _), do: "Float32"
-  defp field_type(%{type: "double"}, _), do: "Float64"
-  defp field_type(%{type: type}, _), do: "XMAVLink.Types.#{type}"
+  defp field_type(%{enum: enum}, module_name, enums_by_name) when enum != "" do
+    if enum_bitmask?(enums_by_name[enum]) or looks_like_a_bitmask?(enums_by_name[enum]) do
+      "MapSet.t(#{module_name}.Types.#{enum})"
+    else
+      "#{module_name}.Types.#{enum}"
+    end
+  end
+
+  defp field_type(%{type: "char"}, _, _), do: "char"
+  defp field_type(%{type: "float"}, _, _), do: "Float32"
+  defp field_type(%{type: "double"}, _, _), do: "Float64"
+  defp field_type(%{type: type}, _, _), do: "XMAVLink.Types.#{type}"
 
   # Map field types to a binary pattern code fragment and a size
   defp type_to_binary("char"), do: %{pattern: "integer-size(8)", size: 1}

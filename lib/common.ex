@@ -9053,7 +9053,7 @@ defmodule Common.Message.StorageInformation do
           write_speed: Float32,
           type: Common.Types.storage_type(),
           name: [char],
-          storage_usage: Common.Types.storage_usage_flag()
+          storage_usage: MapSet.t(Common.Types.storage_usage_flag())
         }
   defimpl XMAVLink.Message do
     def pack(msg, 1),
@@ -9365,7 +9365,7 @@ defmodule Common.Message.VideoStreamInformation do
           stream_id: XMAVLink.Types.uint8_t(),
           count: XMAVLink.Types.uint8_t(),
           type: Common.Types.video_stream_type(),
-          flags: Common.Types.video_stream_status_flags(),
+          flags: MapSet.t(Common.Types.video_stream_status_flags()),
           framerate: Float32,
           resolution_h: XMAVLink.Types.uint16_t(),
           resolution_v: XMAVLink.Types.uint16_t(),
@@ -9381,10 +9381,12 @@ defmodule Common.Message.VideoStreamInformation do
         {:ok, 269, Common.msg_attributes(269),
          <<XMAVLink.Utils.pack_float(msg.framerate)::binary-size(4),
            msg.bitrate::little-integer-size(32),
-           Common.encode(msg.flags, :video_stream_status_flags)::little-integer-size(16),
-           msg.resolution_h::little-integer-size(16), msg.resolution_v::little-integer-size(16),
-           msg.rotation::little-integer-size(16), msg.hfov::little-integer-size(16),
-           msg.stream_id::integer-size(8), msg.count::integer-size(8),
+           Common.pack_bitmask(msg.flags, :video_stream_status_flags, &Common.encode/2)::little-integer-size(
+             16
+           ), msg.resolution_h::little-integer-size(16),
+           msg.resolution_v::little-integer-size(16), msg.rotation::little-integer-size(16),
+           msg.hfov::little-integer-size(16), msg.stream_id::integer-size(8),
+           msg.count::integer-size(8),
            Common.encode(msg.type, :video_stream_type)::integer-size(8),
            XMAVLink.Utils.pack_string(msg.name, 32)::binary-size(32),
            XMAVLink.Utils.pack_string(msg.uri, 160)::binary-size(160)>>}
@@ -9416,7 +9418,7 @@ defmodule Common.Message.VideoStreamStatus do
   @typedoc "Information about the status of a video stream. It may be requested using MAV_CMD_REQUEST_MESSAGE."
   @type t :: %Common.Message.VideoStreamStatus{
           stream_id: XMAVLink.Types.uint8_t(),
-          flags: Common.Types.video_stream_status_flags(),
+          flags: MapSet.t(Common.Types.video_stream_status_flags()),
           framerate: Float32,
           resolution_h: XMAVLink.Types.uint16_t(),
           resolution_v: XMAVLink.Types.uint16_t(),
@@ -9430,10 +9432,11 @@ defmodule Common.Message.VideoStreamStatus do
         {:ok, 270, Common.msg_attributes(270),
          <<XMAVLink.Utils.pack_float(msg.framerate)::binary-size(4),
            msg.bitrate::little-integer-size(32),
-           Common.encode(msg.flags, :video_stream_status_flags)::little-integer-size(16),
-           msg.resolution_h::little-integer-size(16), msg.resolution_v::little-integer-size(16),
-           msg.rotation::little-integer-size(16), msg.hfov::little-integer-size(16),
-           msg.stream_id::integer-size(8)>>}
+           Common.pack_bitmask(msg.flags, :video_stream_status_flags, &Common.encode/2)::little-integer-size(
+             16
+           ), msg.resolution_h::little-integer-size(16),
+           msg.resolution_v::little-integer-size(16), msg.rotation::little-integer-size(16),
+           msg.hfov::little-integer-size(16), msg.stream_id::integer-size(8)>>}
   end
 end
 
@@ -9524,7 +9527,7 @@ defmodule Common.Message.CameraTrackingImageStatus do
   @type t :: %Common.Message.CameraTrackingImageStatus{
           tracking_status: Common.Types.camera_tracking_status_flags(),
           tracking_mode: Common.Types.camera_tracking_mode(),
-          target_data: Common.Types.camera_tracking_target_data(),
+          target_data: MapSet.t(Common.Types.camera_tracking_target_data()),
           point_x: Float32,
           point_y: Float32,
           radius: Float32,
@@ -9546,7 +9549,9 @@ defmodule Common.Message.CameraTrackingImageStatus do
            XMAVLink.Utils.pack_float(msg.rec_bottom_y)::binary-size(4),
            Common.encode(msg.tracking_status, :camera_tracking_status_flags)::integer-size(8),
            Common.encode(msg.tracking_mode, :camera_tracking_mode)::integer-size(8),
-           Common.encode(msg.target_data, :camera_tracking_target_data)::integer-size(8)>>}
+           Common.pack_bitmask(msg.target_data, :camera_tracking_target_data, &Common.encode/2)::integer-size(
+             8
+           )>>}
   end
 end
 
@@ -9693,7 +9698,7 @@ defmodule Common.Message.GimbalManagerStatus do
   @typedoc "Current status about a high level gimbal manager. This message should be broadcast at a low regular rate (e.g. 5Hz)."
   @type t :: %Common.Message.GimbalManagerStatus{
           time_boot_ms: XMAVLink.Types.uint32_t(),
-          flags: Common.Types.gimbal_manager_flags(),
+          flags: MapSet.t(Common.Types.gimbal_manager_flags()),
           gimbal_device_id: XMAVLink.Types.uint8_t(),
           primary_control_sysid: XMAVLink.Types.uint8_t(),
           primary_control_compid: XMAVLink.Types.uint8_t(),
@@ -9740,7 +9745,7 @@ defmodule Common.Message.GimbalManagerSetAttitude do
   @type t :: %Common.Message.GimbalManagerSetAttitude{
           target_system: XMAVLink.Types.uint8_t(),
           target_component: XMAVLink.Types.uint8_t(),
-          flags: Common.Types.gimbal_manager_flags(),
+          flags: MapSet.t(Common.Types.gimbal_manager_flags()),
           gimbal_device_id: XMAVLink.Types.uint8_t(),
           q: [Float32],
           angular_velocity_x: Float32,
@@ -10073,7 +10078,7 @@ defmodule Common.Message.GimbalManagerSetPitchyaw do
   @type t :: %Common.Message.GimbalManagerSetPitchyaw{
           target_system: XMAVLink.Types.uint8_t(),
           target_component: XMAVLink.Types.uint8_t(),
-          flags: Common.Types.gimbal_manager_flags(),
+          flags: MapSet.t(Common.Types.gimbal_manager_flags()),
           gimbal_device_id: XMAVLink.Types.uint8_t(),
           pitch: Float32,
           yaw: Float32,
@@ -10121,7 +10126,7 @@ defmodule Common.Message.GimbalManagerSetManualControl do
   @type t :: %Common.Message.GimbalManagerSetManualControl{
           target_system: XMAVLink.Types.uint8_t(),
           target_component: XMAVLink.Types.uint8_t(),
-          flags: Common.Types.gimbal_manager_flags(),
+          flags: MapSet.t(Common.Types.gimbal_manager_flags()),
           gimbal_device_id: XMAVLink.Types.uint8_t(),
           pitch: Float32,
           yaw: Float32,
@@ -10175,7 +10180,7 @@ defmodule Common.Message.EscInfo do
           count: XMAVLink.Types.uint8_t(),
           connection_type: Common.Types.esc_connection_type(),
           info: XMAVLink.Types.uint8_t(),
-          failure_flags: [Common.Types.esc_failure_flags()],
+          failure_flags: [MapSet.t(Common.Types.esc_failure_flags())],
           error_count: [XMAVLink.Types.uint32_t()],
           temperature: [XMAVLink.Types.int16_t()]
         }
@@ -15763,8 +15768,10 @@ defmodule Common do
     do:
       "Spools out just enough to present the hook to the user to load the payload. Only action and instance command parameters are used, others are ignored"
 
-  @doc "Return keyword list of mav_cmd parameters"
-  @spec describe_params(Common.Types.mav_cmd()) :: XMAVLink.Types.param_description_list()
+  def describe(_), do: ""
+
+  @doc "Return keyword list of parameter descriptions for enum entries that define them"
+  @spec describe_params(Common.Types.enum_value()) :: XMAVLink.Types.param_description_list()
   def describe_params(:mav_cmd_nav_waypoint),
     do: [
       {1, "Hold time. (ignored by fixed wing, time to stay at waypoint for rotary wing)"},
@@ -17366,6 +17373,8 @@ defmodule Common do
       {7, "Empty."}
     ]
 
+  def describe_params(_), do: []
+
   @doc "Return encoded integer value used in a MAVLink message for an enumeration value"
   @spec encode(Common.Types.actuator_configuration(), :actuator_configuration) ::
           0 | 1 | 2 | 3 | 4 | 5
@@ -17407,7 +17416,16 @@ defmodule Common do
   @spec encode(Common.Types.adsb_emitter_type(), :adsb_emitter_type) ::
           0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19
   @spec encode(Common.Types.adsb_flags(), :adsb_flags) ::
-          1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 32768
+          0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000000000
   @spec encode(Common.Types.ais_flags(), :ais_flags) ::
           0b1
           | 0b10
@@ -17526,8 +17544,8 @@ defmodule Common do
           | 98
           | 99
   @spec encode(Common.Types.attitude_target_typemask(), :attitude_target_typemask) ::
-          1 | 2 | 4 | 32 | 64 | 128
-  @spec encode(Common.Types.autotune_axis(), :autotune_axis) :: 0 | 1 | 2 | 4
+          0b1 | 0b10 | 0b100 | 0b100000 | 0b1000000 | 0b10000000
+  @spec encode(Common.Types.autotune_axis(), :autotune_axis) :: 0b0 | 0b1 | 0b10 | 0b100
   @spec encode(Common.Types.camera_cap_flags(), :camera_cap_flags) ::
           0b1
           | 0b10
@@ -17546,7 +17564,7 @@ defmodule Common do
   @spec encode(Common.Types.camera_tracking_status_flags(), :camera_tracking_status_flags) ::
           0 | 1 | 2
   @spec encode(Common.Types.camera_tracking_target_data(), :camera_tracking_target_data) ::
-          0 | 1 | 2 | 4
+          0b0 | 0b1 | 0b10 | 0b100
   @spec encode(Common.Types.camera_zoom_type(), :camera_zoom_type) :: 0 | 1 | 2 | 3
   @spec encode(Common.Types.can_filter_op(), :can_filter_op) :: 0 | 1 | 2
   @spec encode(Common.Types.cellular_config_response(), :cellular_config_response) ::
@@ -17560,7 +17578,7 @@ defmodule Common do
   @spec encode(Common.Types.comp_metadata_type(), :comp_metadata_type) :: 0 | 1 | 2 | 3 | 4 | 5
   @spec encode(Common.Types.esc_connection_type(), :esc_connection_type) :: 0 | 1 | 2 | 3 | 4 | 5
   @spec encode(Common.Types.esc_failure_flags(), :esc_failure_flags) ::
-          0 | 1 | 2 | 4 | 8 | 16 | 32 | 64
+          0b0 | 0b1 | 0b10 | 0b100 | 0b1000 | 0b10000 | 0b100000 | 0b1000000
   @spec encode(Common.Types.estimator_status_flags(), :estimator_status_flags) ::
           0b1
           | 0b10
@@ -17620,22 +17638,22 @@ defmodule Common do
           | 0b100000000
           | 0b1000000000
   @spec encode(Common.Types.gimbal_manager_cap_flags(), :gimbal_manager_cap_flags) ::
-          1
-          | 2
-          | 4
-          | 8
-          | 16
-          | 32
-          | 64
-          | 128
-          | 256
-          | 512
-          | 1024
-          | 2048
-          | 4096
-          | 8192
-          | 65536
-          | 131_072
+          0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b10000000000000
+          | 0b10000000000000000
+          | 0b100000000000000000
   @spec encode(Common.Types.gimbal_manager_flags(), :gimbal_manager_flags) ::
           0b1
           | 0b10
@@ -17652,9 +17670,37 @@ defmodule Common do
           0b1 | 0b10 | 0b100 | 0b1000 | 0b10000 | 0b100000 | 0b1000000 | 0b10000000
   @spec encode(Common.Types.gripper_actions(), :gripper_actions) :: 0 | 1
   @spec encode(Common.Types.highres_imu_updated_flags(), :highres_imu_updated_flags) ::
-          0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 65535
+          0b0
+          | 0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b1111111111111111
   @spec encode(Common.Types.hil_sensor_updated_flags(), :hil_sensor_updated_flags) ::
-          0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 2_147_483_648
+          0b0
+          | 0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b10000000000000000000000000000000
   @spec encode(Common.Types.hl_failure_flag(), :hl_failure_flag) ::
           0b1
           | 0b10
@@ -18008,7 +18054,7 @@ defmodule Common do
   @spec encode(Common.Types.mav_data_stream(), :mav_data_stream) ::
           0 | 1 | 2 | 3 | 4 | 6 | 10 | 11 | 12
   @spec encode(Common.Types.mav_distance_sensor(), :mav_distance_sensor) :: 0 | 1 | 2 | 3 | 4
-  @spec encode(Common.Types.mav_do_reposition_flags(), :mav_do_reposition_flags) :: 1
+  @spec encode(Common.Types.mav_do_reposition_flags(), :mav_do_reposition_flags) :: 0b1
   @spec encode(Common.Types.mav_estimator_type(), :mav_estimator_type) ::
           0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
   @spec encode(Common.Types.mav_event_current_sequence_flags(), :mav_event_current_sequence_flags) ::
@@ -18205,7 +18251,7 @@ defmodule Common do
           | 0b1000000000000000000000000000000
           | 0b10000000000000000000000000000000
   @spec encode(Common.Types.mav_sys_status_sensor_extended(), :mav_sys_status_sensor_extended) ::
-          1
+          0b1
   @spec encode(Common.Types.mav_tunnel_payload_type(), :mav_tunnel_payload_type) ::
           0 | 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 209
   @spec encode(Common.Types.mav_type(), :mav_type) ::
@@ -18316,7 +18362,7 @@ defmodule Common do
   @spec encode(Common.Types.utm_data_avail_flags(), :utm_data_avail_flags) ::
           0b1 | 0b10 | 0b100 | 0b1000 | 0b10000 | 0b100000 | 0b1000000 | 0b10000000
   @spec encode(Common.Types.utm_flight_state(), :utm_flight_state) :: 1 | 2 | 3 | 16 | 32
-  @spec encode(Common.Types.video_stream_status_flags(), :video_stream_status_flags) :: 1 | 2
+  @spec encode(Common.Types.video_stream_status_flags(), :video_stream_status_flags) :: 0b1 | 0b10
   @spec encode(Common.Types.video_stream_type(), :video_stream_type) :: 0 | 1 | 2 | 3
   @spec encode(Common.Types.vtol_transition_heading(), :vtol_transition_heading) ::
           0 | 1 | 2 | 3 | 4
@@ -18386,16 +18432,16 @@ defmodule Common do
   def encode(:adsb_emitter_type_emergency_surface, :adsb_emitter_type), do: 17
   def encode(:adsb_emitter_type_service_surface, :adsb_emitter_type), do: 18
   def encode(:adsb_emitter_type_point_obstacle, :adsb_emitter_type), do: 19
-  def encode(:adsb_flags_valid_coords, :adsb_flags), do: 1
-  def encode(:adsb_flags_valid_altitude, :adsb_flags), do: 2
-  def encode(:adsb_flags_valid_heading, :adsb_flags), do: 4
-  def encode(:adsb_flags_valid_velocity, :adsb_flags), do: 8
-  def encode(:adsb_flags_valid_callsign, :adsb_flags), do: 16
-  def encode(:adsb_flags_valid_squawk, :adsb_flags), do: 32
-  def encode(:adsb_flags_simulated, :adsb_flags), do: 64
-  def encode(:adsb_flags_vertical_velocity_valid, :adsb_flags), do: 128
-  def encode(:adsb_flags_baro_valid, :adsb_flags), do: 256
-  def encode(:adsb_flags_source_uat, :adsb_flags), do: 32768
+  def encode(:adsb_flags_valid_coords, :adsb_flags), do: 0b1
+  def encode(:adsb_flags_valid_altitude, :adsb_flags), do: 0b10
+  def encode(:adsb_flags_valid_heading, :adsb_flags), do: 0b100
+  def encode(:adsb_flags_valid_velocity, :adsb_flags), do: 0b1000
+  def encode(:adsb_flags_valid_callsign, :adsb_flags), do: 0b10000
+  def encode(:adsb_flags_valid_squawk, :adsb_flags), do: 0b100000
+  def encode(:adsb_flags_simulated, :adsb_flags), do: 0b1000000
+  def encode(:adsb_flags_vertical_velocity_valid, :adsb_flags), do: 0b10000000
+  def encode(:adsb_flags_baro_valid, :adsb_flags), do: 0b100000000
+  def encode(:adsb_flags_source_uat, :adsb_flags), do: 0b1000000000000000
   def encode(:ais_flags_position_accuracy, :ais_flags), do: 0b1
   def encode(:ais_flags_valid_cog, :ais_flags), do: 0b10
   def encode(:ais_flags_valid_velocity, :ais_flags), do: 0b100
@@ -18525,16 +18571,19 @@ defmodule Common do
   def encode(:ais_type_other_reserved_3, :ais_type), do: 97
   def encode(:ais_type_other_reserved_4, :ais_type), do: 98
   def encode(:ais_type_other_unknown, :ais_type), do: 99
-  def encode(:attitude_target_typemask_body_roll_rate_ignore, :attitude_target_typemask), do: 1
-  def encode(:attitude_target_typemask_body_pitch_rate_ignore, :attitude_target_typemask), do: 2
-  def encode(:attitude_target_typemask_body_yaw_rate_ignore, :attitude_target_typemask), do: 4
-  def encode(:attitude_target_typemask_thrust_body_set, :attitude_target_typemask), do: 32
-  def encode(:attitude_target_typemask_throttle_ignore, :attitude_target_typemask), do: 64
-  def encode(:attitude_target_typemask_attitude_ignore, :attitude_target_typemask), do: 128
-  def encode(:autotune_axis_default, :autotune_axis), do: 0
-  def encode(:autotune_axis_roll, :autotune_axis), do: 1
-  def encode(:autotune_axis_pitch, :autotune_axis), do: 2
-  def encode(:autotune_axis_yaw, :autotune_axis), do: 4
+  def encode(:attitude_target_typemask_body_roll_rate_ignore, :attitude_target_typemask), do: 0b1
+
+  def encode(:attitude_target_typemask_body_pitch_rate_ignore, :attitude_target_typemask),
+    do: 0b10
+
+  def encode(:attitude_target_typemask_body_yaw_rate_ignore, :attitude_target_typemask), do: 0b100
+  def encode(:attitude_target_typemask_thrust_body_set, :attitude_target_typemask), do: 0b100000
+  def encode(:attitude_target_typemask_throttle_ignore, :attitude_target_typemask), do: 0b1000000
+  def encode(:attitude_target_typemask_attitude_ignore, :attitude_target_typemask), do: 0b10000000
+  def encode(:autotune_axis_default, :autotune_axis), do: 0b0
+  def encode(:autotune_axis_roll, :autotune_axis), do: 0b1
+  def encode(:autotune_axis_pitch, :autotune_axis), do: 0b10
+  def encode(:autotune_axis_yaw, :autotune_axis), do: 0b100
   def encode(:camera_cap_flags_capture_video, :camera_cap_flags), do: 0b1
   def encode(:camera_cap_flags_capture_image, :camera_cap_flags), do: 0b10
   def encode(:camera_cap_flags_has_modes, :camera_cap_flags), do: 0b100
@@ -18556,10 +18605,10 @@ defmodule Common do
   def encode(:camera_tracking_status_flags_idle, :camera_tracking_status_flags), do: 0
   def encode(:camera_tracking_status_flags_active, :camera_tracking_status_flags), do: 1
   def encode(:camera_tracking_status_flags_error, :camera_tracking_status_flags), do: 2
-  def encode(:camera_tracking_target_data_none, :camera_tracking_target_data), do: 0
-  def encode(:camera_tracking_target_data_embedded, :camera_tracking_target_data), do: 1
-  def encode(:camera_tracking_target_data_rendered, :camera_tracking_target_data), do: 2
-  def encode(:camera_tracking_target_data_in_status, :camera_tracking_target_data), do: 4
+  def encode(:camera_tracking_target_data_none, :camera_tracking_target_data), do: 0b0
+  def encode(:camera_tracking_target_data_embedded, :camera_tracking_target_data), do: 0b1
+  def encode(:camera_tracking_target_data_rendered, :camera_tracking_target_data), do: 0b10
+  def encode(:camera_tracking_target_data_in_status, :camera_tracking_target_data), do: 0b100
   def encode(:zoom_type_step, :camera_zoom_type), do: 0
   def encode(:zoom_type_continuous, :camera_zoom_type), do: 1
   def encode(:zoom_type_range, :camera_zoom_type), do: 2
@@ -18606,14 +18655,14 @@ defmodule Common do
   def encode(:esc_connection_type_i2c, :esc_connection_type), do: 3
   def encode(:esc_connection_type_can, :esc_connection_type), do: 4
   def encode(:esc_connection_type_dshot, :esc_connection_type), do: 5
-  def encode(:esc_failure_none, :esc_failure_flags), do: 0
-  def encode(:esc_failure_over_current, :esc_failure_flags), do: 1
-  def encode(:esc_failure_over_voltage, :esc_failure_flags), do: 2
-  def encode(:esc_failure_over_temperature, :esc_failure_flags), do: 4
-  def encode(:esc_failure_over_rpm, :esc_failure_flags), do: 8
-  def encode(:esc_failure_inconsistent_cmd, :esc_failure_flags), do: 16
-  def encode(:esc_failure_motor_stuck, :esc_failure_flags), do: 32
-  def encode(:esc_failure_generic, :esc_failure_flags), do: 64
+  def encode(:esc_failure_none, :esc_failure_flags), do: 0b0
+  def encode(:esc_failure_over_current, :esc_failure_flags), do: 0b1
+  def encode(:esc_failure_over_voltage, :esc_failure_flags), do: 0b10
+  def encode(:esc_failure_over_temperature, :esc_failure_flags), do: 0b100
+  def encode(:esc_failure_over_rpm, :esc_failure_flags), do: 0b1000
+  def encode(:esc_failure_inconsistent_cmd, :esc_failure_flags), do: 0b10000
+  def encode(:esc_failure_motor_stuck, :esc_failure_flags), do: 0b100000
+  def encode(:esc_failure_generic, :esc_failure_flags), do: 0b1000000
   def encode(:estimator_attitude, :estimator_status_flags), do: 0b1
   def encode(:estimator_velocity_horiz, :estimator_status_flags), do: 0b10
   def encode(:estimator_velocity_vert, :estimator_status_flags), do: 0b100
@@ -18716,29 +18765,35 @@ defmodule Common do
 
   def encode(:gimbal_device_flags_rc_exclusive, :gimbal_device_flags), do: 0b100000000
   def encode(:gimbal_device_flags_rc_mixed, :gimbal_device_flags), do: 0b1000000000
-  def encode(:gimbal_manager_cap_flags_has_retract, :gimbal_manager_cap_flags), do: 1
-  def encode(:gimbal_manager_cap_flags_has_neutral, :gimbal_manager_cap_flags), do: 2
-  def encode(:gimbal_manager_cap_flags_has_roll_axis, :gimbal_manager_cap_flags), do: 4
-  def encode(:gimbal_manager_cap_flags_has_roll_follow, :gimbal_manager_cap_flags), do: 8
-  def encode(:gimbal_manager_cap_flags_has_roll_lock, :gimbal_manager_cap_flags), do: 16
-  def encode(:gimbal_manager_cap_flags_has_pitch_axis, :gimbal_manager_cap_flags), do: 32
-  def encode(:gimbal_manager_cap_flags_has_pitch_follow, :gimbal_manager_cap_flags), do: 64
-  def encode(:gimbal_manager_cap_flags_has_pitch_lock, :gimbal_manager_cap_flags), do: 128
-  def encode(:gimbal_manager_cap_flags_has_yaw_axis, :gimbal_manager_cap_flags), do: 256
-  def encode(:gimbal_manager_cap_flags_has_yaw_follow, :gimbal_manager_cap_flags), do: 512
-  def encode(:gimbal_manager_cap_flags_has_yaw_lock, :gimbal_manager_cap_flags), do: 1024
-  def encode(:gimbal_manager_cap_flags_supports_infinite_yaw, :gimbal_manager_cap_flags), do: 2048
+  def encode(:gimbal_manager_cap_flags_has_retract, :gimbal_manager_cap_flags), do: 0b1
+  def encode(:gimbal_manager_cap_flags_has_neutral, :gimbal_manager_cap_flags), do: 0b10
+  def encode(:gimbal_manager_cap_flags_has_roll_axis, :gimbal_manager_cap_flags), do: 0b100
+  def encode(:gimbal_manager_cap_flags_has_roll_follow, :gimbal_manager_cap_flags), do: 0b1000
+  def encode(:gimbal_manager_cap_flags_has_roll_lock, :gimbal_manager_cap_flags), do: 0b10000
+  def encode(:gimbal_manager_cap_flags_has_pitch_axis, :gimbal_manager_cap_flags), do: 0b100000
+  def encode(:gimbal_manager_cap_flags_has_pitch_follow, :gimbal_manager_cap_flags), do: 0b1000000
+  def encode(:gimbal_manager_cap_flags_has_pitch_lock, :gimbal_manager_cap_flags), do: 0b10000000
+  def encode(:gimbal_manager_cap_flags_has_yaw_axis, :gimbal_manager_cap_flags), do: 0b100000000
+
+  def encode(:gimbal_manager_cap_flags_has_yaw_follow, :gimbal_manager_cap_flags),
+    do: 0b1000000000
+
+  def encode(:gimbal_manager_cap_flags_has_yaw_lock, :gimbal_manager_cap_flags), do: 0b10000000000
+
+  def encode(:gimbal_manager_cap_flags_supports_infinite_yaw, :gimbal_manager_cap_flags),
+    do: 0b100000000000
 
   def encode(:gimbal_manager_cap_flags_supports_yaw_in_earth_frame, :gimbal_manager_cap_flags),
-    do: 4096
+    do: 0b1000000000000
 
-  def encode(:gimbal_manager_cap_flags_has_rc_inputs, :gimbal_manager_cap_flags), do: 8192
+  def encode(:gimbal_manager_cap_flags_has_rc_inputs, :gimbal_manager_cap_flags),
+    do: 0b10000000000000
 
   def encode(:gimbal_manager_cap_flags_can_point_location_local, :gimbal_manager_cap_flags),
-    do: 65536
+    do: 0b10000000000000000
 
   def encode(:gimbal_manager_cap_flags_can_point_location_global, :gimbal_manager_cap_flags),
-    do: 131_072
+    do: 0b100000000000000000
 
   def encode(:gimbal_manager_flags_retract, :gimbal_manager_flags), do: 0b1
   def encode(:gimbal_manager_flags_neutral, :gimbal_manager_flags), do: 0b10
@@ -18772,36 +18827,39 @@ defmodule Common do
   def encode(:gps_input_ignore_flag_vertical_accuracy, :gps_input_ignore_flags), do: 0b10000000
   def encode(:gripper_action_release, :gripper_actions), do: 0
   def encode(:gripper_action_grab, :gripper_actions), do: 1
-  def encode(:highres_imu_updated_none, :highres_imu_updated_flags), do: 0
-  def encode(:highres_imu_updated_xacc, :highres_imu_updated_flags), do: 1
-  def encode(:highres_imu_updated_yacc, :highres_imu_updated_flags), do: 2
-  def encode(:highres_imu_updated_zacc, :highres_imu_updated_flags), do: 4
-  def encode(:highres_imu_updated_xgyro, :highres_imu_updated_flags), do: 8
-  def encode(:highres_imu_updated_ygyro, :highres_imu_updated_flags), do: 16
-  def encode(:highres_imu_updated_zgyro, :highres_imu_updated_flags), do: 32
-  def encode(:highres_imu_updated_xmag, :highres_imu_updated_flags), do: 64
-  def encode(:highres_imu_updated_ymag, :highres_imu_updated_flags), do: 128
-  def encode(:highres_imu_updated_zmag, :highres_imu_updated_flags), do: 256
-  def encode(:highres_imu_updated_abs_pressure, :highres_imu_updated_flags), do: 512
-  def encode(:highres_imu_updated_diff_pressure, :highres_imu_updated_flags), do: 1024
-  def encode(:highres_imu_updated_pressure_alt, :highres_imu_updated_flags), do: 2048
-  def encode(:highres_imu_updated_temperature, :highres_imu_updated_flags), do: 4096
-  def encode(:highres_imu_updated_all, :highres_imu_updated_flags), do: 65535
-  def encode(:hil_sensor_updated_none, :hil_sensor_updated_flags), do: 0
-  def encode(:hil_sensor_updated_xacc, :hil_sensor_updated_flags), do: 1
-  def encode(:hil_sensor_updated_yacc, :hil_sensor_updated_flags), do: 2
-  def encode(:hil_sensor_updated_zacc, :hil_sensor_updated_flags), do: 4
-  def encode(:hil_sensor_updated_xgyro, :hil_sensor_updated_flags), do: 8
-  def encode(:hil_sensor_updated_ygyro, :hil_sensor_updated_flags), do: 16
-  def encode(:hil_sensor_updated_zgyro, :hil_sensor_updated_flags), do: 32
-  def encode(:hil_sensor_updated_xmag, :hil_sensor_updated_flags), do: 64
-  def encode(:hil_sensor_updated_ymag, :hil_sensor_updated_flags), do: 128
-  def encode(:hil_sensor_updated_zmag, :hil_sensor_updated_flags), do: 256
-  def encode(:hil_sensor_updated_abs_pressure, :hil_sensor_updated_flags), do: 512
-  def encode(:hil_sensor_updated_diff_pressure, :hil_sensor_updated_flags), do: 1024
-  def encode(:hil_sensor_updated_pressure_alt, :hil_sensor_updated_flags), do: 2048
-  def encode(:hil_sensor_updated_temperature, :hil_sensor_updated_flags), do: 4096
-  def encode(:hil_sensor_updated_reset, :hil_sensor_updated_flags), do: 2_147_483_648
+  def encode(:highres_imu_updated_none, :highres_imu_updated_flags), do: 0b0
+  def encode(:highres_imu_updated_xacc, :highres_imu_updated_flags), do: 0b1
+  def encode(:highres_imu_updated_yacc, :highres_imu_updated_flags), do: 0b10
+  def encode(:highres_imu_updated_zacc, :highres_imu_updated_flags), do: 0b100
+  def encode(:highres_imu_updated_xgyro, :highres_imu_updated_flags), do: 0b1000
+  def encode(:highres_imu_updated_ygyro, :highres_imu_updated_flags), do: 0b10000
+  def encode(:highres_imu_updated_zgyro, :highres_imu_updated_flags), do: 0b100000
+  def encode(:highres_imu_updated_xmag, :highres_imu_updated_flags), do: 0b1000000
+  def encode(:highres_imu_updated_ymag, :highres_imu_updated_flags), do: 0b10000000
+  def encode(:highres_imu_updated_zmag, :highres_imu_updated_flags), do: 0b100000000
+  def encode(:highres_imu_updated_abs_pressure, :highres_imu_updated_flags), do: 0b1000000000
+  def encode(:highres_imu_updated_diff_pressure, :highres_imu_updated_flags), do: 0b10000000000
+  def encode(:highres_imu_updated_pressure_alt, :highres_imu_updated_flags), do: 0b100000000000
+  def encode(:highres_imu_updated_temperature, :highres_imu_updated_flags), do: 0b1000000000000
+  def encode(:highres_imu_updated_all, :highres_imu_updated_flags), do: 0b1111111111111111
+  def encode(:hil_sensor_updated_none, :hil_sensor_updated_flags), do: 0b0
+  def encode(:hil_sensor_updated_xacc, :hil_sensor_updated_flags), do: 0b1
+  def encode(:hil_sensor_updated_yacc, :hil_sensor_updated_flags), do: 0b10
+  def encode(:hil_sensor_updated_zacc, :hil_sensor_updated_flags), do: 0b100
+  def encode(:hil_sensor_updated_xgyro, :hil_sensor_updated_flags), do: 0b1000
+  def encode(:hil_sensor_updated_ygyro, :hil_sensor_updated_flags), do: 0b10000
+  def encode(:hil_sensor_updated_zgyro, :hil_sensor_updated_flags), do: 0b100000
+  def encode(:hil_sensor_updated_xmag, :hil_sensor_updated_flags), do: 0b1000000
+  def encode(:hil_sensor_updated_ymag, :hil_sensor_updated_flags), do: 0b10000000
+  def encode(:hil_sensor_updated_zmag, :hil_sensor_updated_flags), do: 0b100000000
+  def encode(:hil_sensor_updated_abs_pressure, :hil_sensor_updated_flags), do: 0b1000000000
+  def encode(:hil_sensor_updated_diff_pressure, :hil_sensor_updated_flags), do: 0b10000000000
+  def encode(:hil_sensor_updated_pressure_alt, :hil_sensor_updated_flags), do: 0b100000000000
+  def encode(:hil_sensor_updated_temperature, :hil_sensor_updated_flags), do: 0b1000000000000
+
+  def encode(:hil_sensor_updated_reset, :hil_sensor_updated_flags),
+    do: 0b10000000000000000000000000000000
+
   def encode(:hl_failure_flag_gps, :hl_failure_flag), do: 0b1
   def encode(:hl_failure_flag_differential_pressure, :hl_failure_flag), do: 0b10
   def encode(:hl_failure_flag_absolute_pressure, :hl_failure_flag), do: 0b100
@@ -19214,7 +19272,7 @@ defmodule Common do
   def encode(:mav_distance_sensor_infrared, :mav_distance_sensor), do: 2
   def encode(:mav_distance_sensor_radar, :mav_distance_sensor), do: 3
   def encode(:mav_distance_sensor_unknown, :mav_distance_sensor), do: 4
-  def encode(:mav_do_reposition_flags_change_mode, :mav_do_reposition_flags), do: 1
+  def encode(:mav_do_reposition_flags_change_mode, :mav_do_reposition_flags), do: 0b1
   def encode(:mav_estimator_type_unknown, :mav_estimator_type), do: 0
   def encode(:mav_estimator_type_naive, :mav_estimator_type), do: 1
   def encode(:mav_estimator_type_vision, :mav_estimator_type), do: 2
@@ -19709,7 +19767,7 @@ defmodule Common do
   def encode(:mav_sys_status_extension_used, :mav_sys_status_sensor),
     do: 0b10000000000000000000000000000000
 
-  def encode(:mav_sys_status_recovery_system, :mav_sys_status_sensor_extended), do: 1
+  def encode(:mav_sys_status_recovery_system, :mav_sys_status_sensor_extended), do: 0b1
   def encode(:mav_tunnel_payload_type_unknown, :mav_tunnel_payload_type), do: 0
   def encode(:mav_tunnel_payload_type_storm32_reserved0, :mav_tunnel_payload_type), do: 200
   def encode(:mav_tunnel_payload_type_storm32_reserved1, :mav_tunnel_payload_type), do: 201
@@ -19918,8 +19976,8 @@ defmodule Common do
   def encode(:utm_flight_state_airborne, :utm_flight_state), do: 3
   def encode(:utm_flight_state_emergency, :utm_flight_state), do: 16
   def encode(:utm_flight_state_noctrl, :utm_flight_state), do: 32
-  def encode(:video_stream_status_flags_running, :video_stream_status_flags), do: 1
-  def encode(:video_stream_status_flags_thermal, :video_stream_status_flags), do: 2
+  def encode(:video_stream_status_flags_running, :video_stream_status_flags), do: 0b1
+  def encode(:video_stream_status_flags_thermal, :video_stream_status_flags), do: 0b10
   def encode(:video_stream_type_rtsp, :video_stream_type), do: 0
   def encode(:video_stream_type_rtpudp, :video_stream_type), do: 1
   def encode(:video_stream_type_tcp_mpeg, :video_stream_type), do: 2
@@ -19949,6 +20007,7 @@ defmodule Common do
   def encode(:winch_load_line, :winch_actions), do: 7
   def encode(:winch_abandon_line, :winch_actions), do: 8
   def encode(:winch_load_payload, :winch_actions), do: 9
+  def encode(value, _enum), do: value
 
   @doc "Return the atom representation of a MAVLink enumeration value from the enumeration type and encoded integer"
   @spec decode(0 | 1 | 2 | 3 | 4 | 5, :actuator_configuration) ::
@@ -19994,8 +20053,19 @@ defmodule Common do
           0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 | 17 | 18 | 19,
           :adsb_emitter_type
         ) :: Common.Types.adsb_emitter_type()
-  @spec decode(1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 32768, :adsb_flags) ::
-          Common.Types.adsb_flags()
+  @spec decode(
+          0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000000000,
+          :adsb_flags
+        ) :: Common.Types.adsb_flags()
   @spec decode(
           0b1
           | 0b10
@@ -20119,9 +20189,9 @@ defmodule Common do
           | 99,
           :ais_type
         ) :: Common.Types.ais_type()
-  @spec decode(1 | 2 | 4 | 32 | 64 | 128, :attitude_target_typemask) ::
+  @spec decode(0b1 | 0b10 | 0b100 | 0b100000 | 0b1000000 | 0b10000000, :attitude_target_typemask) ::
           Common.Types.attitude_target_typemask()
-  @spec decode(0 | 1 | 2 | 4, :autotune_axis) :: Common.Types.autotune_axis()
+  @spec decode(0b0 | 0b1 | 0b10 | 0b100, :autotune_axis) :: Common.Types.autotune_axis()
   @spec decode(
           0b1
           | 0b10
@@ -20141,7 +20211,7 @@ defmodule Common do
   @spec decode(0 | 1 | 2, :camera_tracking_mode) :: Common.Types.camera_tracking_mode()
   @spec decode(0 | 1 | 2, :camera_tracking_status_flags) ::
           Common.Types.camera_tracking_status_flags()
-  @spec decode(0 | 1 | 2 | 4, :camera_tracking_target_data) ::
+  @spec decode(0b0 | 0b1 | 0b10 | 0b100, :camera_tracking_target_data) ::
           Common.Types.camera_tracking_target_data()
   @spec decode(0 | 1 | 2 | 3, :camera_zoom_type) :: Common.Types.camera_zoom_type()
   @spec decode(0 | 1 | 2, :can_filter_op) :: Common.Types.can_filter_op()
@@ -20155,8 +20225,10 @@ defmodule Common do
           Common.Types.cellular_status_flag()
   @spec decode(0 | 1 | 2 | 3 | 4 | 5, :comp_metadata_type) :: Common.Types.comp_metadata_type()
   @spec decode(0 | 1 | 2 | 3 | 4 | 5, :esc_connection_type) :: Common.Types.esc_connection_type()
-  @spec decode(0 | 1 | 2 | 4 | 8 | 16 | 32 | 64, :esc_failure_flags) ::
-          Common.Types.esc_failure_flags()
+  @spec decode(
+          0b0 | 0b1 | 0b10 | 0b100 | 0b1000 | 0b10000 | 0b100000 | 0b1000000,
+          :esc_failure_flags
+        ) :: Common.Types.esc_failure_flags()
   @spec decode(
           0b1
           | 0b10
@@ -20226,22 +20298,22 @@ defmodule Common do
           :gimbal_device_flags
         ) :: Common.Types.gimbal_device_flags()
   @spec decode(
-          1
-          | 2
-          | 4
-          | 8
-          | 16
-          | 32
-          | 64
-          | 128
-          | 256
-          | 512
-          | 1024
-          | 2048
-          | 4096
-          | 8192
-          | 65536
-          | 131_072,
+          0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b10000000000000
+          | 0b10000000000000000
+          | 0b100000000000000000,
           :gimbal_manager_cap_flags
         ) :: Common.Types.gimbal_manager_cap_flags()
   @spec decode(
@@ -20264,11 +20336,39 @@ defmodule Common do
         ) :: Common.Types.gps_input_ignore_flags()
   @spec decode(0 | 1, :gripper_actions) :: Common.Types.gripper_actions()
   @spec decode(
-          0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 65535,
+          0b0
+          | 0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b1111111111111111,
           :highres_imu_updated_flags
         ) :: Common.Types.highres_imu_updated_flags()
   @spec decode(
-          0 | 1 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 2_147_483_648,
+          0b0
+          | 0b1
+          | 0b10
+          | 0b100
+          | 0b1000
+          | 0b10000
+          | 0b100000
+          | 0b1000000
+          | 0b10000000
+          | 0b100000000
+          | 0b1000000000
+          | 0b10000000000
+          | 0b100000000000
+          | 0b1000000000000
+          | 0b10000000000000000000000000000000,
           :hil_sensor_updated_flags
         ) :: Common.Types.hil_sensor_updated_flags()
   @spec decode(
@@ -20634,7 +20734,7 @@ defmodule Common do
   @spec decode(0 | 1 | 2 | 3 | 4 | 6 | 10 | 11 | 12, :mav_data_stream) ::
           Common.Types.mav_data_stream()
   @spec decode(0 | 1 | 2 | 3 | 4, :mav_distance_sensor) :: Common.Types.mav_distance_sensor()
-  @spec decode(1, :mav_do_reposition_flags) :: Common.Types.mav_do_reposition_flags()
+  @spec decode(0b1, :mav_do_reposition_flags) :: Common.Types.mav_do_reposition_flags()
   @spec decode(0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8, :mav_estimator_type) ::
           Common.Types.mav_estimator_type()
   @spec decode(1, :mav_event_current_sequence_flags) ::
@@ -20852,7 +20952,7 @@ defmodule Common do
           | 0b10000000000000000000000000000000,
           :mav_sys_status_sensor
         ) :: Common.Types.mav_sys_status_sensor()
-  @spec decode(1, :mav_sys_status_sensor_extended) ::
+  @spec decode(0b1, :mav_sys_status_sensor_extended) ::
           Common.Types.mav_sys_status_sensor_extended()
   @spec decode(
           0 | 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 209,
@@ -20974,7 +21074,7 @@ defmodule Common do
           :utm_data_avail_flags
         ) :: Common.Types.utm_data_avail_flags()
   @spec decode(1 | 2 | 3 | 16 | 32, :utm_flight_state) :: Common.Types.utm_flight_state()
-  @spec decode(1 | 2, :video_stream_status_flags) :: Common.Types.video_stream_status_flags()
+  @spec decode(0b1 | 0b10, :video_stream_status_flags) :: Common.Types.video_stream_status_flags()
   @spec decode(0 | 1 | 2 | 3, :video_stream_type) :: Common.Types.video_stream_type()
   @spec decode(0 | 1 | 2 | 3 | 4, :vtol_transition_heading) ::
           Common.Types.vtol_transition_heading()
@@ -21044,16 +21144,16 @@ defmodule Common do
   def decode(17, :adsb_emitter_type), do: :adsb_emitter_type_emergency_surface
   def decode(18, :adsb_emitter_type), do: :adsb_emitter_type_service_surface
   def decode(19, :adsb_emitter_type), do: :adsb_emitter_type_point_obstacle
-  def decode(1, :adsb_flags), do: :adsb_flags_valid_coords
-  def decode(2, :adsb_flags), do: :adsb_flags_valid_altitude
-  def decode(4, :adsb_flags), do: :adsb_flags_valid_heading
-  def decode(8, :adsb_flags), do: :adsb_flags_valid_velocity
-  def decode(16, :adsb_flags), do: :adsb_flags_valid_callsign
-  def decode(32, :adsb_flags), do: :adsb_flags_valid_squawk
-  def decode(64, :adsb_flags), do: :adsb_flags_simulated
-  def decode(128, :adsb_flags), do: :adsb_flags_vertical_velocity_valid
-  def decode(256, :adsb_flags), do: :adsb_flags_baro_valid
-  def decode(32768, :adsb_flags), do: :adsb_flags_source_uat
+  def decode(0b1, :adsb_flags), do: :adsb_flags_valid_coords
+  def decode(0b10, :adsb_flags), do: :adsb_flags_valid_altitude
+  def decode(0b100, :adsb_flags), do: :adsb_flags_valid_heading
+  def decode(0b1000, :adsb_flags), do: :adsb_flags_valid_velocity
+  def decode(0b10000, :adsb_flags), do: :adsb_flags_valid_callsign
+  def decode(0b100000, :adsb_flags), do: :adsb_flags_valid_squawk
+  def decode(0b1000000, :adsb_flags), do: :adsb_flags_simulated
+  def decode(0b10000000, :adsb_flags), do: :adsb_flags_vertical_velocity_valid
+  def decode(0b100000000, :adsb_flags), do: :adsb_flags_baro_valid
+  def decode(0b1000000000000000, :adsb_flags), do: :adsb_flags_source_uat
   def decode(0b1, :ais_flags), do: :ais_flags_position_accuracy
   def decode(0b10, :ais_flags), do: :ais_flags_valid_cog
   def decode(0b100, :ais_flags), do: :ais_flags_valid_velocity
@@ -21183,16 +21283,19 @@ defmodule Common do
   def decode(97, :ais_type), do: :ais_type_other_reserved_3
   def decode(98, :ais_type), do: :ais_type_other_reserved_4
   def decode(99, :ais_type), do: :ais_type_other_unknown
-  def decode(1, :attitude_target_typemask), do: :attitude_target_typemask_body_roll_rate_ignore
-  def decode(2, :attitude_target_typemask), do: :attitude_target_typemask_body_pitch_rate_ignore
-  def decode(4, :attitude_target_typemask), do: :attitude_target_typemask_body_yaw_rate_ignore
-  def decode(32, :attitude_target_typemask), do: :attitude_target_typemask_thrust_body_set
-  def decode(64, :attitude_target_typemask), do: :attitude_target_typemask_throttle_ignore
-  def decode(128, :attitude_target_typemask), do: :attitude_target_typemask_attitude_ignore
-  def decode(0, :autotune_axis), do: :autotune_axis_default
-  def decode(1, :autotune_axis), do: :autotune_axis_roll
-  def decode(2, :autotune_axis), do: :autotune_axis_pitch
-  def decode(4, :autotune_axis), do: :autotune_axis_yaw
+  def decode(0b1, :attitude_target_typemask), do: :attitude_target_typemask_body_roll_rate_ignore
+
+  def decode(0b10, :attitude_target_typemask),
+    do: :attitude_target_typemask_body_pitch_rate_ignore
+
+  def decode(0b100, :attitude_target_typemask), do: :attitude_target_typemask_body_yaw_rate_ignore
+  def decode(0b100000, :attitude_target_typemask), do: :attitude_target_typemask_thrust_body_set
+  def decode(0b1000000, :attitude_target_typemask), do: :attitude_target_typemask_throttle_ignore
+  def decode(0b10000000, :attitude_target_typemask), do: :attitude_target_typemask_attitude_ignore
+  def decode(0b0, :autotune_axis), do: :autotune_axis_default
+  def decode(0b1, :autotune_axis), do: :autotune_axis_roll
+  def decode(0b10, :autotune_axis), do: :autotune_axis_pitch
+  def decode(0b100, :autotune_axis), do: :autotune_axis_yaw
   def decode(0b1, :camera_cap_flags), do: :camera_cap_flags_capture_video
   def decode(0b10, :camera_cap_flags), do: :camera_cap_flags_capture_image
   def decode(0b100, :camera_cap_flags), do: :camera_cap_flags_has_modes
@@ -21214,10 +21317,10 @@ defmodule Common do
   def decode(0, :camera_tracking_status_flags), do: :camera_tracking_status_flags_idle
   def decode(1, :camera_tracking_status_flags), do: :camera_tracking_status_flags_active
   def decode(2, :camera_tracking_status_flags), do: :camera_tracking_status_flags_error
-  def decode(0, :camera_tracking_target_data), do: :camera_tracking_target_data_none
-  def decode(1, :camera_tracking_target_data), do: :camera_tracking_target_data_embedded
-  def decode(2, :camera_tracking_target_data), do: :camera_tracking_target_data_rendered
-  def decode(4, :camera_tracking_target_data), do: :camera_tracking_target_data_in_status
+  def decode(0b0, :camera_tracking_target_data), do: :camera_tracking_target_data_none
+  def decode(0b1, :camera_tracking_target_data), do: :camera_tracking_target_data_embedded
+  def decode(0b10, :camera_tracking_target_data), do: :camera_tracking_target_data_rendered
+  def decode(0b100, :camera_tracking_target_data), do: :camera_tracking_target_data_in_status
   def decode(0, :camera_zoom_type), do: :zoom_type_step
   def decode(1, :camera_zoom_type), do: :zoom_type_continuous
   def decode(2, :camera_zoom_type), do: :zoom_type_range
@@ -21264,14 +21367,14 @@ defmodule Common do
   def decode(3, :esc_connection_type), do: :esc_connection_type_i2c
   def decode(4, :esc_connection_type), do: :esc_connection_type_can
   def decode(5, :esc_connection_type), do: :esc_connection_type_dshot
-  def decode(0, :esc_failure_flags), do: :esc_failure_none
-  def decode(1, :esc_failure_flags), do: :esc_failure_over_current
-  def decode(2, :esc_failure_flags), do: :esc_failure_over_voltage
-  def decode(4, :esc_failure_flags), do: :esc_failure_over_temperature
-  def decode(8, :esc_failure_flags), do: :esc_failure_over_rpm
-  def decode(16, :esc_failure_flags), do: :esc_failure_inconsistent_cmd
-  def decode(32, :esc_failure_flags), do: :esc_failure_motor_stuck
-  def decode(64, :esc_failure_flags), do: :esc_failure_generic
+  def decode(0b0, :esc_failure_flags), do: :esc_failure_none
+  def decode(0b1, :esc_failure_flags), do: :esc_failure_over_current
+  def decode(0b10, :esc_failure_flags), do: :esc_failure_over_voltage
+  def decode(0b100, :esc_failure_flags), do: :esc_failure_over_temperature
+  def decode(0b1000, :esc_failure_flags), do: :esc_failure_over_rpm
+  def decode(0b10000, :esc_failure_flags), do: :esc_failure_inconsistent_cmd
+  def decode(0b100000, :esc_failure_flags), do: :esc_failure_motor_stuck
+  def decode(0b1000000, :esc_failure_flags), do: :esc_failure_generic
   def decode(0b1, :estimator_status_flags), do: :estimator_attitude
   def decode(0b10, :estimator_status_flags), do: :estimator_velocity_horiz
   def decode(0b100, :estimator_status_flags), do: :estimator_velocity_vert
@@ -21374,28 +21477,34 @@ defmodule Common do
 
   def decode(0b100000000, :gimbal_device_flags), do: :gimbal_device_flags_rc_exclusive
   def decode(0b1000000000, :gimbal_device_flags), do: :gimbal_device_flags_rc_mixed
-  def decode(1, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_retract
-  def decode(2, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_neutral
-  def decode(4, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_axis
-  def decode(8, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_follow
-  def decode(16, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_lock
-  def decode(32, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_axis
-  def decode(64, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_follow
-  def decode(128, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_lock
-  def decode(256, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_yaw_axis
-  def decode(512, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_yaw_follow
-  def decode(1024, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_yaw_lock
-  def decode(2048, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_supports_infinite_yaw
+  def decode(0b1, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_retract
+  def decode(0b10, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_neutral
+  def decode(0b100, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_axis
+  def decode(0b1000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_follow
+  def decode(0b10000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_roll_lock
+  def decode(0b100000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_axis
+  def decode(0b1000000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_follow
+  def decode(0b10000000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_pitch_lock
+  def decode(0b100000000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_yaw_axis
 
-  def decode(4096, :gimbal_manager_cap_flags),
+  def decode(0b1000000000, :gimbal_manager_cap_flags),
+    do: :gimbal_manager_cap_flags_has_yaw_follow
+
+  def decode(0b10000000000, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_yaw_lock
+
+  def decode(0b100000000000, :gimbal_manager_cap_flags),
+    do: :gimbal_manager_cap_flags_supports_infinite_yaw
+
+  def decode(0b1000000000000, :gimbal_manager_cap_flags),
     do: :gimbal_manager_cap_flags_supports_yaw_in_earth_frame
 
-  def decode(8192, :gimbal_manager_cap_flags), do: :gimbal_manager_cap_flags_has_rc_inputs
+  def decode(0b10000000000000, :gimbal_manager_cap_flags),
+    do: :gimbal_manager_cap_flags_has_rc_inputs
 
-  def decode(65536, :gimbal_manager_cap_flags),
+  def decode(0b10000000000000000, :gimbal_manager_cap_flags),
     do: :gimbal_manager_cap_flags_can_point_location_local
 
-  def decode(131_072, :gimbal_manager_cap_flags),
+  def decode(0b100000000000000000, :gimbal_manager_cap_flags),
     do: :gimbal_manager_cap_flags_can_point_location_global
 
   def decode(0b1, :gimbal_manager_flags), do: :gimbal_manager_flags_retract
@@ -21430,36 +21539,39 @@ defmodule Common do
   def decode(0b10000000, :gps_input_ignore_flags), do: :gps_input_ignore_flag_vertical_accuracy
   def decode(0, :gripper_actions), do: :gripper_action_release
   def decode(1, :gripper_actions), do: :gripper_action_grab
-  def decode(0, :highres_imu_updated_flags), do: :highres_imu_updated_none
-  def decode(1, :highres_imu_updated_flags), do: :highres_imu_updated_xacc
-  def decode(2, :highres_imu_updated_flags), do: :highres_imu_updated_yacc
-  def decode(4, :highres_imu_updated_flags), do: :highres_imu_updated_zacc
-  def decode(8, :highres_imu_updated_flags), do: :highres_imu_updated_xgyro
-  def decode(16, :highres_imu_updated_flags), do: :highres_imu_updated_ygyro
-  def decode(32, :highres_imu_updated_flags), do: :highres_imu_updated_zgyro
-  def decode(64, :highres_imu_updated_flags), do: :highres_imu_updated_xmag
-  def decode(128, :highres_imu_updated_flags), do: :highres_imu_updated_ymag
-  def decode(256, :highres_imu_updated_flags), do: :highres_imu_updated_zmag
-  def decode(512, :highres_imu_updated_flags), do: :highres_imu_updated_abs_pressure
-  def decode(1024, :highres_imu_updated_flags), do: :highres_imu_updated_diff_pressure
-  def decode(2048, :highres_imu_updated_flags), do: :highres_imu_updated_pressure_alt
-  def decode(4096, :highres_imu_updated_flags), do: :highres_imu_updated_temperature
-  def decode(65535, :highres_imu_updated_flags), do: :highres_imu_updated_all
-  def decode(0, :hil_sensor_updated_flags), do: :hil_sensor_updated_none
-  def decode(1, :hil_sensor_updated_flags), do: :hil_sensor_updated_xacc
-  def decode(2, :hil_sensor_updated_flags), do: :hil_sensor_updated_yacc
-  def decode(4, :hil_sensor_updated_flags), do: :hil_sensor_updated_zacc
-  def decode(8, :hil_sensor_updated_flags), do: :hil_sensor_updated_xgyro
-  def decode(16, :hil_sensor_updated_flags), do: :hil_sensor_updated_ygyro
-  def decode(32, :hil_sensor_updated_flags), do: :hil_sensor_updated_zgyro
-  def decode(64, :hil_sensor_updated_flags), do: :hil_sensor_updated_xmag
-  def decode(128, :hil_sensor_updated_flags), do: :hil_sensor_updated_ymag
-  def decode(256, :hil_sensor_updated_flags), do: :hil_sensor_updated_zmag
-  def decode(512, :hil_sensor_updated_flags), do: :hil_sensor_updated_abs_pressure
-  def decode(1024, :hil_sensor_updated_flags), do: :hil_sensor_updated_diff_pressure
-  def decode(2048, :hil_sensor_updated_flags), do: :hil_sensor_updated_pressure_alt
-  def decode(4096, :hil_sensor_updated_flags), do: :hil_sensor_updated_temperature
-  def decode(2_147_483_648, :hil_sensor_updated_flags), do: :hil_sensor_updated_reset
+  def decode(0b0, :highres_imu_updated_flags), do: :highres_imu_updated_none
+  def decode(0b1, :highres_imu_updated_flags), do: :highres_imu_updated_xacc
+  def decode(0b10, :highres_imu_updated_flags), do: :highres_imu_updated_yacc
+  def decode(0b100, :highres_imu_updated_flags), do: :highres_imu_updated_zacc
+  def decode(0b1000, :highres_imu_updated_flags), do: :highres_imu_updated_xgyro
+  def decode(0b10000, :highres_imu_updated_flags), do: :highres_imu_updated_ygyro
+  def decode(0b100000, :highres_imu_updated_flags), do: :highres_imu_updated_zgyro
+  def decode(0b1000000, :highres_imu_updated_flags), do: :highres_imu_updated_xmag
+  def decode(0b10000000, :highres_imu_updated_flags), do: :highres_imu_updated_ymag
+  def decode(0b100000000, :highres_imu_updated_flags), do: :highres_imu_updated_zmag
+  def decode(0b1000000000, :highres_imu_updated_flags), do: :highres_imu_updated_abs_pressure
+  def decode(0b10000000000, :highres_imu_updated_flags), do: :highres_imu_updated_diff_pressure
+  def decode(0b100000000000, :highres_imu_updated_flags), do: :highres_imu_updated_pressure_alt
+  def decode(0b1000000000000, :highres_imu_updated_flags), do: :highres_imu_updated_temperature
+  def decode(0b1111111111111111, :highres_imu_updated_flags), do: :highres_imu_updated_all
+  def decode(0b0, :hil_sensor_updated_flags), do: :hil_sensor_updated_none
+  def decode(0b1, :hil_sensor_updated_flags), do: :hil_sensor_updated_xacc
+  def decode(0b10, :hil_sensor_updated_flags), do: :hil_sensor_updated_yacc
+  def decode(0b100, :hil_sensor_updated_flags), do: :hil_sensor_updated_zacc
+  def decode(0b1000, :hil_sensor_updated_flags), do: :hil_sensor_updated_xgyro
+  def decode(0b10000, :hil_sensor_updated_flags), do: :hil_sensor_updated_ygyro
+  def decode(0b100000, :hil_sensor_updated_flags), do: :hil_sensor_updated_zgyro
+  def decode(0b1000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_xmag
+  def decode(0b10000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_ymag
+  def decode(0b100000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_zmag
+  def decode(0b1000000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_abs_pressure
+  def decode(0b10000000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_diff_pressure
+  def decode(0b100000000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_pressure_alt
+  def decode(0b1000000000000, :hil_sensor_updated_flags), do: :hil_sensor_updated_temperature
+
+  def decode(0b10000000000000000000000000000000, :hil_sensor_updated_flags),
+    do: :hil_sensor_updated_reset
+
   def decode(0b1, :hl_failure_flag), do: :hl_failure_flag_gps
   def decode(0b10, :hl_failure_flag), do: :hl_failure_flag_differential_pressure
   def decode(0b100, :hl_failure_flag), do: :hl_failure_flag_absolute_pressure
@@ -21872,7 +21984,7 @@ defmodule Common do
   def decode(2, :mav_distance_sensor), do: :mav_distance_sensor_infrared
   def decode(3, :mav_distance_sensor), do: :mav_distance_sensor_radar
   def decode(4, :mav_distance_sensor), do: :mav_distance_sensor_unknown
-  def decode(1, :mav_do_reposition_flags), do: :mav_do_reposition_flags_change_mode
+  def decode(0b1, :mav_do_reposition_flags), do: :mav_do_reposition_flags_change_mode
   def decode(0, :mav_estimator_type), do: :mav_estimator_type_unknown
   def decode(1, :mav_estimator_type), do: :mav_estimator_type_naive
   def decode(2, :mav_estimator_type), do: :mav_estimator_type_vision
@@ -22364,7 +22476,7 @@ defmodule Common do
   def decode(0b10000000000000000000000000000000, :mav_sys_status_sensor),
     do: :mav_sys_status_extension_used
 
-  def decode(1, :mav_sys_status_sensor_extended), do: :mav_sys_status_recovery_system
+  def decode(0b1, :mav_sys_status_sensor_extended), do: :mav_sys_status_recovery_system
   def decode(0, :mav_tunnel_payload_type), do: :mav_tunnel_payload_type_unknown
   def decode(200, :mav_tunnel_payload_type), do: :mav_tunnel_payload_type_storm32_reserved0
   def decode(201, :mav_tunnel_payload_type), do: :mav_tunnel_payload_type_storm32_reserved1
@@ -22573,8 +22685,8 @@ defmodule Common do
   def decode(3, :utm_flight_state), do: :utm_flight_state_airborne
   def decode(16, :utm_flight_state), do: :utm_flight_state_emergency
   def decode(32, :utm_flight_state), do: :utm_flight_state_noctrl
-  def decode(1, :video_stream_status_flags), do: :video_stream_status_flags_running
-  def decode(2, :video_stream_status_flags), do: :video_stream_status_flags_thermal
+  def decode(0b1, :video_stream_status_flags), do: :video_stream_status_flags_running
+  def decode(0b10, :video_stream_status_flags), do: :video_stream_status_flags_thermal
   def decode(0, :video_stream_type), do: :video_stream_type_rtsp
   def decode(1, :video_stream_type), do: :video_stream_type_rtpudp
   def decode(2, :video_stream_type), do: :video_stream_type_tcp_mpeg
@@ -22864,15 +22976,34 @@ defmodule Common do
     end
   end
 
-  @doc "Unpack a MAVLink message given a MAVLink frame's message id and payload"
-  @spec unpack(XMAVLink.Types.message_id(), binary) ::
-          Common.Types.message() | {:error, :unknown_message}
+  @doc "Unpack a MAVLink message given a MAVLink frame's message id, version, and payload"
+  @spec unpack(XMAVLink.Types.message_id(), XMAVLink.Types.version(), binary) ::
+          {:ok, Common.Types.message()} | {:error, :unknown_message}
   def unpack(
         0,
-        _,
+        1,
         <<custom_mode_f::little-integer-size(32), type_f::integer-size(8),
           autopilot_f::integer-size(8), base_mode_f::integer-size(8),
           system_status_f::integer-size(8), mavlink_version_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Heartbeat{
+           custom_mode: custom_mode_f,
+           type: decode(type_f, :mav_type),
+           autopilot: decode(autopilot_f, :mav_autopilot),
+           base_mode: unpack_bitmask(base_mode_f, :mav_mode_flag, &decode/2),
+           system_status: decode(system_status_f, :mav_state),
+           mavlink_version: mavlink_version_f
+         }}
+
+  def unpack(
+        0,
+        2,
+        <<custom_mode_f::little-integer-size(32), type_f::integer-size(8),
+          autopilot_f::integer-size(8), base_mode_f::integer-size(8),
+          system_status_f::integer-size(8), mavlink_version_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -22933,7 +23064,8 @@ defmodule Common do
           battery_remaining_f::signed-integer-size(8),
           onboard_control_sensors_present_extended_f::little-integer-size(32),
           onboard_control_sensors_enabled_extended_f::little-integer-size(32),
-          onboard_control_sensors_health_extended_f::little-integer-size(32)>>
+          onboard_control_sensors_health_extended_f::little-integer-size(32),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -22976,7 +23108,7 @@ defmodule Common do
 
   def unpack(
         2,
-        _,
+        1,
         <<time_unix_usec_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32)>>
       ),
       do:
@@ -22987,8 +23119,21 @@ defmodule Common do
          }}
 
   def unpack(
+        2,
+        2,
+        <<time_unix_usec_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SystemTime{
+           time_unix_usec: time_unix_usec_f,
+           time_boot_ms: time_boot_ms_f
+         }}
+
+  def unpack(
         4,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), seq_f::little-integer-size(32),
           target_system_f::integer-size(8), target_component_f::integer-size(8)>>
       ),
@@ -23002,8 +23147,24 @@ defmodule Common do
          }}
 
   def unpack(
+        4,
+        2,
+        <<time_usec_f::little-integer-size(64), seq_f::little-integer-size(32),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Ping{
+           time_usec: time_usec_f,
+           seq: seq_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         5,
-        _,
+        1,
         <<target_system_f::integer-size(8), control_request_f::integer-size(8),
           version_f::integer-size(8), passkey_f::binary-size(25)>>
       ),
@@ -23017,8 +23178,24 @@ defmodule Common do
          }}
 
   def unpack(
+        5,
+        2,
+        <<target_system_f::integer-size(8), control_request_f::integer-size(8),
+          version_f::integer-size(8), passkey_f::binary-size(25),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ChangeOperatorControl{
+           target_system: target_system_f,
+           control_request: control_request_f,
+           version: version_f,
+           passkey: replace_trailing(passkey_f, <<0>>, "")
+         }}
+
+  def unpack(
         6,
-        _,
+        1,
         <<gcs_system_id_f::integer-size(8), control_request_f::integer-size(8),
           ack_f::integer-size(8)>>
       ),
@@ -23030,12 +23207,29 @@ defmodule Common do
            ack: ack_f
          }}
 
-  def unpack(7, _, <<key_f::binary-size(32)>>),
+  def unpack(
+        6,
+        2,
+        <<gcs_system_id_f::integer-size(8), control_request_f::integer-size(8),
+          ack_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ChangeOperatorControlAck{
+           gcs_system_id: gcs_system_id_f,
+           control_request: control_request_f,
+           ack: ack_f
+         }}
+
+  def unpack(7, 1, <<key_f::binary-size(32)>>),
+    do: {:ok, %Common.Message.AuthKey{key: replace_trailing(key_f, <<0>>, "")}}
+
+  def unpack(7, 2, <<key_f::binary-size(32), _future_extension_fields::binary>>),
     do: {:ok, %Common.Message.AuthKey{key: replace_trailing(key_f, <<0>>, "")}}
 
   def unpack(
         8,
-        _,
+        1,
         <<timestamp_f::little-integer-size(64), tx_rate_f::little-integer-size(32),
           rx_rate_f::little-integer-size(32), messages_sent_f::little-integer-size(32),
           messages_received_f::little-integer-size(32), messages_lost_f::little-integer-size(32),
@@ -23060,8 +23254,34 @@ defmodule Common do
          }}
 
   def unpack(
+        8,
+        2,
+        <<timestamp_f::little-integer-size(64), tx_rate_f::little-integer-size(32),
+          rx_rate_f::little-integer-size(32), messages_sent_f::little-integer-size(32),
+          messages_received_f::little-integer-size(32), messages_lost_f::little-integer-size(32),
+          rx_parse_err_f::little-integer-size(16), tx_overflows_f::little-integer-size(16),
+          rx_overflows_f::little-integer-size(16), tx_buf_f::integer-size(8),
+          rx_buf_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LinkNodeStatus{
+           timestamp: timestamp_f,
+           tx_rate: tx_rate_f,
+           rx_rate: rx_rate_f,
+           messages_sent: messages_sent_f,
+           messages_received: messages_received_f,
+           messages_lost: messages_lost_f,
+           rx_parse_err: rx_parse_err_f,
+           tx_overflows: tx_overflows_f,
+           rx_overflows: rx_overflows_f,
+           tx_buf: tx_buf_f,
+           rx_buf: rx_buf_f
+         }}
+
+  def unpack(
         11,
-        _,
+        1,
         <<custom_mode_f::little-integer-size(32), target_system_f::integer-size(8),
           base_mode_f::integer-size(8)>>
       ),
@@ -23074,8 +23294,22 @@ defmodule Common do
          }}
 
   def unpack(
+        11,
+        2,
+        <<custom_mode_f::little-integer-size(32), target_system_f::integer-size(8),
+          base_mode_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SetMode{
+           custom_mode: custom_mode_f,
+           target_system: target_system_f,
+           base_mode: decode(base_mode_f, :mav_mode)
+         }}
+
+  def unpack(
         20,
-        _,
+        1,
         <<param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), param_id_f::binary-size(16)>>
       ),
@@ -23088,7 +23322,23 @@ defmodule Common do
            param_id: replace_trailing(param_id_f, <<0>>, "")
          }}
 
-  def unpack(21, _, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
+  def unpack(
+        20,
+        2,
+        <<param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), param_id_f::binary-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamRequestRead{
+           param_index: param_index_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           param_id: replace_trailing(param_id_f, <<0>>, "")
+         }}
+
+  def unpack(21, 1, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.ParamRequestList{
@@ -23097,8 +23347,21 @@ defmodule Common do
        }}
 
   def unpack(
+        21,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamRequestList{
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         22,
-        _,
+        1,
         <<param_value_f::binary-size(4), param_count_f::little-integer-size(16),
           param_index_f::little-integer-size(16), param_id_f::binary-size(16),
           param_type_f::integer-size(8)>>
@@ -23114,11 +23377,45 @@ defmodule Common do
          }}
 
   def unpack(
+        22,
+        2,
+        <<param_value_f::binary-size(4), param_count_f::little-integer-size(16),
+          param_index_f::little-integer-size(16), param_id_f::binary-size(16),
+          param_type_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamValue{
+           param_value: unpack_float(param_value_f),
+           param_count: param_count_f,
+           param_index: param_index_f,
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           param_type: decode(param_type_f, :mav_param_type)
+         }}
+
+  def unpack(
         23,
-        _,
+        1,
         <<param_value_f::binary-size(4), target_system_f::integer-size(8),
           target_component_f::integer-size(8), param_id_f::binary-size(16),
           param_type_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamSet{
+           param_value: unpack_float(param_value_f),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           param_type: decode(param_type_f, :mav_param_type)
+         }}
+
+  def unpack(
+        23,
+        2,
+        <<param_value_f::binary-size(4), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), param_id_f::binary-size(16),
+          param_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23164,7 +23461,8 @@ defmodule Common do
           fix_type_f::integer-size(8), satellites_visible_f::integer-size(8),
           alt_ellipsoid_f::little-signed-integer-size(32), h_acc_f::little-integer-size(32),
           v_acc_f::little-integer-size(32), vel_acc_f::little-integer-size(32),
-          hdg_acc_f::little-integer-size(32), yaw_f::little-integer-size(16)>>
+          hdg_acc_f::little-integer-size(32), yaw_f::little-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23189,10 +23487,44 @@ defmodule Common do
 
   def unpack(
         25,
-        _,
+        1,
         <<satellites_visible_f::integer-size(8), satellite_prn_f::binary-size(20),
           satellite_used_f::binary-size(20), satellite_elevation_f::binary-size(20),
           satellite_azimuth_f::binary-size(20), satellite_snr_f::binary-size(20)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GpsStatus{
+           satellites_visible: satellites_visible_f,
+           satellite_prn:
+             unpack_array(satellite_prn_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           satellite_used:
+             unpack_array(satellite_used_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           satellite_elevation:
+             unpack_array(satellite_elevation_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           satellite_azimuth:
+             unpack_array(satellite_azimuth_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           satellite_snr:
+             unpack_array(satellite_snr_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
+        25,
+        2,
+        <<satellites_visible_f::integer-size(8), satellite_prn_f::binary-size(20),
+          satellite_used_f::binary-size(20), satellite_elevation_f::binary-size(20),
+          satellite_azimuth_f::binary-size(20), satellite_snr_f::binary-size(20),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23252,7 +23584,7 @@ defmodule Common do
           xgyro_f::little-signed-integer-size(16), ygyro_f::little-signed-integer-size(16),
           zgyro_f::little-signed-integer-size(16), xmag_f::little-signed-integer-size(16),
           ymag_f::little-signed-integer-size(16), zmag_f::little-signed-integer-size(16),
-          temperature_f::little-signed-integer-size(16)>>
+          temperature_f::little-signed-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23302,7 +23634,8 @@ defmodule Common do
           xgyro_f::little-signed-integer-size(16), ygyro_f::little-signed-integer-size(16),
           zgyro_f::little-signed-integer-size(16), xmag_f::little-signed-integer-size(16),
           ymag_f::little-signed-integer-size(16), zmag_f::little-signed-integer-size(16),
-          id_f::integer-size(8), temperature_f::little-signed-integer-size(16)>>
+          id_f::integer-size(8), temperature_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23323,11 +23656,29 @@ defmodule Common do
 
   def unpack(
         28,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), press_abs_f::little-signed-integer-size(16),
           press_diff1_f::little-signed-integer-size(16),
           press_diff2_f::little-signed-integer-size(16),
           temperature_f::little-signed-integer-size(16)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RawPressure{
+           time_usec: time_usec_f,
+           press_abs: press_abs_f,
+           press_diff1: press_diff1_f,
+           press_diff2: press_diff2_f,
+           temperature: temperature_f
+         }}
+
+  def unpack(
+        28,
+        2,
+        <<time_usec_f::little-integer-size(64), press_abs_f::little-signed-integer-size(16),
+          press_diff1_f::little-signed-integer-size(16),
+          press_diff2_f::little-signed-integer-size(16),
+          temperature_f::little-signed-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23359,7 +23710,8 @@ defmodule Common do
         2,
         <<time_boot_ms_f::little-integer-size(32), press_abs_f::binary-size(4),
           press_diff_f::binary-size(4), temperature_f::little-signed-integer-size(16),
-          temperature_press_diff_f::little-signed-integer-size(16)>>
+          temperature_press_diff_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23373,10 +23725,30 @@ defmodule Common do
 
   def unpack(
         30,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), roll_f::binary-size(4),
           pitch_f::binary-size(4), yaw_f::binary-size(4), rollspeed_f::binary-size(4),
           pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Attitude{
+           time_boot_ms: time_boot_ms_f,
+           roll: unpack_float(roll_f),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f),
+           rollspeed: unpack_float(rollspeed_f),
+           pitchspeed: unpack_float(pitchspeed_f),
+           yawspeed: unpack_float(yawspeed_f)
+         }}
+
+  def unpack(
+        30,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), roll_f::binary-size(4),
+          pitch_f::binary-size(4), yaw_f::binary-size(4), rollspeed_f::binary-size(4),
+          pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23416,7 +23788,7 @@ defmodule Common do
         <<time_boot_ms_f::little-integer-size(32), q1_f::binary-size(4), q2_f::binary-size(4),
           q3_f::binary-size(4), q4_f::binary-size(4), rollspeed_f::binary-size(4),
           pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4),
-          repr_offset_q_f::binary-size(16)>>
+          repr_offset_q_f::binary-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23437,7 +23809,7 @@ defmodule Common do
 
   def unpack(
         32,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4)>>
       ),
@@ -23454,8 +23826,27 @@ defmodule Common do
          }}
 
   def unpack(
+        32,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LocalPositionNed{
+           time_boot_ms: time_boot_ms_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f)
+         }}
+
+  def unpack(
         33,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
           relative_alt_f::little-signed-integer-size(32), vx_f::little-signed-integer-size(16),
@@ -23477,8 +23868,31 @@ defmodule Common do
          }}
 
   def unpack(
+        33,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
+          relative_alt_f::little-signed-integer-size(32), vx_f::little-signed-integer-size(16),
+          vy_f::little-signed-integer-size(16), vz_f::little-signed-integer-size(16),
+          hdg_f::little-integer-size(16), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GlobalPositionInt{
+           time_boot_ms: time_boot_ms_f,
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           relative_alt: relative_alt_f,
+           vx: vx_f,
+           vy: vy_f,
+           vz: vz_f,
+           hdg: hdg_f
+         }}
+
+  def unpack(
         34,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), chan1_scaled_f::little-signed-integer-size(16),
           chan2_scaled_f::little-signed-integer-size(16),
           chan3_scaled_f::little-signed-integer-size(16),
@@ -23506,13 +23920,68 @@ defmodule Common do
          }}
 
   def unpack(
+        34,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), chan1_scaled_f::little-signed-integer-size(16),
+          chan2_scaled_f::little-signed-integer-size(16),
+          chan3_scaled_f::little-signed-integer-size(16),
+          chan4_scaled_f::little-signed-integer-size(16),
+          chan5_scaled_f::little-signed-integer-size(16),
+          chan6_scaled_f::little-signed-integer-size(16),
+          chan7_scaled_f::little-signed-integer-size(16),
+          chan8_scaled_f::little-signed-integer-size(16), port_f::integer-size(8),
+          rssi_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RcChannelsScaled{
+           time_boot_ms: time_boot_ms_f,
+           chan1_scaled: chan1_scaled_f,
+           chan2_scaled: chan2_scaled_f,
+           chan3_scaled: chan3_scaled_f,
+           chan4_scaled: chan4_scaled_f,
+           chan5_scaled: chan5_scaled_f,
+           chan6_scaled: chan6_scaled_f,
+           chan7_scaled: chan7_scaled_f,
+           chan8_scaled: chan8_scaled_f,
+           port: port_f,
+           rssi: rssi_f
+         }}
+
+  def unpack(
         35,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), chan1_raw_f::little-integer-size(16),
           chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
           chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
           chan6_raw_f::little-integer-size(16), chan7_raw_f::little-integer-size(16),
           chan8_raw_f::little-integer-size(16), port_f::integer-size(8), rssi_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RcChannelsRaw{
+           time_boot_ms: time_boot_ms_f,
+           chan1_raw: chan1_raw_f,
+           chan2_raw: chan2_raw_f,
+           chan3_raw: chan3_raw_f,
+           chan4_raw: chan4_raw_f,
+           chan5_raw: chan5_raw_f,
+           chan6_raw: chan6_raw_f,
+           chan7_raw: chan7_raw_f,
+           chan8_raw: chan8_raw_f,
+           port: port_f,
+           rssi: rssi_f
+         }}
+
+  def unpack(
+        35,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), chan1_raw_f::little-integer-size(16),
+          chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
+          chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
+          chan6_raw_f::little-integer-size(16), chan7_raw_f::little-integer-size(16),
+          chan8_raw_f::little-integer-size(16), port_f::integer-size(8), rssi_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23565,7 +24034,8 @@ defmodule Common do
           servo9_raw_f::little-integer-size(16), servo10_raw_f::little-integer-size(16),
           servo11_raw_f::little-integer-size(16), servo12_raw_f::little-integer-size(16),
           servo13_raw_f::little-integer-size(16), servo14_raw_f::little-integer-size(16),
-          servo15_raw_f::little-integer-size(16), servo16_raw_f::little-integer-size(16)>>
+          servo15_raw_f::little-integer-size(16), servo16_raw_f::little-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23611,7 +24081,8 @@ defmodule Common do
         2,
         <<start_index_f::little-signed-integer-size(16),
           end_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
-          target_component_f::integer-size(8), mission_type_f::integer-size(8)>>
+          target_component_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23644,7 +24115,8 @@ defmodule Common do
         2,
         <<start_index_f::little-signed-integer-size(16),
           end_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
-          target_component_f::integer-size(8), mission_type_f::integer-size(8)>>
+          target_component_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23692,7 +24164,7 @@ defmodule Common do
           seq_f::little-integer-size(16), command_f::little-integer-size(16),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
           frame_f::integer-size(8), current_f::integer-size(8), autocontinue_f::integer-size(8),
-          mission_type_f::integer-size(8)>>
+          mission_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23732,7 +24204,8 @@ defmodule Common do
         40,
         2,
         <<seq_f::little-integer-size(16), target_system_f::integer-size(8),
-          target_component_f::integer-size(8), mission_type_f::integer-size(8)>>
+          target_component_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23745,9 +24218,23 @@ defmodule Common do
 
   def unpack(
         41,
-        _,
+        1,
         <<seq_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.MissionSetCurrent{
+           seq: seq_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
+        41,
+        2,
+        <<seq_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23764,7 +24251,8 @@ defmodule Common do
         42,
         2,
         <<seq_f::little-integer-size(16), total_f::little-integer-size(16),
-          mission_state_f::integer-size(8), mission_mode_f::integer-size(8)>>
+          mission_state_f::integer-size(8), mission_mode_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23787,7 +24275,7 @@ defmodule Common do
         43,
         2,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
-          mission_type_f::integer-size(8)>>
+          mission_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23815,7 +24303,8 @@ defmodule Common do
         44,
         2,
         <<count_f::little-integer-size(16), target_system_f::integer-size(8),
-          target_component_f::integer-size(8), mission_type_f::integer-size(8)>>
+          target_component_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23838,7 +24327,7 @@ defmodule Common do
         45,
         2,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
-          mission_type_f::integer-size(8)>>
+          mission_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23848,7 +24337,10 @@ defmodule Common do
            mission_type: decode(mission_type_f, :mav_mission_type)
          }}
 
-  def unpack(46, _, <<seq_f::little-integer-size(16)>>),
+  def unpack(46, 1, <<seq_f::little-integer-size(16)>>),
+    do: {:ok, %Common.Message.MissionItemReached{seq: seq_f}}
+
+  def unpack(46, 2, <<seq_f::little-integer-size(16), _future_extension_fields::binary>>),
     do: {:ok, %Common.Message.MissionItemReached{seq: seq_f}}
 
   def unpack(
@@ -23869,7 +24361,8 @@ defmodule Common do
         47,
         2,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
-          type_f::integer-size(8), mission_type_f::integer-size(8)>>
+          type_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23900,7 +24393,7 @@ defmodule Common do
         2,
         <<latitude_f::little-signed-integer-size(32), longitude_f::little-signed-integer-size(32),
           altitude_f::little-signed-integer-size(32), target_system_f::integer-size(8),
-          time_usec_f::little-integer-size(64)>>
+          time_usec_f::little-integer-size(64), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23930,7 +24423,8 @@ defmodule Common do
         49,
         2,
         <<latitude_f::little-signed-integer-size(32), longitude_f::little-signed-integer-size(32),
-          altitude_f::little-signed-integer-size(32), time_usec_f::little-integer-size(64)>>
+          altitude_f::little-signed-integer-size(32), time_usec_f::little-integer-size(64),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23943,12 +24437,35 @@ defmodule Common do
 
   def unpack(
         50,
-        _,
+        1,
         <<param_value0_f::binary-size(4), scale_f::binary-size(4),
           param_value_min_f::binary-size(4), param_value_max_f::binary-size(4),
           param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), param_id_f::binary-size(16),
           parameter_rc_channel_index_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamMapRc{
+           param_value0: unpack_float(param_value0_f),
+           scale: unpack_float(scale_f),
+           param_value_min: unpack_float(param_value_min_f),
+           param_value_max: unpack_float(param_value_max_f),
+           param_index: param_index_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           parameter_rc_channel_index: parameter_rc_channel_index_f
+         }}
+
+  def unpack(
+        50,
+        2,
+        <<param_value0_f::binary-size(4), scale_f::binary-size(4),
+          param_value_min_f::binary-size(4), param_value_max_f::binary-size(4),
+          param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), param_id_f::binary-size(16),
+          parameter_rc_channel_index_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23982,7 +24499,8 @@ defmodule Common do
         51,
         2,
         <<seq_f::little-integer-size(16), target_system_f::integer-size(8),
-          target_component_f::integer-size(8), mission_type_f::integer-size(8)>>
+          target_component_f::integer-size(8), mission_type_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -23995,7 +24513,7 @@ defmodule Common do
 
   def unpack(
         54,
-        _,
+        1,
         <<p1x_f::binary-size(4), p1y_f::binary-size(4), p1z_f::binary-size(4),
           p2x_f::binary-size(4), p2y_f::binary-size(4), p2z_f::binary-size(4),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
@@ -24016,8 +24534,30 @@ defmodule Common do
          }}
 
   def unpack(
+        54,
+        2,
+        <<p1x_f::binary-size(4), p1y_f::binary-size(4), p1z_f::binary-size(4),
+          p2x_f::binary-size(4), p2y_f::binary-size(4), p2z_f::binary-size(4),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SafetySetAllowedArea{
+           p1x: unpack_float(p1x_f),
+           p1y: unpack_float(p1y_f),
+           p1z: unpack_float(p1z_f),
+           p2x: unpack_float(p2x_f),
+           p2y: unpack_float(p2y_f),
+           p2z: unpack_float(p2z_f),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           frame: decode(frame_f, :mav_frame)
+         }}
+
+  def unpack(
         55,
-        _,
+        1,
         <<p1x_f::binary-size(4), p1y_f::binary-size(4), p1z_f::binary-size(4),
           p2x_f::binary-size(4), p2y_f::binary-size(4), p2z_f::binary-size(4),
           frame_f::integer-size(8)>>
@@ -24035,8 +24575,27 @@ defmodule Common do
          }}
 
   def unpack(
+        55,
+        2,
+        <<p1x_f::binary-size(4), p1y_f::binary-size(4), p1z_f::binary-size(4),
+          p2x_f::binary-size(4), p2y_f::binary-size(4), p2z_f::binary-size(4),
+          frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SafetyAllowedArea{
+           p1x: unpack_float(p1x_f),
+           p1y: unpack_float(p1y_f),
+           p1z: unpack_float(p1z_f),
+           p2x: unpack_float(p2x_f),
+           p2y: unpack_float(p2y_f),
+           p2z: unpack_float(p2z_f),
+           frame: decode(frame_f, :mav_frame)
+         }}
+
+  def unpack(
         61,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), q_f::binary-size(16), rollspeed_f::binary-size(4),
           pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4),
           covariance_f::binary-size(36)>>
@@ -24056,8 +24615,29 @@ defmodule Common do
          }}
 
   def unpack(
+        61,
+        2,
+        <<time_usec_f::little-integer-size(64), q_f::binary-size(16), rollspeed_f::binary-size(4),
+          pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4), covariance_f::binary-size(36),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.AttitudeQuaternionCov{
+           time_usec: time_usec_f,
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           rollspeed: unpack_float(rollspeed_f),
+           pitchspeed: unpack_float(pitchspeed_f),
+           yawspeed: unpack_float(yawspeed_f),
+           covariance:
+             unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         62,
-        _,
+        1,
         <<nav_roll_f::binary-size(4), nav_pitch_f::binary-size(4), alt_error_f::binary-size(4),
           aspd_error_f::binary-size(4), xtrack_error_f::binary-size(4),
           nav_bearing_f::little-signed-integer-size(16),
@@ -24077,8 +24657,30 @@ defmodule Common do
          }}
 
   def unpack(
+        62,
+        2,
+        <<nav_roll_f::binary-size(4), nav_pitch_f::binary-size(4), alt_error_f::binary-size(4),
+          aspd_error_f::binary-size(4), xtrack_error_f::binary-size(4),
+          nav_bearing_f::little-signed-integer-size(16),
+          target_bearing_f::little-signed-integer-size(16), wp_dist_f::little-integer-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.NavControllerOutput{
+           nav_roll: unpack_float(nav_roll_f),
+           nav_pitch: unpack_float(nav_pitch_f),
+           alt_error: unpack_float(alt_error_f),
+           aspd_error: unpack_float(aspd_error_f),
+           xtrack_error: unpack_float(xtrack_error_f),
+           nav_bearing: nav_bearing_f,
+           target_bearing: target_bearing_f,
+           wp_dist: wp_dist_f
+         }}
+
+  def unpack(
         63,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
           relative_alt_f::little-signed-integer-size(32), vx_f::binary-size(4),
@@ -24104,8 +24706,35 @@ defmodule Common do
          }}
 
   def unpack(
+        63,
+        2,
+        <<time_usec_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
+          relative_alt_f::little-signed-integer-size(32), vx_f::binary-size(4),
+          vy_f::binary-size(4), vz_f::binary-size(4), covariance_f::binary-size(144),
+          estimator_type_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GlobalPositionIntCov{
+           time_usec: time_usec_f,
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           relative_alt: relative_alt_f,
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           covariance:
+             unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           estimator_type: decode(estimator_type_f, :mav_estimator_type)
+         }}
+
+  def unpack(
         64,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
           ax_f::binary-size(4), ay_f::binary-size(4), az_f::binary-size(4),
@@ -24132,8 +24761,37 @@ defmodule Common do
          }}
 
   def unpack(
+        64,
+        2,
+        <<time_usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
+          ax_f::binary-size(4), ay_f::binary-size(4), az_f::binary-size(4),
+          covariance_f::binary-size(180), estimator_type_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LocalPositionNedCov{
+           time_usec: time_usec_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           ax: unpack_float(ax_f),
+           ay: unpack_float(ay_f),
+           az: unpack_float(az_f),
+           covariance:
+             unpack_array(covariance_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           estimator_type: decode(estimator_type_f, :mav_estimator_type)
+         }}
+
+  def unpack(
         65,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), chan1_raw_f::little-integer-size(16),
           chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
           chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
@@ -24173,8 +24831,49 @@ defmodule Common do
          }}
 
   def unpack(
+        65,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), chan1_raw_f::little-integer-size(16),
+          chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
+          chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
+          chan6_raw_f::little-integer-size(16), chan7_raw_f::little-integer-size(16),
+          chan8_raw_f::little-integer-size(16), chan9_raw_f::little-integer-size(16),
+          chan10_raw_f::little-integer-size(16), chan11_raw_f::little-integer-size(16),
+          chan12_raw_f::little-integer-size(16), chan13_raw_f::little-integer-size(16),
+          chan14_raw_f::little-integer-size(16), chan15_raw_f::little-integer-size(16),
+          chan16_raw_f::little-integer-size(16), chan17_raw_f::little-integer-size(16),
+          chan18_raw_f::little-integer-size(16), chancount_f::integer-size(8),
+          rssi_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RcChannels{
+           time_boot_ms: time_boot_ms_f,
+           chan1_raw: chan1_raw_f,
+           chan2_raw: chan2_raw_f,
+           chan3_raw: chan3_raw_f,
+           chan4_raw: chan4_raw_f,
+           chan5_raw: chan5_raw_f,
+           chan6_raw: chan6_raw_f,
+           chan7_raw: chan7_raw_f,
+           chan8_raw: chan8_raw_f,
+           chan9_raw: chan9_raw_f,
+           chan10_raw: chan10_raw_f,
+           chan11_raw: chan11_raw_f,
+           chan12_raw: chan12_raw_f,
+           chan13_raw: chan13_raw_f,
+           chan14_raw: chan14_raw_f,
+           chan15_raw: chan15_raw_f,
+           chan16_raw: chan16_raw_f,
+           chan17_raw: chan17_raw_f,
+           chan18_raw: chan18_raw_f,
+           chancount: chancount_f,
+           rssi: rssi_f
+         }}
+
+  def unpack(
         66,
-        _,
+        1,
         <<req_message_rate_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), req_stream_id_f::integer-size(8),
           start_stop_f::integer-size(8)>>
@@ -24190,10 +24889,41 @@ defmodule Common do
          }}
 
   def unpack(
+        66,
+        2,
+        <<req_message_rate_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), req_stream_id_f::integer-size(8),
+          start_stop_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RequestDataStream{
+           req_message_rate: req_message_rate_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           req_stream_id: req_stream_id_f,
+           start_stop: start_stop_f
+         }}
+
+  def unpack(
         67,
-        _,
+        1,
         <<message_rate_f::little-integer-size(16), stream_id_f::integer-size(8),
           on_off_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.DataStream{
+           message_rate: message_rate_f,
+           stream_id: stream_id_f,
+           on_off: on_off_f
+         }}
+
+  def unpack(
+        67,
+        2,
+        <<message_rate_f::little-integer-size(16), stream_id_f::integer-size(8),
+          on_off_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24228,7 +24958,8 @@ defmodule Common do
           z_f::little-signed-integer-size(16), r_f::little-signed-integer-size(16),
           buttons_f::little-integer-size(16), target_f::integer-size(8),
           buttons2_f::little-integer-size(16), enabled_extensions_f::integer-size(8),
-          s_f::little-signed-integer-size(16), t_f::little-signed-integer-size(16)>>
+          s_f::little-signed-integer-size(16), t_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24281,7 +25012,8 @@ defmodule Common do
           chan11_raw_f::little-integer-size(16), chan12_raw_f::little-integer-size(16),
           chan13_raw_f::little-integer-size(16), chan14_raw_f::little-integer-size(16),
           chan15_raw_f::little-integer-size(16), chan16_raw_f::little-integer-size(16),
-          chan17_raw_f::little-integer-size(16), chan18_raw_f::little-integer-size(16)>>
+          chan17_raw_f::little-integer-size(16), chan18_raw_f::little-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24346,7 +25078,7 @@ defmodule Common do
           seq_f::little-integer-size(16), command_f::little-integer-size(16),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
           frame_f::integer-size(8), current_f::integer-size(8), autocontinue_f::integer-size(8),
-          mission_type_f::integer-size(8)>>
+          mission_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24370,7 +25102,7 @@ defmodule Common do
 
   def unpack(
         74,
-        _,
+        1,
         <<airspeed_f::binary-size(4), groundspeed_f::binary-size(4), alt_f::binary-size(4),
           climb_f::binary-size(4), heading_f::little-signed-integer-size(16),
           throttle_f::little-integer-size(16)>>
@@ -24387,8 +25119,26 @@ defmodule Common do
          }}
 
   def unpack(
+        74,
+        2,
+        <<airspeed_f::binary-size(4), groundspeed_f::binary-size(4), alt_f::binary-size(4),
+          climb_f::binary-size(4), heading_f::little-signed-integer-size(16),
+          throttle_f::little-integer-size(16), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.VfrHud{
+           airspeed: unpack_float(airspeed_f),
+           groundspeed: unpack_float(groundspeed_f),
+           alt: unpack_float(alt_f),
+           climb: unpack_float(climb_f),
+           heading: heading_f,
+           throttle: throttle_f
+         }}
+
+  def unpack(
         75,
-        _,
+        1,
         <<param1_f::binary-size(4), param2_f::binary-size(4), param3_f::binary-size(4),
           param4_f::binary-size(4), x_f::little-signed-integer-size(32),
           y_f::little-signed-integer-size(32), z_f::binary-size(4),
@@ -24415,13 +25165,67 @@ defmodule Common do
          }}
 
   def unpack(
+        75,
+        2,
+        <<param1_f::binary-size(4), param2_f::binary-size(4), param3_f::binary-size(4),
+          param4_f::binary-size(4), x_f::little-signed-integer-size(32),
+          y_f::little-signed-integer-size(32), z_f::binary-size(4),
+          command_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), frame_f::integer-size(8),
+          current_f::integer-size(8), autocontinue_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CommandInt{
+           param1: unpack_float(param1_f),
+           param2: unpack_float(param2_f),
+           param3: unpack_float(param3_f),
+           param4: unpack_float(param4_f),
+           x: x_f,
+           y: y_f,
+           z: unpack_float(z_f),
+           command: decode(command_f, :mav_cmd),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           frame: decode(frame_f, :mav_frame),
+           current: current_f,
+           autocontinue: autocontinue_f
+         }}
+
+  def unpack(
         76,
-        _,
+        1,
         <<param1_f::binary-size(4), param2_f::binary-size(4), param3_f::binary-size(4),
           param4_f::binary-size(4), param5_f::binary-size(4), param6_f::binary-size(4),
           param7_f::binary-size(4), command_f::little-integer-size(16),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
           confirmation_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CommandLong{
+           param1: unpack_float(param1_f),
+           param2: unpack_float(param2_f),
+           param3: unpack_float(param3_f),
+           param4: unpack_float(param4_f),
+           param5: unpack_float(param5_f),
+           param6: unpack_float(param6_f),
+           param7: unpack_float(param7_f),
+           command: decode(command_f, :mav_cmd),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           confirmation: confirmation_f
+         }}
+
+  def unpack(
+        76,
+        2,
+        <<param1_f::binary-size(4), param2_f::binary-size(4), param3_f::binary-size(4),
+          param4_f::binary-size(4), param5_f::binary-size(4), param6_f::binary-size(4),
+          param7_f::binary-size(4), command_f::little-integer-size(16),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          confirmation_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24452,7 +25256,8 @@ defmodule Common do
         2,
         <<command_f::little-integer-size(16), result_f::integer-size(8),
           progress_f::integer-size(8), result_param2_f::little-signed-integer-size(32),
-          target_system_f::integer-size(8), target_component_f::integer-size(8)>>
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24467,7 +25272,7 @@ defmodule Common do
 
   def unpack(
         80,
-        _,
+        1,
         <<command_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
       ),
@@ -24480,11 +25285,45 @@ defmodule Common do
          }}
 
   def unpack(
+        80,
+        2,
+        <<command_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CommandCancel{
+           command: decode(command_f, :mav_cmd),
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         81,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), roll_f::binary-size(4),
           pitch_f::binary-size(4), yaw_f::binary-size(4), thrust_f::binary-size(4),
           mode_switch_f::integer-size(8), manual_override_switch_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ManualSetpoint{
+           time_boot_ms: time_boot_ms_f,
+           roll: unpack_float(roll_f),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f),
+           thrust: unpack_float(thrust_f),
+           mode_switch: mode_switch_f,
+           manual_override_switch: manual_override_switch_f
+         }}
+
+  def unpack(
+        81,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), roll_f::binary-size(4),
+          pitch_f::binary-size(4), yaw_f::binary-size(4), thrust_f::binary-size(4),
+          mode_switch_f::integer-size(8), manual_override_switch_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24528,7 +25367,8 @@ defmodule Common do
           body_roll_rate_f::binary-size(4), body_pitch_rate_f::binary-size(4),
           body_yaw_rate_f::binary-size(4), thrust_f::binary-size(4),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
-          type_mask_f::integer-size(8), thrust_body_f::binary-size(12)>>
+          type_mask_f::integer-size(8), thrust_body_f::binary-size(12),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24550,7 +25390,7 @@ defmodule Common do
 
   def unpack(
         83,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), q_f::binary-size(16),
           body_roll_rate_f::binary-size(4), body_pitch_rate_f::binary-size(4),
           body_yaw_rate_f::binary-size(4), thrust_f::binary-size(4),
@@ -24569,8 +25409,28 @@ defmodule Common do
          }}
 
   def unpack(
+        83,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), q_f::binary-size(16),
+          body_roll_rate_f::binary-size(4), body_pitch_rate_f::binary-size(4),
+          body_yaw_rate_f::binary-size(4), thrust_f::binary-size(4), type_mask_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.AttitudeTarget{
+           time_boot_ms: time_boot_ms_f,
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           body_roll_rate: unpack_float(body_roll_rate_f),
+           body_pitch_rate: unpack_float(body_pitch_rate_f),
+           body_yaw_rate: unpack_float(body_yaw_rate_f),
+           thrust: unpack_float(thrust_f),
+           type_mask: unpack_bitmask(type_mask_f, :attitude_target_typemask, &decode/2)
+         }}
+
+  def unpack(
         84,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
           afx_f::binary-size(4), afy_f::binary-size(4), afz_f::binary-size(4),
@@ -24600,8 +25460,39 @@ defmodule Common do
          }}
 
   def unpack(
+        84,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
+          afx_f::binary-size(4), afy_f::binary-size(4), afz_f::binary-size(4),
+          yaw_f::binary-size(4), yaw_rate_f::binary-size(4), type_mask_f::little-integer-size(16),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          coordinate_frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SetPositionTargetLocalNed{
+           time_boot_ms: time_boot_ms_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           afx: unpack_float(afx_f),
+           afy: unpack_float(afy_f),
+           afz: unpack_float(afz_f),
+           yaw: unpack_float(yaw_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           type_mask: unpack_bitmask(type_mask_f, :position_target_typemask, &decode/2),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           coordinate_frame: decode(coordinate_frame_f, :mav_frame)
+         }}
+
+  def unpack(
         85,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
           afx_f::binary-size(4), afy_f::binary-size(4), afz_f::binary-size(4),
@@ -24628,8 +25519,36 @@ defmodule Common do
          }}
 
   def unpack(
+        85,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), vx_f::binary-size(4), vy_f::binary-size(4), vz_f::binary-size(4),
+          afx_f::binary-size(4), afy_f::binary-size(4), afz_f::binary-size(4),
+          yaw_f::binary-size(4), yaw_rate_f::binary-size(4), type_mask_f::little-integer-size(16),
+          coordinate_frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.PositionTargetLocalNed{
+           time_boot_ms: time_boot_ms_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           afx: unpack_float(afx_f),
+           afy: unpack_float(afy_f),
+           afz: unpack_float(afz_f),
+           yaw: unpack_float(yaw_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           type_mask: unpack_bitmask(type_mask_f, :position_target_typemask, &decode/2),
+           coordinate_frame: decode(coordinate_frame_f, :mav_frame)
+         }}
+
+  def unpack(
         86,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), lat_int_f::little-signed-integer-size(32),
           lon_int_f::little-signed-integer-size(32), alt_f::binary-size(4), vx_f::binary-size(4),
           vy_f::binary-size(4), vz_f::binary-size(4), afx_f::binary-size(4),
@@ -24660,8 +25579,40 @@ defmodule Common do
          }}
 
   def unpack(
+        86,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), lat_int_f::little-signed-integer-size(32),
+          lon_int_f::little-signed-integer-size(32), alt_f::binary-size(4), vx_f::binary-size(4),
+          vy_f::binary-size(4), vz_f::binary-size(4), afx_f::binary-size(4),
+          afy_f::binary-size(4), afz_f::binary-size(4), yaw_f::binary-size(4),
+          yaw_rate_f::binary-size(4), type_mask_f::little-integer-size(16),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          coordinate_frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SetPositionTargetGlobalInt{
+           time_boot_ms: time_boot_ms_f,
+           lat_int: lat_int_f,
+           lon_int: lon_int_f,
+           alt: unpack_float(alt_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           afx: unpack_float(afx_f),
+           afy: unpack_float(afy_f),
+           afz: unpack_float(afz_f),
+           yaw: unpack_float(yaw_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           type_mask: unpack_bitmask(type_mask_f, :position_target_typemask, &decode/2),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           coordinate_frame: decode(coordinate_frame_f, :mav_frame)
+         }}
+
+  def unpack(
         87,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), lat_int_f::little-signed-integer-size(32),
           lon_int_f::little-signed-integer-size(32), alt_f::binary-size(4), vx_f::binary-size(4),
           vy_f::binary-size(4), vz_f::binary-size(4), afx_f::binary-size(4),
@@ -24689,8 +25640,37 @@ defmodule Common do
          }}
 
   def unpack(
+        87,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), lat_int_f::little-signed-integer-size(32),
+          lon_int_f::little-signed-integer-size(32), alt_f::binary-size(4), vx_f::binary-size(4),
+          vy_f::binary-size(4), vz_f::binary-size(4), afx_f::binary-size(4),
+          afy_f::binary-size(4), afz_f::binary-size(4), yaw_f::binary-size(4),
+          yaw_rate_f::binary-size(4), type_mask_f::little-integer-size(16),
+          coordinate_frame_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.PositionTargetGlobalInt{
+           time_boot_ms: time_boot_ms_f,
+           lat_int: lat_int_f,
+           lon_int: lon_int_f,
+           alt: unpack_float(alt_f),
+           vx: unpack_float(vx_f),
+           vy: unpack_float(vy_f),
+           vz: unpack_float(vz_f),
+           afx: unpack_float(afx_f),
+           afy: unpack_float(afy_f),
+           afz: unpack_float(afz_f),
+           yaw: unpack_float(yaw_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           type_mask: unpack_bitmask(type_mask_f, :position_target_typemask, &decode/2),
+           coordinate_frame: decode(coordinate_frame_f, :mav_frame)
+         }}
+
+  def unpack(
         89,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), roll_f::binary-size(4), pitch_f::binary-size(4),
           yaw_f::binary-size(4)>>
@@ -24708,8 +25688,27 @@ defmodule Common do
          }}
 
   def unpack(
+        89,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), roll_f::binary-size(4), pitch_f::binary-size(4),
+          yaw_f::binary-size(4), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LocalPositionNedSystemGlobalOffset{
+           time_boot_ms: time_boot_ms_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           roll: unpack_float(roll_f),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f)
+         }}
+
+  def unpack(
         90,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), roll_f::binary-size(4), pitch_f::binary-size(4),
           yaw_f::binary-size(4), rollspeed_f::binary-size(4), pitchspeed_f::binary-size(4),
           yawspeed_f::binary-size(4), lat_f::little-signed-integer-size(32),
@@ -24740,8 +25739,41 @@ defmodule Common do
          }}
 
   def unpack(
+        90,
+        2,
+        <<time_usec_f::little-integer-size(64), roll_f::binary-size(4), pitch_f::binary-size(4),
+          yaw_f::binary-size(4), rollspeed_f::binary-size(4), pitchspeed_f::binary-size(4),
+          yawspeed_f::binary-size(4), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
+          vx_f::little-signed-integer-size(16), vy_f::little-signed-integer-size(16),
+          vz_f::little-signed-integer-size(16), xacc_f::little-signed-integer-size(16),
+          yacc_f::little-signed-integer-size(16), zacc_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilState{
+           time_usec: time_usec_f,
+           roll: unpack_float(roll_f),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f),
+           rollspeed: unpack_float(rollspeed_f),
+           pitchspeed: unpack_float(pitchspeed_f),
+           yawspeed: unpack_float(yawspeed_f),
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           vx: vx_f,
+           vy: vy_f,
+           vz: vz_f,
+           xacc: xacc_f,
+           yacc: yacc_f,
+           zacc: zacc_f
+         }}
+
+  def unpack(
         91,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), roll_ailerons_f::binary-size(4),
           pitch_elevator_f::binary-size(4), yaw_rudder_f::binary-size(4),
           throttle_f::binary-size(4), aux1_f::binary-size(4), aux2_f::binary-size(4),
@@ -24765,8 +25797,33 @@ defmodule Common do
          }}
 
   def unpack(
+        91,
+        2,
+        <<time_usec_f::little-integer-size(64), roll_ailerons_f::binary-size(4),
+          pitch_elevator_f::binary-size(4), yaw_rudder_f::binary-size(4),
+          throttle_f::binary-size(4), aux1_f::binary-size(4), aux2_f::binary-size(4),
+          aux3_f::binary-size(4), aux4_f::binary-size(4), mode_f::integer-size(8),
+          nav_mode_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilControls{
+           time_usec: time_usec_f,
+           roll_ailerons: unpack_float(roll_ailerons_f),
+           pitch_elevator: unpack_float(pitch_elevator_f),
+           yaw_rudder: unpack_float(yaw_rudder_f),
+           throttle: unpack_float(throttle_f),
+           aux1: unpack_float(aux1_f),
+           aux2: unpack_float(aux2_f),
+           aux3: unpack_float(aux3_f),
+           aux4: unpack_float(aux4_f),
+           mode: decode(mode_f, :mav_mode),
+           nav_mode: nav_mode_f
+         }}
+
+  def unpack(
         92,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), chan1_raw_f::little-integer-size(16),
           chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
           chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
@@ -24795,10 +25852,59 @@ defmodule Common do
          }}
 
   def unpack(
+        92,
+        2,
+        <<time_usec_f::little-integer-size(64), chan1_raw_f::little-integer-size(16),
+          chan2_raw_f::little-integer-size(16), chan3_raw_f::little-integer-size(16),
+          chan4_raw_f::little-integer-size(16), chan5_raw_f::little-integer-size(16),
+          chan6_raw_f::little-integer-size(16), chan7_raw_f::little-integer-size(16),
+          chan8_raw_f::little-integer-size(16), chan9_raw_f::little-integer-size(16),
+          chan10_raw_f::little-integer-size(16), chan11_raw_f::little-integer-size(16),
+          chan12_raw_f::little-integer-size(16), rssi_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilRcInputsRaw{
+           time_usec: time_usec_f,
+           chan1_raw: chan1_raw_f,
+           chan2_raw: chan2_raw_f,
+           chan3_raw: chan3_raw_f,
+           chan4_raw: chan4_raw_f,
+           chan5_raw: chan5_raw_f,
+           chan6_raw: chan6_raw_f,
+           chan7_raw: chan7_raw_f,
+           chan8_raw: chan8_raw_f,
+           chan9_raw: chan9_raw_f,
+           chan10_raw: chan10_raw_f,
+           chan11_raw: chan11_raw_f,
+           chan12_raw: chan12_raw_f,
+           rssi: rssi_f
+         }}
+
+  def unpack(
         93,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), flags_f::little-integer-size(64),
           controls_f::binary-size(64), mode_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilActuatorControls{
+           time_usec: time_usec_f,
+           flags: flags_f,
+           controls:
+             unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           mode: unpack_bitmask(mode_f, :mav_mode_flag, &decode/2)
+         }}
+
+  def unpack(
+        93,
+        2,
+        <<time_usec_f::little-integer-size(64), flags_f::little-integer-size(64),
+          controls_f::binary-size(64), mode_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24840,7 +25946,7 @@ defmodule Common do
           flow_comp_m_y_f::binary-size(4), ground_distance_f::binary-size(4),
           flow_x_f::little-signed-integer-size(16), flow_y_f::little-signed-integer-size(16),
           sensor_id_f::integer-size(8), quality_f::integer-size(8), flow_rate_x_f::binary-size(4),
-          flow_rate_y_f::binary-size(4)>>
+          flow_rate_y_f::binary-size(4), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24881,7 +25987,8 @@ defmodule Common do
         2,
         <<usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), roll_f::binary-size(4), pitch_f::binary-size(4),
-          yaw_f::binary-size(4), covariance_f::binary-size(84), reset_counter_f::integer-size(8)>>
+          yaw_f::binary-size(4), covariance_f::binary-size(84), reset_counter_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24924,7 +26031,8 @@ defmodule Common do
         2,
         <<usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), roll_f::binary-size(4), pitch_f::binary-size(4),
-          yaw_f::binary-size(4), covariance_f::binary-size(84), reset_counter_f::integer-size(8)>>
+          yaw_f::binary-size(4), covariance_f::binary-size(84), reset_counter_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -24962,7 +26070,8 @@ defmodule Common do
         103,
         2,
         <<usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
-          z_f::binary-size(4), covariance_f::binary-size(36), reset_counter_f::integer-size(8)>>
+          z_f::binary-size(4), covariance_f::binary-size(36), reset_counter_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25002,7 +26111,7 @@ defmodule Common do
         2,
         <<usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), roll_f::binary-size(4), pitch_f::binary-size(4),
-          yaw_f::binary-size(4), covariance_f::binary-size(84)>>
+          yaw_f::binary-size(4), covariance_f::binary-size(84), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25058,7 +26167,8 @@ defmodule Common do
           zgyro_f::binary-size(4), xmag_f::binary-size(4), ymag_f::binary-size(4),
           zmag_f::binary-size(4), abs_pressure_f::binary-size(4), diff_pressure_f::binary-size(4),
           pressure_alt_f::binary-size(4), temperature_f::binary-size(4),
-          fields_updated_f::little-integer-size(16), id_f::integer-size(8)>>
+          fields_updated_f::little-integer-size(16), id_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25084,13 +26194,41 @@ defmodule Common do
 
   def unpack(
         106,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), integration_time_us_f::little-integer-size(32),
           integrated_x_f::binary-size(4), integrated_y_f::binary-size(4),
           integrated_xgyro_f::binary-size(4), integrated_ygyro_f::binary-size(4),
           integrated_zgyro_f::binary-size(4), time_delta_distance_us_f::little-integer-size(32),
           distance_f::binary-size(4), temperature_f::little-signed-integer-size(16),
           sensor_id_f::integer-size(8), quality_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpticalFlowRad{
+           time_usec: time_usec_f,
+           integration_time_us: integration_time_us_f,
+           integrated_x: unpack_float(integrated_x_f),
+           integrated_y: unpack_float(integrated_y_f),
+           integrated_xgyro: unpack_float(integrated_xgyro_f),
+           integrated_ygyro: unpack_float(integrated_ygyro_f),
+           integrated_zgyro: unpack_float(integrated_zgyro_f),
+           time_delta_distance_us: time_delta_distance_us_f,
+           distance: unpack_float(distance_f),
+           temperature: temperature_f,
+           sensor_id: sensor_id_f,
+           quality: quality_f
+         }}
+
+  def unpack(
+        106,
+        2,
+        <<time_usec_f::little-integer-size(64), integration_time_us_f::little-integer-size(32),
+          integrated_x_f::binary-size(4), integrated_y_f::binary-size(4),
+          integrated_xgyro_f::binary-size(4), integrated_ygyro_f::binary-size(4),
+          integrated_zgyro_f::binary-size(4), time_delta_distance_us_f::little-integer-size(32),
+          distance_f::binary-size(4), temperature_f::little-signed-integer-size(16),
+          sensor_id_f::integer-size(8), quality_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25147,7 +26285,8 @@ defmodule Common do
           zgyro_f::binary-size(4), xmag_f::binary-size(4), ymag_f::binary-size(4),
           zmag_f::binary-size(4), abs_pressure_f::binary-size(4), diff_pressure_f::binary-size(4),
           pressure_alt_f::binary-size(4), temperature_f::binary-size(4),
-          fields_updated_f::little-integer-size(32), id_f::integer-size(8)>>
+          fields_updated_f::little-integer-size(32), id_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25217,7 +26356,7 @@ defmodule Common do
           lat_f::binary-size(4), lon_f::binary-size(4), alt_f::binary-size(4),
           std_dev_horz_f::binary-size(4), std_dev_vert_f::binary-size(4), vn_f::binary-size(4),
           ve_f::binary-size(4), vd_f::binary-size(4), lat_int_f::little-signed-integer-size(32),
-          lon_int_f::little-signed-integer-size(32)>>
+          lon_int_f::little-signed-integer-size(32), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25249,7 +26388,7 @@ defmodule Common do
 
   def unpack(
         109,
-        _,
+        1,
         <<rxerrors_f::little-integer-size(16), fixed_f::little-integer-size(16),
           rssi_f::integer-size(8), remrssi_f::integer-size(8), txbuf_f::integer-size(8),
           noise_f::integer-size(8), remnoise_f::integer-size(8)>>
@@ -25267,10 +26406,49 @@ defmodule Common do
          }}
 
   def unpack(
+        109,
+        2,
+        <<rxerrors_f::little-integer-size(16), fixed_f::little-integer-size(16),
+          rssi_f::integer-size(8), remrssi_f::integer-size(8), txbuf_f::integer-size(8),
+          noise_f::integer-size(8), remnoise_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RadioStatus{
+           rxerrors: rxerrors_f,
+           fixed: fixed_f,
+           rssi: rssi_f,
+           remrssi: remrssi_f,
+           txbuf: txbuf_f,
+           noise: noise_f,
+           remnoise: remnoise_f
+         }}
+
+  def unpack(
         110,
-        _,
+        1,
         <<target_network_f::integer-size(8), target_system_f::integer-size(8),
           target_component_f::integer-size(8), payload_f::binary-size(251)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.FileTransferProtocol{
+           target_network: target_network_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           payload:
+             unpack_array(payload_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
+        110,
+        2,
+        <<target_network_f::integer-size(8), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), payload_f::binary-size(251),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25295,7 +26473,8 @@ defmodule Common do
         111,
         2,
         <<tc1_f::little-signed-integer-size(64), ts1_f::little-signed-integer-size(64),
-          target_system_f::integer-size(8), target_component_f::integer-size(8)>>
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25306,8 +26485,16 @@ defmodule Common do
            target_component: target_component_f
          }}
 
-  def unpack(112, _, <<time_usec_f::little-integer-size(64), seq_f::little-integer-size(32)>>),
+  def unpack(112, 1, <<time_usec_f::little-integer-size(64), seq_f::little-integer-size(32)>>),
     do: {:ok, %Common.Message.CameraTrigger{time_usec: time_usec_f, seq: seq_f}}
+
+  def unpack(
+        112,
+        2,
+        <<time_usec_f::little-integer-size(64), seq_f::little-integer-size(32),
+          _future_extension_fields::binary>>
+      ),
+      do: {:ok, %Common.Message.CameraTrigger{time_usec: time_usec_f, seq: seq_f}}
 
   def unpack(
         113,
@@ -25348,7 +26535,7 @@ defmodule Common do
           ve_f::little-signed-integer-size(16), vd_f::little-signed-integer-size(16),
           cog_f::little-integer-size(16), fix_type_f::integer-size(8),
           satellites_visible_f::integer-size(8), id_f::integer-size(8),
-          yaw_f::little-integer-size(16)>>
+          yaw_f::little-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25372,7 +26559,7 @@ defmodule Common do
 
   def unpack(
         114,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), integration_time_us_f::little-integer-size(32),
           integrated_x_f::binary-size(4), integrated_y_f::binary-size(4),
           integrated_xgyro_f::binary-size(4), integrated_ygyro_f::binary-size(4),
@@ -25398,8 +26585,36 @@ defmodule Common do
          }}
 
   def unpack(
+        114,
+        2,
+        <<time_usec_f::little-integer-size(64), integration_time_us_f::little-integer-size(32),
+          integrated_x_f::binary-size(4), integrated_y_f::binary-size(4),
+          integrated_xgyro_f::binary-size(4), integrated_ygyro_f::binary-size(4),
+          integrated_zgyro_f::binary-size(4), time_delta_distance_us_f::little-integer-size(32),
+          distance_f::binary-size(4), temperature_f::little-signed-integer-size(16),
+          sensor_id_f::integer-size(8), quality_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilOpticalFlow{
+           time_usec: time_usec_f,
+           integration_time_us: integration_time_us_f,
+           integrated_x: unpack_float(integrated_x_f),
+           integrated_y: unpack_float(integrated_y_f),
+           integrated_xgyro: unpack_float(integrated_xgyro_f),
+           integrated_ygyro: unpack_float(integrated_ygyro_f),
+           integrated_zgyro: unpack_float(integrated_zgyro_f),
+           time_delta_distance_us: time_delta_distance_us_f,
+           distance: unpack_float(distance_f),
+           temperature: temperature_f,
+           sensor_id: sensor_id_f,
+           quality: quality_f
+         }}
+
+  def unpack(
         115,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), attitude_quaternion_f::binary-size(16),
           rollspeed_f::binary-size(4), pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4),
           lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
@@ -25408,6 +26623,42 @@ defmodule Common do
           ind_airspeed_f::little-integer-size(16), true_airspeed_f::little-integer-size(16),
           xacc_f::little-signed-integer-size(16), yacc_f::little-signed-integer-size(16),
           zacc_f::little-signed-integer-size(16)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HilStateQuaternion{
+           time_usec: time_usec_f,
+           attitude_quaternion:
+             unpack_array(attitude_quaternion_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           rollspeed: unpack_float(rollspeed_f),
+           pitchspeed: unpack_float(pitchspeed_f),
+           yawspeed: unpack_float(yawspeed_f),
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           vx: vx_f,
+           vy: vy_f,
+           vz: vz_f,
+           ind_airspeed: ind_airspeed_f,
+           true_airspeed: true_airspeed_f,
+           xacc: xacc_f,
+           yacc: yacc_f,
+           zacc: zacc_f
+         }}
+
+  def unpack(
+        115,
+        2,
+        <<time_usec_f::little-integer-size(64), attitude_quaternion_f::binary-size(16),
+          rollspeed_f::binary-size(4), pitchspeed_f::binary-size(4), yawspeed_f::binary-size(4),
+          lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          alt_f::little-signed-integer-size(32), vx_f::little-signed-integer-size(16),
+          vy_f::little-signed-integer-size(16), vz_f::little-signed-integer-size(16),
+          ind_airspeed_f::little-integer-size(16), true_airspeed_f::little-integer-size(16),
+          xacc_f::little-signed-integer-size(16), yacc_f::little-signed-integer-size(16),
+          zacc_f::little-signed-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25465,7 +26716,7 @@ defmodule Common do
           xgyro_f::little-signed-integer-size(16), ygyro_f::little-signed-integer-size(16),
           zgyro_f::little-signed-integer-size(16), xmag_f::little-signed-integer-size(16),
           ymag_f::little-signed-integer-size(16), zmag_f::little-signed-integer-size(16),
-          temperature_f::little-signed-integer-size(16)>>
+          temperature_f::little-signed-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25485,7 +26736,7 @@ defmodule Common do
 
   def unpack(
         117,
-        _,
+        1,
         <<start_f::little-integer-size(16), end_f::little-integer-size(16),
           target_system_f::integer-size(8), target_component_f::integer-size(8)>>
       ),
@@ -25499,8 +26750,24 @@ defmodule Common do
          }}
 
   def unpack(
+        117,
+        2,
+        <<start_f::little-integer-size(16), end_f::little-integer-size(16),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogRequestList{
+           start: start_f,
+           end: end_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         118,
-        _,
+        1,
         <<time_utc_f::little-integer-size(32), size_f::little-integer-size(32),
           id_f::little-integer-size(16), num_logs_f::little-integer-size(16),
           last_log_num_f::little-integer-size(16)>>
@@ -25516,8 +26783,25 @@ defmodule Common do
          }}
 
   def unpack(
+        118,
+        2,
+        <<time_utc_f::little-integer-size(32), size_f::little-integer-size(32),
+          id_f::little-integer-size(16), num_logs_f::little-integer-size(16),
+          last_log_num_f::little-integer-size(16), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogEntry{
+           time_utc: time_utc_f,
+           size: size_f,
+           id: id_f,
+           num_logs: num_logs_f,
+           last_log_num: last_log_num_f
+         }}
+
+  def unpack(
         119,
-        _,
+        1,
         <<ofs_f::little-integer-size(32), count_f::little-integer-size(32),
           id_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
@@ -25533,8 +26817,25 @@ defmodule Common do
          }}
 
   def unpack(
+        119,
+        2,
+        <<ofs_f::little-integer-size(32), count_f::little-integer-size(32),
+          id_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogRequestData{
+           ofs: ofs_f,
+           count: count_f,
+           id: id_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         120,
-        _,
+        1,
         <<ofs_f::little-integer-size(32), id_f::little-integer-size(16), count_f::integer-size(8),
           data_f::binary-size(90)>>
       ),
@@ -25548,7 +26849,23 @@ defmodule Common do
              unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
          }}
 
-  def unpack(121, _, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
+  def unpack(
+        120,
+        2,
+        <<ofs_f::little-integer-size(32), id_f::little-integer-size(16), count_f::integer-size(8),
+          data_f::binary-size(90), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogData{
+           ofs: ofs_f,
+           id: id_f,
+           count: count_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(121, 1, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.LogErase{
@@ -25556,7 +26873,20 @@ defmodule Common do
          target_component: target_component_f
        }}
 
-  def unpack(122, _, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
+  def unpack(
+        121,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogErase{
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(122, 1, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.LogRequestEnd{
@@ -25565,10 +26895,39 @@ defmodule Common do
        }}
 
   def unpack(
+        122,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LogRequestEnd{
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         123,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           len_f::integer-size(8), data_f::binary-size(110)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GpsInjectData{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           len: len_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
+        123,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          len_f::integer-size(8), data_f::binary-size(110), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25618,7 +26977,8 @@ defmodule Common do
           satellites_visible_f::integer-size(8), dgps_numch_f::integer-size(8),
           yaw_f::little-integer-size(16), alt_ellipsoid_f::little-signed-integer-size(32),
           h_acc_f::little-integer-size(32), v_acc_f::little-integer-size(32),
-          vel_acc_f::little-integer-size(32), hdg_acc_f::little-integer-size(32)>>
+          vel_acc_f::little-integer-size(32), hdg_acc_f::little-integer-size(32),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25645,9 +27005,23 @@ defmodule Common do
 
   def unpack(
         125,
-        _,
+        1,
         <<vcc_f::little-integer-size(16), vservo_f::little-integer-size(16),
           flags_f::little-integer-size(16)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.PowerStatus{
+           vcc: vcc_f,
+           vservo: vservo_f,
+           flags: unpack_bitmask(flags_f, :mav_power_status, &decode/2)
+         }}
+
+  def unpack(
+        125,
+        2,
+        <<vcc_f::little-integer-size(16), vservo_f::little-integer-size(16),
+          flags_f::little-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25682,7 +27056,7 @@ defmodule Common do
         <<baudrate_f::little-integer-size(32), timeout_f::little-integer-size(16),
           device_f::integer-size(8), flags_f::integer-size(8), count_f::integer-size(8),
           data_f::binary-size(70), target_system_f::integer-size(8),
-          target_component_f::integer-size(8)>>
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25700,7 +27074,7 @@ defmodule Common do
 
   def unpack(
         127,
-        _,
+        1,
         <<time_last_baseline_ms_f::little-integer-size(32), tow_f::little-integer-size(32),
           baseline_a_mm_f::little-signed-integer-size(32),
           baseline_b_mm_f::little-signed-integer-size(32),
@@ -25729,8 +27103,38 @@ defmodule Common do
          }}
 
   def unpack(
+        127,
+        2,
+        <<time_last_baseline_ms_f::little-integer-size(32), tow_f::little-integer-size(32),
+          baseline_a_mm_f::little-signed-integer-size(32),
+          baseline_b_mm_f::little-signed-integer-size(32),
+          baseline_c_mm_f::little-signed-integer-size(32), accuracy_f::little-integer-size(32),
+          iar_num_hypotheses_f::little-signed-integer-size(32), wn_f::little-integer-size(16),
+          rtk_receiver_id_f::integer-size(8), rtk_health_f::integer-size(8),
+          rtk_rate_f::integer-size(8), nsats_f::integer-size(8),
+          baseline_coords_type_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GpsRtk{
+           time_last_baseline_ms: time_last_baseline_ms_f,
+           tow: tow_f,
+           baseline_a_mm: baseline_a_mm_f,
+           baseline_b_mm: baseline_b_mm_f,
+           baseline_c_mm: baseline_c_mm_f,
+           accuracy: accuracy_f,
+           iar_num_hypotheses: iar_num_hypotheses_f,
+           wn: wn_f,
+           rtk_receiver_id: rtk_receiver_id_f,
+           rtk_health: rtk_health_f,
+           rtk_rate: rtk_rate_f,
+           nsats: nsats_f,
+           baseline_coords_type: decode(baseline_coords_type_f, :rtk_baseline_coordinate_system)
+         }}
+
+  def unpack(
         128,
-        _,
+        1,
         <<time_last_baseline_ms_f::little-integer-size(32), tow_f::little-integer-size(32),
           baseline_a_mm_f::little-signed-integer-size(32),
           baseline_b_mm_f::little-signed-integer-size(32),
@@ -25739,6 +27143,36 @@ defmodule Common do
           rtk_receiver_id_f::integer-size(8), rtk_health_f::integer-size(8),
           rtk_rate_f::integer-size(8), nsats_f::integer-size(8),
           baseline_coords_type_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Gps2Rtk{
+           time_last_baseline_ms: time_last_baseline_ms_f,
+           tow: tow_f,
+           baseline_a_mm: baseline_a_mm_f,
+           baseline_b_mm: baseline_b_mm_f,
+           baseline_c_mm: baseline_c_mm_f,
+           accuracy: accuracy_f,
+           iar_num_hypotheses: iar_num_hypotheses_f,
+           wn: wn_f,
+           rtk_receiver_id: rtk_receiver_id_f,
+           rtk_health: rtk_health_f,
+           rtk_rate: rtk_rate_f,
+           nsats: nsats_f,
+           baseline_coords_type: decode(baseline_coords_type_f, :rtk_baseline_coordinate_system)
+         }}
+
+  def unpack(
+        128,
+        2,
+        <<time_last_baseline_ms_f::little-integer-size(32), tow_f::little-integer-size(32),
+          baseline_a_mm_f::little-signed-integer-size(32),
+          baseline_b_mm_f::little-signed-integer-size(32),
+          baseline_c_mm_f::little-signed-integer-size(32), accuracy_f::little-integer-size(32),
+          iar_num_hypotheses_f::little-signed-integer-size(32), wn_f::little-integer-size(16),
+          rtk_receiver_id_f::integer-size(8), rtk_health_f::integer-size(8),
+          rtk_rate_f::integer-size(8), nsats_f::integer-size(8),
+          baseline_coords_type_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25790,7 +27224,7 @@ defmodule Common do
           xgyro_f::little-signed-integer-size(16), ygyro_f::little-signed-integer-size(16),
           zgyro_f::little-signed-integer-size(16), xmag_f::little-signed-integer-size(16),
           ymag_f::little-signed-integer-size(16), zmag_f::little-signed-integer-size(16),
-          temperature_f::little-signed-integer-size(16)>>
+          temperature_f::little-signed-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25810,7 +27244,7 @@ defmodule Common do
 
   def unpack(
         130,
-        _,
+        1,
         <<size_f::little-integer-size(32), width_f::little-integer-size(16),
           height_f::little-integer-size(16), packets_f::little-integer-size(16),
           type_f::integer-size(8), payload_f::integer-size(8), jpg_quality_f::integer-size(8)>>
@@ -25827,7 +27261,27 @@ defmodule Common do
            jpg_quality: jpg_quality_f
          }}
 
-  def unpack(131, _, <<seqnr_f::little-integer-size(16), data_f::binary-size(253)>>),
+  def unpack(
+        130,
+        2,
+        <<size_f::little-integer-size(32), width_f::little-integer-size(16),
+          height_f::little-integer-size(16), packets_f::little-integer-size(16),
+          type_f::integer-size(8), payload_f::integer-size(8), jpg_quality_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.DataTransmissionHandshake{
+           size: size_f,
+           width: width_f,
+           height: height_f,
+           packets: packets_f,
+           type: decode(type_f, :mavlink_data_stream_type),
+           payload: payload_f,
+           jpg_quality: jpg_quality_f
+         }}
+
+  def unpack(131, 1, <<seqnr_f::little-integer-size(16), data_f::binary-size(253)>>),
     do:
       {:ok,
        %Common.Message.EncapsulatedData{
@@ -25835,6 +27289,20 @@ defmodule Common do
          data:
            unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
        }}
+
+  def unpack(
+        131,
+        2,
+        <<seqnr_f::little-integer-size(16), data_f::binary-size(253),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.EncapsulatedData{
+           seqnr: seqnr_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
 
   def unpack(
         132,
@@ -25865,7 +27333,7 @@ defmodule Common do
           type_f::integer-size(8), id_f::integer-size(8), orientation_f::integer-size(8),
           covariance_f::integer-size(8), horizontal_fov_f::binary-size(4),
           vertical_fov_f::binary-size(4), quaternion_f::binary-size(16),
-          signal_quality_f::integer-size(8)>>
+          signal_quality_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25889,7 +27357,7 @@ defmodule Common do
 
   def unpack(
         133,
-        _,
+        1,
         <<mask_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), grid_spacing_f::little-integer-size(16)>>
       ),
@@ -25903,8 +27371,24 @@ defmodule Common do
          }}
 
   def unpack(
+        133,
+        2,
+        <<mask_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), grid_spacing_f::little-integer-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TerrainRequest{
+           mask: mask_f,
+           lat: lat_f,
+           lon: lon_f,
+           grid_spacing: grid_spacing_f
+         }}
+
+  def unpack(
         134,
-        _,
+        1,
         <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
           grid_spacing_f::little-integer-size(16), data_f::binary-size(32),
           gridbit_f::integer-size(8)>>
@@ -25923,19 +27407,67 @@ defmodule Common do
          }}
 
   def unpack(
+        134,
+        2,
+        <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          grid_spacing_f::little-integer-size(16), data_f::binary-size(32),
+          gridbit_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TerrainData{
+           lat: lat_f,
+           lon: lon_f,
+           grid_spacing: grid_spacing_f,
+           data:
+             unpack_array(data_f, fn <<elem::little-signed-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           gridbit: gridbit_f
+         }}
+
+  def unpack(
         135,
-        _,
+        1,
         <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32)>>
       ),
       do: {:ok, %Common.Message.TerrainCheck{lat: lat_f, lon: lon_f}}
 
   def unpack(
+        135,
+        2,
+        <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          _future_extension_fields::binary>>
+      ),
+      do: {:ok, %Common.Message.TerrainCheck{lat: lat_f, lon: lon_f}}
+
+  def unpack(
         136,
-        _,
+        1,
         <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
           terrain_height_f::binary-size(4), current_height_f::binary-size(4),
           spacing_f::little-integer-size(16), pending_f::little-integer-size(16),
           loaded_f::little-integer-size(16)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TerrainReport{
+           lat: lat_f,
+           lon: lon_f,
+           terrain_height: unpack_float(terrain_height_f),
+           current_height: unpack_float(current_height_f),
+           spacing: spacing_f,
+           pending: pending_f,
+           loaded: loaded_f
+         }}
+
+  def unpack(
+        136,
+        2,
+        <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          terrain_height_f::binary-size(4), current_height_f::binary-size(4),
+          spacing_f::little-integer-size(16), pending_f::little-integer-size(16),
+          loaded_f::little-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -25969,7 +27501,8 @@ defmodule Common do
         2,
         <<time_boot_ms_f::little-integer-size(32), press_abs_f::binary-size(4),
           press_diff_f::binary-size(4), temperature_f::little-signed-integer-size(16),
-          temperature_press_diff_f::little-signed-integer-size(16)>>
+          temperature_press_diff_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26001,7 +27534,8 @@ defmodule Common do
         138,
         2,
         <<time_usec_f::little-integer-size(64), q_f::binary-size(16), x_f::binary-size(4),
-          y_f::binary-size(4), z_f::binary-size(4), covariance_f::binary-size(84)>>
+          y_f::binary-size(4), z_f::binary-size(4), covariance_f::binary-size(84),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26019,7 +27553,7 @@ defmodule Common do
 
   def unpack(
         139,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), controls_f::binary-size(32),
           group_mlx_f::integer-size(8), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
@@ -26038,8 +27572,28 @@ defmodule Common do
          }}
 
   def unpack(
+        139,
+        2,
+        <<time_usec_f::little-integer-size(64), controls_f::binary-size(32),
+          group_mlx_f::integer-size(8), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SetActuatorControlTarget{
+           time_usec: time_usec_f,
+           controls:
+             unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           group_mlx: group_mlx_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         140,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), controls_f::binary-size(32),
           group_mlx_f::integer-size(8)>>
       ),
@@ -26055,8 +27609,25 @@ defmodule Common do
          }}
 
   def unpack(
+        140,
+        2,
+        <<time_usec_f::little-integer-size(64), controls_f::binary-size(32),
+          group_mlx_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ActuatorControlTarget{
+           time_usec: time_usec_f,
+           controls:
+             unpack_array(controls_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           group_mlx: group_mlx_f
+         }}
+
+  def unpack(
         141,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), altitude_monotonic_f::binary-size(4),
           altitude_amsl_f::binary-size(4), altitude_local_f::binary-size(4),
           altitude_relative_f::binary-size(4), altitude_terrain_f::binary-size(4),
@@ -26075,10 +27646,51 @@ defmodule Common do
          }}
 
   def unpack(
+        141,
+        2,
+        <<time_usec_f::little-integer-size(64), altitude_monotonic_f::binary-size(4),
+          altitude_amsl_f::binary-size(4), altitude_local_f::binary-size(4),
+          altitude_relative_f::binary-size(4), altitude_terrain_f::binary-size(4),
+          bottom_clearance_f::binary-size(4), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Altitude{
+           time_usec: time_usec_f,
+           altitude_monotonic: unpack_float(altitude_monotonic_f),
+           altitude_amsl: unpack_float(altitude_amsl_f),
+           altitude_local: unpack_float(altitude_local_f),
+           altitude_relative: unpack_float(altitude_relative_f),
+           altitude_terrain: unpack_float(altitude_terrain_f),
+           bottom_clearance: unpack_float(bottom_clearance_f)
+         }}
+
+  def unpack(
         142,
-        _,
+        1,
         <<request_id_f::integer-size(8), uri_type_f::integer-size(8), uri_f::binary-size(120),
           transfer_type_f::integer-size(8), storage_f::binary-size(120)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ResourceRequest{
+           request_id: request_id_f,
+           uri_type: uri_type_f,
+           uri:
+             unpack_array(uri_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end),
+           transfer_type: transfer_type_f,
+           storage:
+             unpack_array(storage_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
+        142,
+        2,
+        <<request_id_f::integer-size(8), uri_type_f::integer-size(8), uri_f::binary-size(120),
+          transfer_type_f::integer-size(8), storage_f::binary-size(120),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26114,7 +27726,8 @@ defmodule Common do
         2,
         <<time_boot_ms_f::little-integer-size(32), press_abs_f::binary-size(4),
           press_diff_f::binary-size(4), temperature_f::little-signed-integer-size(16),
-          temperature_press_diff_f::little-signed-integer-size(16)>>
+          temperature_press_diff_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26128,7 +27741,7 @@ defmodule Common do
 
   def unpack(
         144,
-        _,
+        1,
         <<timestamp_f::little-integer-size(64), custom_state_f::little-integer-size(64),
           lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
           alt_f::binary-size(4), vel_f::binary-size(12), acc_f::binary-size(12),
@@ -26161,14 +27774,88 @@ defmodule Common do
          }}
 
   def unpack(
+        144,
+        2,
+        <<timestamp_f::little-integer-size(64), custom_state_f::little-integer-size(64),
+          lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          alt_f::binary-size(4), vel_f::binary-size(12), acc_f::binary-size(12),
+          attitude_q_f::binary-size(16), rates_f::binary-size(12),
+          position_cov_f::binary-size(12), est_capabilities_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.FollowTarget{
+           timestamp: timestamp_f,
+           custom_state: custom_state_f,
+           lat: lat_f,
+           lon: lon_f,
+           alt: unpack_float(alt_f),
+           vel:
+             unpack_array(vel_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           acc:
+             unpack_array(acc_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           attitude_q:
+             unpack_array(attitude_q_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           rates:
+             unpack_array(rates_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           position_cov:
+             unpack_array(position_cov_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           est_capabilities: est_capabilities_f
+         }}
+
+  def unpack(
         146,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), x_acc_f::binary-size(4), y_acc_f::binary-size(4),
           z_acc_f::binary-size(4), x_vel_f::binary-size(4), y_vel_f::binary-size(4),
           z_vel_f::binary-size(4), x_pos_f::binary-size(4), y_pos_f::binary-size(4),
           z_pos_f::binary-size(4), airspeed_f::binary-size(4), vel_variance_f::binary-size(12),
           pos_variance_f::binary-size(12), q_f::binary-size(16), roll_rate_f::binary-size(4),
           pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ControlSystemState{
+           time_usec: time_usec_f,
+           x_acc: unpack_float(x_acc_f),
+           y_acc: unpack_float(y_acc_f),
+           z_acc: unpack_float(z_acc_f),
+           x_vel: unpack_float(x_vel_f),
+           y_vel: unpack_float(y_vel_f),
+           z_vel: unpack_float(z_vel_f),
+           x_pos: unpack_float(x_pos_f),
+           y_pos: unpack_float(y_pos_f),
+           z_pos: unpack_float(z_pos_f),
+           airspeed: unpack_float(airspeed_f),
+           vel_variance:
+             unpack_array(vel_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           pos_variance:
+             unpack_array(pos_variance_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end),
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           roll_rate: unpack_float(roll_rate_f),
+           pitch_rate: unpack_float(pitch_rate_f),
+           yaw_rate: unpack_float(yaw_rate_f)
+         }}
+
+  def unpack(
+        146,
+        2,
+        <<time_usec_f::little-integer-size(64), x_acc_f::binary-size(4), y_acc_f::binary-size(4),
+          z_acc_f::binary-size(4), x_vel_f::binary-size(4), y_vel_f::binary-size(4),
+          z_vel_f::binary-size(4), x_pos_f::binary-size(4), y_pos_f::binary-size(4),
+          z_pos_f::binary-size(4), airspeed_f::binary-size(4), vel_variance_f::binary-size(12),
+          pos_variance_f::binary-size(12), q_f::binary-size(16), roll_rate_f::binary-size(4),
+          pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26236,7 +27923,7 @@ defmodule Common do
           battery_remaining_f::signed-integer-size(8),
           time_remaining_f::little-signed-integer-size(32), charge_state_f::integer-size(8),
           voltages_ext_f::binary-size(8), mode_f::integer-size(8),
-          fault_bitmask_f::little-integer-size(32)>>
+          fault_bitmask_f::little-integer-size(32), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26308,7 +27995,8 @@ defmodule Common do
           os_sw_version_f::little-integer-size(32), board_version_f::little-integer-size(32),
           vendor_id_f::little-integer-size(16), product_id_f::little-integer-size(16),
           flight_custom_version_f::binary-size(8), middleware_custom_version_f::binary-size(8),
-          os_custom_version_f::binary-size(8), uid2_f::binary-size(18)>>
+          os_custom_version_f::binary-size(8), uid2_f::binary-size(18),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26364,7 +28052,8 @@ defmodule Common do
           angle_y_f::binary-size(4), distance_f::binary-size(4), size_x_f::binary-size(4),
           size_y_f::binary-size(4), target_num_f::integer-size(8), frame_f::integer-size(8),
           x_f::binary-size(4), y_f::binary-size(4), z_f::binary-size(4), q_f::binary-size(16),
-          type_f::integer-size(8), position_valid_f::integer-size(8)>>
+          type_f::integer-size(8), position_valid_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26405,7 +28094,7 @@ defmodule Common do
         2,
         <<breach_time_f::little-integer-size(32), breach_count_f::little-integer-size(16),
           breach_status_f::integer-size(8), breach_type_f::integer-size(8),
-          breach_mitigation_f::integer-size(8)>>
+          breach_mitigation_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26454,7 +28143,8 @@ defmodule Common do
           offdiag_z_f::binary-size(4), compass_id_f::integer-size(8), cal_mask_f::integer-size(8),
           cal_status_f::integer-size(8), autosaved_f::integer-size(8),
           orientation_confidence_f::binary-size(4), old_orientation_f::integer-size(8),
-          new_orientation_f::integer-size(8), scale_factor_f::binary-size(4)>>
+          new_orientation_f::integer-size(8), scale_factor_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26525,7 +28215,8 @@ defmodule Common do
           cylinder_head_temperature_f::binary-size(4), ignition_timing_f::binary-size(4),
           injection_time_f::binary-size(4), exhaust_gas_temperature_f::binary-size(4),
           throttle_out_f::binary-size(4), pt_compensation_f::binary-size(4),
-          health_f::integer-size(8), ignition_voltage_f::binary-size(4)>>
+          health_f::integer-size(8), ignition_voltage_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26552,7 +28243,7 @@ defmodule Common do
 
   def unpack(
         230,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), vel_ratio_f::binary-size(4),
           pos_horiz_ratio_f::binary-size(4), pos_vert_ratio_f::binary-size(4),
           mag_ratio_f::binary-size(4), hagl_ratio_f::binary-size(4), tas_ratio_f::binary-size(4),
@@ -26575,12 +28266,59 @@ defmodule Common do
          }}
 
   def unpack(
+        230,
+        2,
+        <<time_usec_f::little-integer-size(64), vel_ratio_f::binary-size(4),
+          pos_horiz_ratio_f::binary-size(4), pos_vert_ratio_f::binary-size(4),
+          mag_ratio_f::binary-size(4), hagl_ratio_f::binary-size(4), tas_ratio_f::binary-size(4),
+          pos_horiz_accuracy_f::binary-size(4), pos_vert_accuracy_f::binary-size(4),
+          flags_f::little-integer-size(16), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.EstimatorStatus{
+           time_usec: time_usec_f,
+           vel_ratio: unpack_float(vel_ratio_f),
+           pos_horiz_ratio: unpack_float(pos_horiz_ratio_f),
+           pos_vert_ratio: unpack_float(pos_vert_ratio_f),
+           mag_ratio: unpack_float(mag_ratio_f),
+           hagl_ratio: unpack_float(hagl_ratio_f),
+           tas_ratio: unpack_float(tas_ratio_f),
+           pos_horiz_accuracy: unpack_float(pos_horiz_accuracy_f),
+           pos_vert_accuracy: unpack_float(pos_vert_accuracy_f),
+           flags: unpack_bitmask(flags_f, :estimator_status_flags, &decode/2)
+         }}
+
+  def unpack(
         231,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), wind_x_f::binary-size(4),
           wind_y_f::binary-size(4), wind_z_f::binary-size(4), var_horiz_f::binary-size(4),
           var_vert_f::binary-size(4), wind_alt_f::binary-size(4),
           horiz_accuracy_f::binary-size(4), vert_accuracy_f::binary-size(4)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.WindCov{
+           time_usec: time_usec_f,
+           wind_x: unpack_float(wind_x_f),
+           wind_y: unpack_float(wind_y_f),
+           wind_z: unpack_float(wind_z_f),
+           var_horiz: unpack_float(var_horiz_f),
+           var_vert: unpack_float(var_vert_f),
+           wind_alt: unpack_float(wind_alt_f),
+           horiz_accuracy: unpack_float(horiz_accuracy_f),
+           vert_accuracy: unpack_float(vert_accuracy_f)
+         }}
+
+  def unpack(
+        231,
+        2,
+        <<time_usec_f::little-integer-size(64), wind_x_f::binary-size(4),
+          wind_y_f::binary-size(4), wind_z_f::binary-size(4), var_horiz_f::binary-size(4),
+          var_vert_f::binary-size(4), wind_alt_f::binary-size(4),
+          horiz_accuracy_f::binary-size(4), vert_accuracy_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26642,7 +28380,7 @@ defmodule Common do
           vert_accuracy_f::binary-size(4), ignore_flags_f::little-integer-size(16),
           time_week_f::little-integer-size(16), gps_id_f::integer-size(8),
           fix_type_f::integer-size(8), satellites_visible_f::integer-size(8),
-          yaw_f::little-integer-size(16)>>
+          yaw_f::little-integer-size(16), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26670,7 +28408,7 @@ defmodule Common do
 
   def unpack(
         233,
-        _,
+        1,
         <<flags_f::integer-size(8), len_f::integer-size(8), data_f::binary-size(180)>>
       ),
       do:
@@ -26683,8 +28421,23 @@ defmodule Common do
          }}
 
   def unpack(
+        233,
+        2,
+        <<flags_f::integer-size(8), len_f::integer-size(8), data_f::binary-size(180),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GpsRtcmData{
+           flags: flags_f,
+           len: len_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         234,
-        _,
+        1,
         <<custom_mode_f::little-integer-size(32), latitude_f::little-signed-integer-size(32),
           longitude_f::little-signed-integer-size(32), roll_f::little-signed-integer-size(16),
           pitch_f::little-signed-integer-size(16), heading_f::little-integer-size(16),
@@ -26729,8 +28482,55 @@ defmodule Common do
          }}
 
   def unpack(
+        234,
+        2,
+        <<custom_mode_f::little-integer-size(32), latitude_f::little-signed-integer-size(32),
+          longitude_f::little-signed-integer-size(32), roll_f::little-signed-integer-size(16),
+          pitch_f::little-signed-integer-size(16), heading_f::little-integer-size(16),
+          heading_sp_f::little-signed-integer-size(16),
+          altitude_amsl_f::little-signed-integer-size(16),
+          altitude_sp_f::little-signed-integer-size(16), wp_distance_f::little-integer-size(16),
+          base_mode_f::integer-size(8), landed_state_f::integer-size(8),
+          throttle_f::signed-integer-size(8), airspeed_f::integer-size(8),
+          airspeed_sp_f::integer-size(8), groundspeed_f::integer-size(8),
+          climb_rate_f::signed-integer-size(8), gps_nsat_f::integer-size(8),
+          gps_fix_type_f::integer-size(8), battery_remaining_f::integer-size(8),
+          temperature_f::signed-integer-size(8), temperature_air_f::signed-integer-size(8),
+          failsafe_f::integer-size(8), wp_num_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HighLatency{
+           custom_mode: custom_mode_f,
+           latitude: latitude_f,
+           longitude: longitude_f,
+           roll: roll_f,
+           pitch: pitch_f,
+           heading: heading_f,
+           heading_sp: heading_sp_f,
+           altitude_amsl: altitude_amsl_f,
+           altitude_sp: altitude_sp_f,
+           wp_distance: wp_distance_f,
+           base_mode: unpack_bitmask(base_mode_f, :mav_mode_flag, &decode/2),
+           landed_state: decode(landed_state_f, :mav_landed_state),
+           throttle: throttle_f,
+           airspeed: airspeed_f,
+           airspeed_sp: airspeed_sp_f,
+           groundspeed: groundspeed_f,
+           climb_rate: climb_rate_f,
+           gps_nsat: gps_nsat_f,
+           gps_fix_type: decode(gps_fix_type_f, :gps_fix_type),
+           battery_remaining: battery_remaining_f,
+           temperature: temperature_f,
+           temperature_air: temperature_air_f,
+           failsafe: failsafe_f,
+           wp_num: wp_num_f
+         }}
+
+  def unpack(
         235,
-        _,
+        1,
         <<timestamp_f::little-integer-size(32), latitude_f::little-signed-integer-size(32),
           longitude_f::little-signed-integer-size(32), custom_mode_f::little-integer-size(16),
           altitude_f::little-signed-integer-size(16),
@@ -26779,12 +28579,83 @@ defmodule Common do
          }}
 
   def unpack(
+        235,
+        2,
+        <<timestamp_f::little-integer-size(32), latitude_f::little-signed-integer-size(32),
+          longitude_f::little-signed-integer-size(32), custom_mode_f::little-integer-size(16),
+          altitude_f::little-signed-integer-size(16),
+          target_altitude_f::little-signed-integer-size(16),
+          target_distance_f::little-integer-size(16), wp_num_f::little-integer-size(16),
+          failure_flags_f::little-integer-size(16), type_f::integer-size(8),
+          autopilot_f::integer-size(8), heading_f::integer-size(8),
+          target_heading_f::integer-size(8), throttle_f::integer-size(8),
+          airspeed_f::integer-size(8), airspeed_sp_f::integer-size(8),
+          groundspeed_f::integer-size(8), windspeed_f::integer-size(8),
+          wind_heading_f::integer-size(8), eph_f::integer-size(8), epv_f::integer-size(8),
+          temperature_air_f::signed-integer-size(8), climb_rate_f::signed-integer-size(8),
+          battery_f::signed-integer-size(8), custom0_f::signed-integer-size(8),
+          custom1_f::signed-integer-size(8), custom2_f::signed-integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HighLatency2{
+           timestamp: timestamp_f,
+           latitude: latitude_f,
+           longitude: longitude_f,
+           custom_mode: custom_mode_f,
+           altitude: altitude_f,
+           target_altitude: target_altitude_f,
+           target_distance: target_distance_f,
+           wp_num: wp_num_f,
+           failure_flags: unpack_bitmask(failure_flags_f, :hl_failure_flag, &decode/2),
+           type: decode(type_f, :mav_type),
+           autopilot: decode(autopilot_f, :mav_autopilot),
+           heading: heading_f,
+           target_heading: target_heading_f,
+           throttle: throttle_f,
+           airspeed: airspeed_f,
+           airspeed_sp: airspeed_sp_f,
+           groundspeed: groundspeed_f,
+           windspeed: windspeed_f,
+           wind_heading: wind_heading_f,
+           eph: eph_f,
+           epv: epv_f,
+           temperature_air: temperature_air_f,
+           climb_rate: climb_rate_f,
+           battery: battery_f,
+           custom0: custom0_f,
+           custom1: custom1_f,
+           custom2: custom2_f
+         }}
+
+  def unpack(
         241,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), vibration_x_f::binary-size(4),
           vibration_y_f::binary-size(4), vibration_z_f::binary-size(4),
           clipping_0_f::little-integer-size(32), clipping_1_f::little-integer-size(32),
           clipping_2_f::little-integer-size(32)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Vibration{
+           time_usec: time_usec_f,
+           vibration_x: unpack_float(vibration_x_f),
+           vibration_y: unpack_float(vibration_y_f),
+           vibration_z: unpack_float(vibration_z_f),
+           clipping_0: clipping_0_f,
+           clipping_1: clipping_1_f,
+           clipping_2: clipping_2_f
+         }}
+
+  def unpack(
+        241,
+        2,
+        <<time_usec_f::little-integer-size(64), vibration_x_f::binary-size(4),
+          vibration_y_f::binary-size(4), vibration_z_f::binary-size(4),
+          clipping_0_f::little-integer-size(32), clipping_1_f::little-integer-size(32),
+          clipping_2_f::little-integer-size(32), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26828,7 +28699,7 @@ defmodule Common do
           altitude_f::little-signed-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), q_f::binary-size(16), approach_x_f::binary-size(4),
           approach_y_f::binary-size(4), approach_z_f::binary-size(4),
-          time_usec_f::little-integer-size(64)>>
+          time_usec_f::little-integer-size(64), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26878,7 +28749,8 @@ defmodule Common do
           altitude_f::little-signed-integer-size(32), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), q_f::binary-size(16), approach_x_f::binary-size(4),
           approach_y_f::binary-size(4), approach_z_f::binary-size(4),
-          target_system_f::integer-size(8), time_usec_f::little-integer-size(64)>>
+          target_system_f::integer-size(8), time_usec_f::little-integer-size(64),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -26899,14 +28771,24 @@ defmodule Common do
 
   def unpack(
         244,
-        _,
+        1,
         <<interval_us_f::little-signed-integer-size(32), message_id_f::little-integer-size(16)>>
       ),
       do:
         {:ok,
          %Common.Message.MessageInterval{interval_us: interval_us_f, message_id: message_id_f}}
 
-  def unpack(245, _, <<vtol_state_f::integer-size(8), landed_state_f::integer-size(8)>>),
+  def unpack(
+        244,
+        2,
+        <<interval_us_f::little-signed-integer-size(32), message_id_f::little-integer-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.MessageInterval{interval_us: interval_us_f, message_id: message_id_f}}
+
+  def unpack(245, 1, <<vtol_state_f::integer-size(8), landed_state_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.ExtendedSysState{
@@ -26915,8 +28797,21 @@ defmodule Common do
        }}
 
   def unpack(
+        245,
+        2,
+        <<vtol_state_f::integer-size(8), landed_state_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ExtendedSysState{
+           vtol_state: decode(vtol_state_f, :mav_vtol_state),
+           landed_state: decode(landed_state_f, :mav_landed_state)
+         }}
+
+  def unpack(
         246,
-        _,
+        1,
         <<icao_address_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), altitude_f::little-signed-integer-size(32),
           heading_f::little-integer-size(16), hor_velocity_f::little-integer-size(16),
@@ -26943,8 +28838,37 @@ defmodule Common do
          }}
 
   def unpack(
+        246,
+        2,
+        <<icao_address_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), altitude_f::little-signed-integer-size(32),
+          heading_f::little-integer-size(16), hor_velocity_f::little-integer-size(16),
+          ver_velocity_f::little-signed-integer-size(16), flags_f::little-integer-size(16),
+          squawk_f::little-integer-size(16), altitude_type_f::integer-size(8),
+          callsign_f::binary-size(9), emitter_type_f::integer-size(8), tslc_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.AdsbVehicle{
+           icao_address: icao_address_f,
+           lat: lat_f,
+           lon: lon_f,
+           altitude: altitude_f,
+           heading: heading_f,
+           hor_velocity: hor_velocity_f,
+           ver_velocity: ver_velocity_f,
+           flags: unpack_bitmask(flags_f, :adsb_flags, &decode/2),
+           squawk: squawk_f,
+           altitude_type: decode(altitude_type_f, :adsb_altitude_type),
+           callsign: replace_trailing(callsign_f, <<0>>, ""),
+           emitter_type: decode(emitter_type_f, :adsb_emitter_type),
+           tslc: tslc_f
+         }}
+
+  def unpack(
         247,
-        _,
+        1,
         <<id_f::little-integer-size(32), time_to_minimum_delta_f::binary-size(4),
           altitude_minimum_delta_f::binary-size(4), horizontal_minimum_delta_f::binary-size(4),
           src_f::integer-size(8), action_f::integer-size(8), threat_level_f::integer-size(8)>>
@@ -26962,8 +28886,28 @@ defmodule Common do
          }}
 
   def unpack(
+        247,
+        2,
+        <<id_f::little-integer-size(32), time_to_minimum_delta_f::binary-size(4),
+          altitude_minimum_delta_f::binary-size(4), horizontal_minimum_delta_f::binary-size(4),
+          src_f::integer-size(8), action_f::integer-size(8), threat_level_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Collision{
+           id: id_f,
+           time_to_minimum_delta: unpack_float(time_to_minimum_delta_f),
+           altitude_minimum_delta: unpack_float(altitude_minimum_delta_f),
+           horizontal_minimum_delta: unpack_float(horizontal_minimum_delta_f),
+           src: decode(src_f, :mav_collision_src),
+           action: decode(action_f, :mav_collision_action),
+           threat_level: decode(threat_level_f, :mav_collision_threat_level)
+         }}
+
+  def unpack(
         248,
-        _,
+        1,
         <<message_type_f::little-integer-size(16), target_network_f::integer-size(8),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
           payload_f::binary-size(249)>>
@@ -26982,8 +28926,28 @@ defmodule Common do
          }}
 
   def unpack(
+        248,
+        2,
+        <<message_type_f::little-integer-size(16), target_network_f::integer-size(8),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          payload_f::binary-size(249), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.V2Extension{
+           message_type: message_type_f,
+           target_network: target_network_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           payload:
+             unpack_array(payload_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         249,
-        _,
+        1,
         <<address_f::little-integer-size(16), ver_f::integer-size(8), type_f::integer-size(8),
           value_f::binary-size(32)>>
       ),
@@ -27000,8 +28964,26 @@ defmodule Common do
          }}
 
   def unpack(
+        249,
+        2,
+        <<address_f::little-integer-size(16), ver_f::integer-size(8), type_f::integer-size(8),
+          value_f::binary-size(32), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.MemoryVect{
+           address: address_f,
+           ver: ver_f,
+           type: type_f,
+           value:
+             unpack_array(value_f, fn <<elem::signed-integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         250,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
           z_f::binary-size(4), name_f::binary-size(10)>>
       ),
@@ -27016,8 +28998,24 @@ defmodule Common do
          }}
 
   def unpack(
+        250,
+        2,
+        <<time_usec_f::little-integer-size(64), x_f::binary-size(4), y_f::binary-size(4),
+          z_f::binary-size(4), name_f::binary-size(10), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.DebugVect{
+           time_usec: time_usec_f,
+           x: unpack_float(x_f),
+           y: unpack_float(y_f),
+           z: unpack_float(z_f),
+           name: replace_trailing(name_f, <<0>>, "")
+         }}
+
+  def unpack(
         251,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), value_f::binary-size(4),
           name_f::binary-size(10)>>
       ),
@@ -27030,10 +29028,38 @@ defmodule Common do
          }}
 
   def unpack(
+        251,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), value_f::binary-size(4),
+          name_f::binary-size(10), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.NamedValueFloat{
+           time_boot_ms: time_boot_ms_f,
+           value: unpack_float(value_f),
+           name: replace_trailing(name_f, <<0>>, "")
+         }}
+
+  def unpack(
         252,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), value_f::little-signed-integer-size(32),
           name_f::binary-size(10)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.NamedValueInt{
+           time_boot_ms: time_boot_ms_f,
+           value: value_f,
+           name: replace_trailing(name_f, <<0>>, "")
+         }}
+
+  def unpack(
+        252,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), value_f::little-signed-integer-size(32),
+          name_f::binary-size(10), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27055,7 +29081,7 @@ defmodule Common do
         253,
         2,
         <<severity_f::integer-size(8), text_f::binary-size(50), id_f::little-integer-size(16),
-          chunk_seq_f::integer-size(8)>>
+          chunk_seq_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27068,7 +29094,7 @@ defmodule Common do
 
   def unpack(
         254,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), value_f::binary-size(4),
           ind_f::integer-size(8)>>
       ),
@@ -27081,8 +29107,22 @@ defmodule Common do
          }}
 
   def unpack(
+        254,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), value_f::binary-size(4),
+          ind_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Debug{
+           time_boot_ms: time_boot_ms_f,
+           value: unpack_float(value_f),
+           ind: ind_f
+         }}
+
+  def unpack(
         256,
-        _,
+        1,
         <<initial_timestamp_f::little-integer-size(64), target_system_f::integer-size(8),
           target_component_f::integer-size(8), secret_key_f::binary-size(32)>>
       ),
@@ -27099,10 +29139,43 @@ defmodule Common do
          }}
 
   def unpack(
+        256,
+        2,
+        <<initial_timestamp_f::little-integer-size(64), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), secret_key_f::binary-size(32),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SetupSigning{
+           initial_timestamp: initial_timestamp_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           secret_key:
+             unpack_array(secret_key_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         257,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), last_change_ms_f::little-integer-size(32),
           state_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ButtonChange{
+           time_boot_ms: time_boot_ms_f,
+           last_change_ms: last_change_ms_f,
+           state: state_f
+         }}
+
+  def unpack(
+        257,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), last_change_ms_f::little-integer-size(32),
+          state_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27130,7 +29203,7 @@ defmodule Common do
         258,
         2,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
-          tune_f::binary-size(30), tune2_f::binary-size(200)>>
+          tune_f::binary-size(30), tune2_f::binary-size(200), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27143,7 +29216,7 @@ defmodule Common do
 
   def unpack(
         259,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), firmware_version_f::little-integer-size(32),
           focal_length_f::binary-size(4), sensor_size_h_f::binary-size(4),
           sensor_size_v_f::binary-size(4), flags_f::little-integer-size(32),
@@ -27151,6 +29224,41 @@ defmodule Common do
           cam_definition_version_f::little-integer-size(16), vendor_name_f::binary-size(32),
           model_name_f::binary-size(32), lens_id_f::integer-size(8),
           cam_definition_uri_f::binary-size(140)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CameraInformation{
+           time_boot_ms: time_boot_ms_f,
+           firmware_version: firmware_version_f,
+           focal_length: unpack_float(focal_length_f),
+           sensor_size_h: unpack_float(sensor_size_h_f),
+           sensor_size_v: unpack_float(sensor_size_v_f),
+           flags: unpack_bitmask(flags_f, :camera_cap_flags, &decode/2),
+           resolution_h: resolution_h_f,
+           resolution_v: resolution_v_f,
+           cam_definition_version: cam_definition_version_f,
+           vendor_name:
+             unpack_array(vendor_name_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           model_name:
+             unpack_array(model_name_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           lens_id: lens_id_f,
+           cam_definition_uri: replace_trailing(cam_definition_uri_f, <<0>>, "")
+         }}
+
+  def unpack(
+        259,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), firmware_version_f::little-integer-size(32),
+          focal_length_f::binary-size(4), sensor_size_h_f::binary-size(4),
+          sensor_size_v_f::binary-size(4), flags_f::little-integer-size(32),
+          resolution_h_f::little-integer-size(16), resolution_v_f::little-integer-size(16),
+          cam_definition_version_f::little-integer-size(16), vendor_name_f::binary-size(32),
+          model_name_f::binary-size(32), lens_id_f::integer-size(8),
+          cam_definition_uri_f::binary-size(140), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27188,7 +29296,8 @@ defmodule Common do
         260,
         2,
         <<time_boot_ms_f::little-integer-size(32), mode_id_f::integer-size(8),
-          zoomlevel_f::binary-size(4), focuslevel_f::binary-size(4)>>
+          zoomlevel_f::binary-size(4), focuslevel_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27230,7 +29339,7 @@ defmodule Common do
           read_speed_f::binary-size(4), write_speed_f::binary-size(4),
           storage_id_f::integer-size(8), storage_count_f::integer-size(8),
           status_f::integer-size(8), type_f::integer-size(8), name_f::binary-size(32),
-          storage_usage_f::integer-size(8)>>
+          storage_usage_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27273,7 +29382,7 @@ defmodule Common do
         <<time_boot_ms_f::little-integer-size(32), image_interval_f::binary-size(4),
           recording_time_ms_f::little-integer-size(32), available_capacity_f::binary-size(4),
           image_status_f::integer-size(8), video_status_f::integer-size(8),
-          image_count_f::little-signed-integer-size(32)>>
+          image_count_f::little-signed-integer-size(32), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27289,7 +29398,7 @@ defmodule Common do
 
   def unpack(
         263,
-        _,
+        1,
         <<time_utc_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
           lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
           alt_f::little-signed-integer-size(32), relative_alt_f::little-signed-integer-size(32),
@@ -27314,10 +29423,52 @@ defmodule Common do
          }}
 
   def unpack(
+        263,
+        2,
+        <<time_utc_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
+          lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          alt_f::little-signed-integer-size(32), relative_alt_f::little-signed-integer-size(32),
+          q_f::binary-size(16), image_index_f::little-signed-integer-size(32),
+          camera_id_f::integer-size(8), capture_result_f::signed-integer-size(8),
+          file_url_f::binary-size(205), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CameraImageCaptured{
+           time_utc: time_utc_f,
+           time_boot_ms: time_boot_ms_f,
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           relative_alt: relative_alt_f,
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           image_index: image_index_f,
+           camera_id: camera_id_f,
+           capture_result: capture_result_f,
+           file_url: replace_trailing(file_url_f, <<0>>, "")
+         }}
+
+  def unpack(
         264,
-        _,
+        1,
         <<arming_time_utc_f::little-integer-size(64), takeoff_time_utc_f::little-integer-size(64),
           flight_uuid_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.FlightInformation{
+           arming_time_utc: arming_time_utc_f,
+           takeoff_time_utc: takeoff_time_utc_f,
+           flight_uuid: flight_uuid_f,
+           time_boot_ms: time_boot_ms_f
+         }}
+
+  def unpack(
+        264,
+        2,
+        <<arming_time_utc_f::little-integer-size(64), takeoff_time_utc_f::little-integer-size(64),
+          flight_uuid_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27347,7 +29498,8 @@ defmodule Common do
         265,
         2,
         <<time_boot_ms_f::little-integer-size(32), roll_f::binary-size(4),
-          pitch_f::binary-size(4), yaw_f::binary-size(4), yaw_absolute_f::binary-size(4)>>
+          pitch_f::binary-size(4), yaw_f::binary-size(4), yaw_absolute_f::binary-size(4),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27361,7 +29513,7 @@ defmodule Common do
 
   def unpack(
         266,
-        _,
+        1,
         <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), length_f::integer-size(8),
           first_message_offset_f::integer-size(8), data_f::binary-size(249)>>
@@ -27379,8 +29531,28 @@ defmodule Common do
          }}
 
   def unpack(
+        266,
+        2,
+        <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), length_f::integer-size(8),
+          first_message_offset_f::integer-size(8), data_f::binary-size(249),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LoggingData{
+           sequence: sequence_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           length: length_f,
+           first_message_offset: first_message_offset_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         267,
-        _,
+        1,
         <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), length_f::integer-size(8),
           first_message_offset_f::integer-size(8), data_f::binary-size(249)>>
@@ -27398,8 +29570,28 @@ defmodule Common do
          }}
 
   def unpack(
+        267,
+        2,
+        <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), length_f::integer-size(8),
+          first_message_offset_f::integer-size(8), data_f::binary-size(249),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LoggingDataAcked{
+           sequence: sequence_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           length: length_f,
+           first_message_offset: first_message_offset_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         268,
-        _,
+        1,
         <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
       ),
@@ -27412,8 +29604,22 @@ defmodule Common do
          }}
 
   def unpack(
+        268,
+        2,
+        <<sequence_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.LoggingAck{
+           sequence: sequence_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         269,
-        _,
+        1,
         <<framerate_f::binary-size(4), bitrate_f::little-integer-size(32),
           flags_f::little-integer-size(16), resolution_h_f::little-integer-size(16),
           resolution_v_f::little-integer-size(16), rotation_f::little-integer-size(16),
@@ -27425,7 +29631,34 @@ defmodule Common do
          %Common.Message.VideoStreamInformation{
            framerate: unpack_float(framerate_f),
            bitrate: bitrate_f,
-           flags: decode(flags_f, :video_stream_status_flags),
+           flags: unpack_bitmask(flags_f, :video_stream_status_flags, &decode/2),
+           resolution_h: resolution_h_f,
+           resolution_v: resolution_v_f,
+           rotation: rotation_f,
+           hfov: hfov_f,
+           stream_id: stream_id_f,
+           count: count_f,
+           type: decode(type_f, :video_stream_type),
+           name: replace_trailing(name_f, <<0>>, ""),
+           uri: replace_trailing(uri_f, <<0>>, "")
+         }}
+
+  def unpack(
+        269,
+        2,
+        <<framerate_f::binary-size(4), bitrate_f::little-integer-size(32),
+          flags_f::little-integer-size(16), resolution_h_f::little-integer-size(16),
+          resolution_v_f::little-integer-size(16), rotation_f::little-integer-size(16),
+          hfov_f::little-integer-size(16), stream_id_f::integer-size(8), count_f::integer-size(8),
+          type_f::integer-size(8), name_f::binary-size(32), uri_f::binary-size(160),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.VideoStreamInformation{
+           framerate: unpack_float(framerate_f),
+           bitrate: bitrate_f,
+           flags: unpack_bitmask(flags_f, :video_stream_status_flags, &decode/2),
            resolution_h: resolution_h_f,
            resolution_v: resolution_v_f,
            rotation: rotation_f,
@@ -27439,7 +29672,7 @@ defmodule Common do
 
   def unpack(
         270,
-        _,
+        1,
         <<framerate_f::binary-size(4), bitrate_f::little-integer-size(32),
           flags_f::little-integer-size(16), resolution_h_f::little-integer-size(16),
           resolution_v_f::little-integer-size(16), rotation_f::little-integer-size(16),
@@ -27450,7 +29683,29 @@ defmodule Common do
          %Common.Message.VideoStreamStatus{
            framerate: unpack_float(framerate_f),
            bitrate: bitrate_f,
-           flags: decode(flags_f, :video_stream_status_flags),
+           flags: unpack_bitmask(flags_f, :video_stream_status_flags, &decode/2),
+           resolution_h: resolution_h_f,
+           resolution_v: resolution_v_f,
+           rotation: rotation_f,
+           hfov: hfov_f,
+           stream_id: stream_id_f
+         }}
+
+  def unpack(
+        270,
+        2,
+        <<framerate_f::binary-size(4), bitrate_f::little-integer-size(32),
+          flags_f::little-integer-size(16), resolution_h_f::little-integer-size(16),
+          resolution_v_f::little-integer-size(16), rotation_f::little-integer-size(16),
+          hfov_f::little-integer-size(16), stream_id_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.VideoStreamStatus{
+           framerate: unpack_float(framerate_f),
+           bitrate: bitrate_f,
+           flags: unpack_bitmask(flags_f, :video_stream_status_flags, &decode/2),
            resolution_h: resolution_h_f,
            resolution_v: resolution_v_f,
            rotation: rotation_f,
@@ -27460,7 +29715,7 @@ defmodule Common do
 
   def unpack(
         271,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), lat_camera_f::little-signed-integer-size(32),
           lon_camera_f::little-signed-integer-size(32),
           alt_camera_f::little-signed-integer-size(32),
@@ -27485,8 +29740,34 @@ defmodule Common do
          }}
 
   def unpack(
+        271,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), lat_camera_f::little-signed-integer-size(32),
+          lon_camera_f::little-signed-integer-size(32),
+          alt_camera_f::little-signed-integer-size(32),
+          lat_image_f::little-signed-integer-size(32),
+          lon_image_f::little-signed-integer-size(32),
+          alt_image_f::little-signed-integer-size(32), q_f::binary-size(16),
+          hfov_f::binary-size(4), vfov_f::binary-size(4), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CameraFovStatus{
+           time_boot_ms: time_boot_ms_f,
+           lat_camera: lat_camera_f,
+           lon_camera: lon_camera_f,
+           alt_camera: alt_camera_f,
+           lat_image: lat_image_f,
+           lon_image: lon_image_f,
+           alt_image: alt_image_f,
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           hfov: unpack_float(hfov_f),
+           vfov: unpack_float(vfov_f)
+         }}
+
+  def unpack(
         275,
-        _,
+        1,
         <<point_x_f::binary-size(4), point_y_f::binary-size(4), radius_f::binary-size(4),
           rec_top_x_f::binary-size(4), rec_top_y_f::binary-size(4),
           rec_bottom_x_f::binary-size(4), rec_bottom_y_f::binary-size(4),
@@ -27505,12 +29786,36 @@ defmodule Common do
            rec_bottom_y: unpack_float(rec_bottom_y_f),
            tracking_status: decode(tracking_status_f, :camera_tracking_status_flags),
            tracking_mode: decode(tracking_mode_f, :camera_tracking_mode),
-           target_data: decode(target_data_f, :camera_tracking_target_data)
+           target_data: unpack_bitmask(target_data_f, :camera_tracking_target_data, &decode/2)
+         }}
+
+  def unpack(
+        275,
+        2,
+        <<point_x_f::binary-size(4), point_y_f::binary-size(4), radius_f::binary-size(4),
+          rec_top_x_f::binary-size(4), rec_top_y_f::binary-size(4),
+          rec_bottom_x_f::binary-size(4), rec_bottom_y_f::binary-size(4),
+          tracking_status_f::integer-size(8), tracking_mode_f::integer-size(8),
+          target_data_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CameraTrackingImageStatus{
+           point_x: unpack_float(point_x_f),
+           point_y: unpack_float(point_y_f),
+           radius: unpack_float(radius_f),
+           rec_top_x: unpack_float(rec_top_x_f),
+           rec_top_y: unpack_float(rec_top_y_f),
+           rec_bottom_x: unpack_float(rec_bottom_x_f),
+           rec_bottom_y: unpack_float(rec_bottom_y_f),
+           tracking_status: decode(tracking_status_f, :camera_tracking_status_flags),
+           tracking_mode: decode(tracking_mode_f, :camera_tracking_mode),
+           target_data: unpack_bitmask(target_data_f, :camera_tracking_target_data, &decode/2)
          }}
 
   def unpack(
         276,
-        _,
+        1,
         <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
           alt_f::binary-size(4), h_acc_f::binary-size(4), v_acc_f::binary-size(4),
           vel_n_f::binary-size(4), vel_e_f::binary-size(4), vel_d_f::binary-size(4),
@@ -27536,8 +29841,36 @@ defmodule Common do
          }}
 
   def unpack(
+        276,
+        2,
+        <<lat_f::little-signed-integer-size(32), lon_f::little-signed-integer-size(32),
+          alt_f::binary-size(4), h_acc_f::binary-size(4), v_acc_f::binary-size(4),
+          vel_n_f::binary-size(4), vel_e_f::binary-size(4), vel_d_f::binary-size(4),
+          vel_acc_f::binary-size(4), dist_f::binary-size(4), hdg_f::binary-size(4),
+          hdg_acc_f::binary-size(4), tracking_status_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CameraTrackingGeoStatus{
+           lat: lat_f,
+           lon: lon_f,
+           alt: unpack_float(alt_f),
+           h_acc: unpack_float(h_acc_f),
+           v_acc: unpack_float(v_acc_f),
+           vel_n: unpack_float(vel_n_f),
+           vel_e: unpack_float(vel_e_f),
+           vel_d: unpack_float(vel_d_f),
+           vel_acc: unpack_float(vel_acc_f),
+           dist: unpack_float(dist_f),
+           hdg: unpack_float(hdg_f),
+           hdg_acc: unpack_float(hdg_acc_f),
+           tracking_status: decode(tracking_status_f, :camera_tracking_status_flags)
+         }}
+
+  def unpack(
         280,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), cap_flags_f::little-integer-size(32),
           roll_min_f::binary-size(4), roll_max_f::binary-size(4), pitch_min_f::binary-size(4),
           pitch_max_f::binary-size(4), yaw_min_f::binary-size(4), yaw_max_f::binary-size(4),
@@ -27558,8 +29891,30 @@ defmodule Common do
          }}
 
   def unpack(
+        280,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), cap_flags_f::little-integer-size(32),
+          roll_min_f::binary-size(4), roll_max_f::binary-size(4), pitch_min_f::binary-size(4),
+          pitch_max_f::binary-size(4), yaw_min_f::binary-size(4), yaw_max_f::binary-size(4),
+          gimbal_device_id_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalManagerInformation{
+           time_boot_ms: time_boot_ms_f,
+           cap_flags: unpack_bitmask(cap_flags_f, :gimbal_manager_cap_flags, &decode/2),
+           roll_min: unpack_float(roll_min_f),
+           roll_max: unpack_float(roll_max_f),
+           pitch_min: unpack_float(pitch_min_f),
+           pitch_max: unpack_float(pitch_max_f),
+           yaw_min: unpack_float(yaw_min_f),
+           yaw_max: unpack_float(yaw_max_f),
+           gimbal_device_id: gimbal_device_id_f
+         }}
+
+  def unpack(
         281,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), flags_f::little-integer-size(32),
           gimbal_device_id_f::integer-size(8), primary_control_sysid_f::integer-size(8),
           primary_control_compid_f::integer-size(8), secondary_control_sysid_f::integer-size(8),
@@ -27578,8 +29933,28 @@ defmodule Common do
          }}
 
   def unpack(
+        281,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), flags_f::little-integer-size(32),
+          gimbal_device_id_f::integer-size(8), primary_control_sysid_f::integer-size(8),
+          primary_control_compid_f::integer-size(8), secondary_control_sysid_f::integer-size(8),
+          secondary_control_compid_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalManagerStatus{
+           time_boot_ms: time_boot_ms_f,
+           flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
+           gimbal_device_id: gimbal_device_id_f,
+           primary_control_sysid: primary_control_sysid_f,
+           primary_control_compid: primary_control_compid_f,
+           secondary_control_sysid: secondary_control_sysid_f,
+           secondary_control_compid: secondary_control_compid_f
+         }}
+
+  def unpack(
         282,
-        _,
+        1,
         <<flags_f::little-integer-size(32), q_f::binary-size(16),
           angular_velocity_x_f::binary-size(4), angular_velocity_y_f::binary-size(4),
           angular_velocity_z_f::binary-size(4), target_system_f::integer-size(8),
@@ -27599,8 +29974,30 @@ defmodule Common do
          }}
 
   def unpack(
+        282,
+        2,
+        <<flags_f::little-integer-size(32), q_f::binary-size(16),
+          angular_velocity_x_f::binary-size(4), angular_velocity_y_f::binary-size(4),
+          angular_velocity_z_f::binary-size(4), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), gimbal_device_id_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalManagerSetAttitude{
+           flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           angular_velocity_x: unpack_float(angular_velocity_x_f),
+           angular_velocity_y: unpack_float(angular_velocity_y_f),
+           angular_velocity_z: unpack_float(angular_velocity_z_f),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           gimbal_device_id: gimbal_device_id_f
+         }}
+
+  def unpack(
         283,
-        _,
+        1,
         <<uid_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
           firmware_version_f::little-integer-size(32),
           hardware_version_f::little-integer-size(32), roll_min_f::binary-size(4),
@@ -27631,12 +30028,64 @@ defmodule Common do
          }}
 
   def unpack(
+        283,
+        2,
+        <<uid_f::little-integer-size(64), time_boot_ms_f::little-integer-size(32),
+          firmware_version_f::little-integer-size(32),
+          hardware_version_f::little-integer-size(32), roll_min_f::binary-size(4),
+          roll_max_f::binary-size(4), pitch_min_f::binary-size(4), pitch_max_f::binary-size(4),
+          yaw_min_f::binary-size(4), yaw_max_f::binary-size(4),
+          cap_flags_f::little-integer-size(16), custom_cap_flags_f::little-integer-size(16),
+          vendor_name_f::binary-size(32), model_name_f::binary-size(32),
+          custom_name_f::binary-size(32), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalDeviceInformation{
+           uid: uid_f,
+           time_boot_ms: time_boot_ms_f,
+           firmware_version: firmware_version_f,
+           hardware_version: hardware_version_f,
+           roll_min: unpack_float(roll_min_f),
+           roll_max: unpack_float(roll_max_f),
+           pitch_min: unpack_float(pitch_min_f),
+           pitch_max: unpack_float(pitch_max_f),
+           yaw_min: unpack_float(yaw_min_f),
+           yaw_max: unpack_float(yaw_max_f),
+           cap_flags: unpack_bitmask(cap_flags_f, :gimbal_device_cap_flags, &decode/2),
+           custom_cap_flags: custom_cap_flags_f,
+           vendor_name: replace_trailing(vendor_name_f, <<0>>, ""),
+           model_name: replace_trailing(model_name_f, <<0>>, ""),
+           custom_name: replace_trailing(custom_name_f, <<0>>, "")
+         }}
+
+  def unpack(
         284,
-        _,
+        1,
         <<q_f::binary-size(16), angular_velocity_x_f::binary-size(4),
           angular_velocity_y_f::binary-size(4), angular_velocity_z_f::binary-size(4),
           flags_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalDeviceSetAttitude{
+           q: unpack_array(q_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           angular_velocity_x: unpack_float(angular_velocity_x_f),
+           angular_velocity_y: unpack_float(angular_velocity_y_f),
+           angular_velocity_z: unpack_float(angular_velocity_z_f),
+           flags: unpack_bitmask(flags_f, :gimbal_device_flags, &decode/2),
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
+        284,
+        2,
+        <<q_f::binary-size(16), angular_velocity_x_f::binary-size(4),
+          angular_velocity_y_f::binary-size(4), angular_velocity_z_f::binary-size(4),
+          flags_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27681,7 +30130,7 @@ defmodule Common do
           angular_velocity_z_f::binary-size(4), failure_flags_f::little-integer-size(32),
           flags_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), delta_yaw_f::binary-size(4),
-          delta_yaw_velocity_f::binary-size(4)>>
+          delta_yaw_velocity_f::binary-size(4), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27738,7 +30187,7 @@ defmodule Common do
           feed_forward_angular_velocity_z_f::binary-size(4),
           estimator_status_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), landed_state_f::integer-size(8),
-          angular_velocity_z_f::binary-size(4)>>
+          angular_velocity_z_f::binary-size(4), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27761,7 +30210,7 @@ defmodule Common do
 
   def unpack(
         287,
-        _,
+        1,
         <<flags_f::little-integer-size(32), pitch_f::binary-size(4), yaw_f::binary-size(4),
           pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
@@ -27781,8 +30230,29 @@ defmodule Common do
          }}
 
   def unpack(
+        287,
+        2,
+        <<flags_f::little-integer-size(32), pitch_f::binary-size(4), yaw_f::binary-size(4),
+          pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          gimbal_device_id_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalManagerSetPitchyaw{
+           flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f),
+           pitch_rate: unpack_float(pitch_rate_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           gimbal_device_id: gimbal_device_id_f
+         }}
+
+  def unpack(
         288,
-        _,
+        1,
         <<flags_f::little-integer-size(32), pitch_f::binary-size(4), yaw_f::binary-size(4),
           pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4),
           target_system_f::integer-size(8), target_component_f::integer-size(8),
@@ -27802,8 +30272,29 @@ defmodule Common do
          }}
 
   def unpack(
+        288,
+        2,
+        <<flags_f::little-integer-size(32), pitch_f::binary-size(4), yaw_f::binary-size(4),
+          pitch_rate_f::binary-size(4), yaw_rate_f::binary-size(4),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          gimbal_device_id_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GimbalManagerSetManualControl{
+           flags: unpack_bitmask(flags_f, :gimbal_manager_flags, &decode/2),
+           pitch: unpack_float(pitch_f),
+           yaw: unpack_float(yaw_f),
+           pitch_rate: unpack_float(pitch_rate_f),
+           yaw_rate: unpack_float(yaw_rate_f),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           gimbal_device_id: gimbal_device_id_f
+         }}
+
+  def unpack(
         290,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), error_count_f::binary-size(16),
           counter_f::little-integer-size(16), failure_flags_f::binary-size(8),
           temperature_f::binary-size(8), index_f::integer-size(8), count_f::integer-size(8),
@@ -27833,10 +30324,64 @@ defmodule Common do
          }}
 
   def unpack(
+        290,
+        2,
+        <<time_usec_f::little-integer-size(64), error_count_f::binary-size(16),
+          counter_f::little-integer-size(16), failure_flags_f::binary-size(8),
+          temperature_f::binary-size(8), index_f::integer-size(8), count_f::integer-size(8),
+          connection_type_f::integer-size(8), info_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.EscInfo{
+           time_usec: time_usec_f,
+           error_count:
+             unpack_array(error_count_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           counter: counter_f,
+           failure_flags:
+             unpack_array(failure_flags_f, fn <<elem::little-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           temperature:
+             unpack_array(temperature_f, fn <<elem::little-signed-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           index: index_f,
+           count: count_f,
+           connection_type: decode(connection_type_f, :esc_connection_type),
+           info: info_f
+         }}
+
+  def unpack(
         291,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), rpm_f::binary-size(16),
           voltage_f::binary-size(16), current_f::binary-size(16), index_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.EscStatus{
+           time_usec: time_usec_f,
+           rpm:
+             unpack_array(rpm_f, fn <<elem::little-signed-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           voltage:
+             unpack_array(voltage_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           current:
+             unpack_array(current_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           index: index_f
+         }}
+
+  def unpack(
+        291,
+        2,
+        <<time_usec_f::little-integer-size(64), rpm_f::binary-size(16),
+          voltage_f::binary-size(16), current_f::binary-size(16), index_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27865,7 +30410,7 @@ defmodule Common do
         299,
         2,
         <<ssid_f::binary-size(32), password_f::binary-size(64), mode_f::signed-integer-size(8),
-          response_f::signed-integer-size(8)>>
+          response_f::signed-integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -27878,7 +30423,7 @@ defmodule Common do
 
   def unpack(
         300,
-        _,
+        1,
         <<version_f::little-integer-size(16), min_version_f::little-integer-size(16),
           max_version_f::little-integer-size(16), spec_version_hash_f::binary-size(8),
           library_version_hash_f::binary-size(8)>>
@@ -27900,8 +30445,31 @@ defmodule Common do
          }}
 
   def unpack(
+        300,
+        2,
+        <<version_f::little-integer-size(16), min_version_f::little-integer-size(16),
+          max_version_f::little-integer-size(16), spec_version_hash_f::binary-size(8),
+          library_version_hash_f::binary-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ProtocolVersion{
+           version: version_f,
+           min_version: min_version_f,
+           max_version: max_version_f,
+           spec_version_hash:
+             unpack_array(spec_version_hash_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           library_version_hash:
+             unpack_array(library_version_hash_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         301,
-        _,
+        1,
         <<mmsi_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), cog_f::little-integer-size(16),
           heading_f::little-integer-size(16), velocity_f::little-integer-size(16),
@@ -27935,8 +30503,43 @@ defmodule Common do
          }}
 
   def unpack(
+        301,
+        2,
+        <<mmsi_f::little-integer-size(32), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), cog_f::little-integer-size(16),
+          heading_f::little-integer-size(16), velocity_f::little-integer-size(16),
+          dimension_bow_f::little-integer-size(16), dimension_stern_f::little-integer-size(16),
+          tslc_f::little-integer-size(16), flags_f::little-integer-size(16),
+          turn_rate_f::signed-integer-size(8), navigational_status_f::integer-size(8),
+          type_f::integer-size(8), dimension_port_f::integer-size(8),
+          dimension_starboard_f::integer-size(8), callsign_f::binary-size(7),
+          name_f::binary-size(20), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.AisVessel{
+           mmsi: mmsi_f,
+           lat: lat_f,
+           lon: lon_f,
+           cog: cog_f,
+           heading: heading_f,
+           velocity: velocity_f,
+           dimension_bow: dimension_bow_f,
+           dimension_stern: dimension_stern_f,
+           tslc: tslc_f,
+           flags: unpack_bitmask(flags_f, :ais_flags, &decode/2),
+           turn_rate: turn_rate_f,
+           navigational_status: decode(navigational_status_f, :ais_nav_status),
+           type: decode(type_f, :ais_type),
+           dimension_port: dimension_port_f,
+           dimension_starboard: dimension_starboard_f,
+           callsign: replace_trailing(callsign_f, <<0>>, ""),
+           name: replace_trailing(name_f, <<0>>, "")
+         }}
+
+  def unpack(
         310,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), uptime_sec_f::little-integer-size(32),
           vendor_specific_status_code_f::little-integer-size(16), health_f::integer-size(8),
           mode_f::integer-size(8), sub_mode_f::integer-size(8)>>
@@ -27953,8 +30556,26 @@ defmodule Common do
          }}
 
   def unpack(
+        310,
+        2,
+        <<time_usec_f::little-integer-size(64), uptime_sec_f::little-integer-size(32),
+          vendor_specific_status_code_f::little-integer-size(16), health_f::integer-size(8),
+          mode_f::integer-size(8), sub_mode_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.UavcanNodeStatus{
+           time_usec: time_usec_f,
+           uptime_sec: uptime_sec_f,
+           vendor_specific_status_code: vendor_specific_status_code_f,
+           health: decode(health_f, :uavcan_node_health),
+           mode: decode(mode_f, :uavcan_node_mode),
+           sub_mode: sub_mode_f
+         }}
+
+  def unpack(
         311,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), uptime_sec_f::little-integer-size(32),
           sw_vcs_commit_f::little-integer-size(32), name_f::binary-size(80),
           hw_version_major_f::integer-size(8), hw_version_minor_f::integer-size(8),
@@ -27979,8 +30600,34 @@ defmodule Common do
          }}
 
   def unpack(
+        311,
+        2,
+        <<time_usec_f::little-integer-size(64), uptime_sec_f::little-integer-size(32),
+          sw_vcs_commit_f::little-integer-size(32), name_f::binary-size(80),
+          hw_version_major_f::integer-size(8), hw_version_minor_f::integer-size(8),
+          hw_unique_id_f::binary-size(16), sw_version_major_f::integer-size(8),
+          sw_version_minor_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.UavcanNodeInfo{
+           time_usec: time_usec_f,
+           uptime_sec: uptime_sec_f,
+           sw_vcs_commit: sw_vcs_commit_f,
+           name: replace_trailing(name_f, <<0>>, ""),
+           hw_version_major: hw_version_major_f,
+           hw_version_minor: hw_version_minor_f,
+           hw_unique_id:
+             unpack_array(hw_unique_id_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           sw_version_major: sw_version_major_f,
+           sw_version_minor: sw_version_minor_f
+         }}
+
+  def unpack(
         320,
-        _,
+        1,
         <<param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), param_id_f::binary-size(16)>>
       ),
@@ -27993,7 +30640,23 @@ defmodule Common do
            param_id: replace_trailing(param_id_f, <<0>>, "")
          }}
 
-  def unpack(321, _, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
+  def unpack(
+        320,
+        2,
+        <<param_index_f::little-signed-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), param_id_f::binary-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamExtRequestRead{
+           param_index: param_index_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           param_id: replace_trailing(param_id_f, <<0>>, "")
+         }}
+
+  def unpack(321, 1, <<target_system_f::integer-size(8), target_component_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.ParamExtRequestList{
@@ -28002,8 +30665,21 @@ defmodule Common do
        }}
 
   def unpack(
+        321,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamExtRequestList{
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         322,
-        _,
+        1,
         <<param_count_f::little-integer-size(16), param_index_f::little-integer-size(16),
           param_id_f::binary-size(16), param_value_f::binary-size(128),
           param_type_f::integer-size(8)>>
@@ -28019,8 +30695,25 @@ defmodule Common do
          }}
 
   def unpack(
+        322,
+        2,
+        <<param_count_f::little-integer-size(16), param_index_f::little-integer-size(16),
+          param_id_f::binary-size(16), param_value_f::binary-size(128),
+          param_type_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamExtValue{
+           param_count: param_count_f,
+           param_index: param_index_f,
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           param_value: replace_trailing(param_value_f, <<0>>, ""),
+           param_type: decode(param_type_f, :mav_param_ext_type)
+         }}
+
+  def unpack(
         323,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           param_id_f::binary-size(16), param_value_f::binary-size(128),
           param_type_f::integer-size(8)>>
@@ -28036,10 +30729,43 @@ defmodule Common do
          }}
 
   def unpack(
+        323,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          param_id_f::binary-size(16), param_value_f::binary-size(128),
+          param_type_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamExtSet{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           param_value: replace_trailing(param_value_f, <<0>>, ""),
+           param_type: decode(param_type_f, :mav_param_ext_type)
+         }}
+
+  def unpack(
         324,
-        _,
+        1,
         <<param_id_f::binary-size(16), param_value_f::binary-size(128),
           param_type_f::integer-size(8), param_result_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ParamExtAck{
+           param_id: replace_trailing(param_id_f, <<0>>, ""),
+           param_value: replace_trailing(param_value_f, <<0>>, ""),
+           param_type: decode(param_type_f, :mav_param_ext_type),
+           param_result: decode(param_result_f, :param_ack)
+         }}
+
+  def unpack(
+        324,
+        2,
+        <<param_id_f::binary-size(16), param_value_f::binary-size(128),
+          param_type_f::integer-size(8), param_result_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28077,8 +30803,8 @@ defmodule Common do
         <<time_usec_f::little-integer-size(64), distances_f::binary-size(144),
           min_distance_f::little-integer-size(16), max_distance_f::little-integer-size(16),
           sensor_type_f::integer-size(8), increment_f::integer-size(8),
-          increment_f_f::binary-size(4), angle_offset_f::binary-size(4),
-          frame_f::integer-size(8)>>
+          increment_f_f::binary-size(4), angle_offset_f::binary-size(4), frame_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28142,7 +30868,8 @@ defmodule Common do
           yawspeed_f::binary-size(4), pose_covariance_f::binary-size(84),
           velocity_covariance_f::binary-size(84), frame_id_f::integer-size(8),
           child_frame_id_f::integer-size(8), reset_counter_f::integer-size(8),
-          estimator_type_f::integer-size(8), quality_f::signed-integer-size(8)>>
+          estimator_type_f::integer-size(8), quality_f::signed-integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28175,7 +30902,7 @@ defmodule Common do
 
   def unpack(
         332,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), pos_x_f::binary-size(20),
           pos_y_f::binary-size(20), pos_z_f::binary-size(20), vel_x_f::binary-size(20),
           vel_y_f::binary-size(20), vel_z_f::binary-size(20), acc_x_f::binary-size(20),
@@ -28217,8 +30944,51 @@ defmodule Common do
          }}
 
   def unpack(
+        332,
+        2,
+        <<time_usec_f::little-integer-size(64), pos_x_f::binary-size(20),
+          pos_y_f::binary-size(20), pos_z_f::binary-size(20), vel_x_f::binary-size(20),
+          vel_y_f::binary-size(20), vel_z_f::binary-size(20), acc_x_f::binary-size(20),
+          acc_y_f::binary-size(20), acc_z_f::binary-size(20), pos_yaw_f::binary-size(20),
+          vel_yaw_f::binary-size(20), command_f::binary-size(10), valid_points_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TrajectoryRepresentationWaypoints{
+           time_usec: time_usec_f,
+           pos_x:
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_y:
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_z:
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           vel_x:
+             unpack_array(vel_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           vel_y:
+             unpack_array(vel_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           vel_z:
+             unpack_array(vel_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           acc_x:
+             unpack_array(acc_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           acc_y:
+             unpack_array(acc_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           acc_z:
+             unpack_array(acc_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_yaw:
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           vel_yaw:
+             unpack_array(vel_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           command:
+             unpack_array(command_f, fn <<elem::little-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           valid_points: valid_points_f
+         }}
+
+  def unpack(
         333,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), pos_x_f::binary-size(20),
           pos_y_f::binary-size(20), pos_z_f::binary-size(20), delta_f::binary-size(20),
           pos_yaw_f::binary-size(20), valid_points_f::integer-size(8)>>
@@ -28241,8 +31011,33 @@ defmodule Common do
          }}
 
   def unpack(
+        333,
+        2,
+        <<time_usec_f::little-integer-size(64), pos_x_f::binary-size(20),
+          pos_y_f::binary-size(20), pos_z_f::binary-size(20), delta_f::binary-size(20),
+          pos_yaw_f::binary-size(20), valid_points_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TrajectoryRepresentationBezier{
+           time_usec: time_usec_f,
+           pos_x:
+             unpack_array(pos_x_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_y:
+             unpack_array(pos_y_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_z:
+             unpack_array(pos_z_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           delta:
+             unpack_array(delta_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           pos_yaw:
+             unpack_array(pos_yaw_f, fn <<elem::binary-size(4), rest::binary>> -> {elem, rest} end),
+           valid_points: valid_points_f
+         }}
+
+  def unpack(
         334,
-        _,
+        1,
         <<mcc_f::little-integer-size(16), mnc_f::little-integer-size(16),
           lac_f::little-integer-size(16), status_f::integer-size(8),
           failure_reason_f::integer-size(8), type_f::integer-size(8), quality_f::integer-size(8)>>
@@ -28260,8 +31055,28 @@ defmodule Common do
          }}
 
   def unpack(
+        334,
+        2,
+        <<mcc_f::little-integer-size(16), mnc_f::little-integer-size(16),
+          lac_f::little-integer-size(16), status_f::integer-size(8),
+          failure_reason_f::integer-size(8), type_f::integer-size(8), quality_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CellularStatus{
+           mcc: mcc_f,
+           mnc: mnc_f,
+           lac: lac_f,
+           status: decode(status_f, :cellular_status_flag),
+           failure_reason: decode(failure_reason_f, :cellular_network_failed_reason),
+           type: decode(type_f, :cellular_network_radio_type),
+           quality: quality_f
+         }}
+
+  def unpack(
         335,
-        _,
+        1,
         <<timestamp_f::little-integer-size(64), last_heartbeat_f::little-integer-size(64),
           failed_sessions_f::little-integer-size(16),
           successful_sessions_f::little-integer-size(16), signal_quality_f::integer-size(8),
@@ -28282,8 +31097,30 @@ defmodule Common do
          }}
 
   def unpack(
+        335,
+        2,
+        <<timestamp_f::little-integer-size(64), last_heartbeat_f::little-integer-size(64),
+          failed_sessions_f::little-integer-size(16),
+          successful_sessions_f::little-integer-size(16), signal_quality_f::integer-size(8),
+          ring_pending_f::integer-size(8), tx_session_pending_f::integer-size(8),
+          rx_session_pending_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.IsbdLinkStatus{
+           timestamp: timestamp_f,
+           last_heartbeat: last_heartbeat_f,
+           failed_sessions: failed_sessions_f,
+           successful_sessions: successful_sessions_f,
+           signal_quality: signal_quality_f,
+           ring_pending: ring_pending_f,
+           tx_session_pending: tx_session_pending_f,
+           rx_session_pending: rx_session_pending_f
+         }}
+
+  def unpack(
         336,
-        _,
+        1,
         <<enable_lte_f::integer-size(8), enable_pin_f::integer-size(8), pin_f::binary-size(16),
           new_pin_f::binary-size(16), apn_f::binary-size(32), puk_f::binary-size(16),
           roaming_f::integer-size(8), response_f::integer-size(8)>>
@@ -28301,12 +31138,41 @@ defmodule Common do
            response: decode(response_f, :cellular_config_response)
          }}
 
-  def unpack(339, _, <<frequency_f::binary-size(4), index_f::integer-size(8)>>),
+  def unpack(
+        336,
+        2,
+        <<enable_lte_f::integer-size(8), enable_pin_f::integer-size(8), pin_f::binary-size(16),
+          new_pin_f::binary-size(16), apn_f::binary-size(32), puk_f::binary-size(16),
+          roaming_f::integer-size(8), response_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CellularConfig{
+           enable_lte: enable_lte_f,
+           enable_pin: enable_pin_f,
+           pin: replace_trailing(pin_f, <<0>>, ""),
+           new_pin: replace_trailing(new_pin_f, <<0>>, ""),
+           apn: replace_trailing(apn_f, <<0>>, ""),
+           puk: replace_trailing(puk_f, <<0>>, ""),
+           roaming: roaming_f,
+           response: decode(response_f, :cellular_config_response)
+         }}
+
+  def unpack(339, 1, <<frequency_f::binary-size(4), index_f::integer-size(8)>>),
     do: {:ok, %Common.Message.RawRpm{frequency: unpack_float(frequency_f), index: index_f}}
 
   def unpack(
+        339,
+        2,
+        <<frequency_f::binary-size(4), index_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do: {:ok, %Common.Message.RawRpm{frequency: unpack_float(frequency_f), index: index_f}}
+
+  def unpack(
         340,
-        _,
+        1,
         <<time_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
           lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
           relative_alt_f::little-signed-integer-size(32),
@@ -28316,6 +31182,44 @@ defmodule Common do
           h_acc_f::little-integer-size(16), v_acc_f::little-integer-size(16),
           vel_acc_f::little-integer-size(16), update_rate_f::little-integer-size(16),
           uas_id_f::binary-size(18), flight_state_f::integer-size(8), flags_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.UtmGlobalPosition{
+           time: time_f,
+           lat: lat_f,
+           lon: lon_f,
+           alt: alt_f,
+           relative_alt: relative_alt_f,
+           next_lat: next_lat_f,
+           next_lon: next_lon_f,
+           next_alt: next_alt_f,
+           vx: vx_f,
+           vy: vy_f,
+           vz: vz_f,
+           h_acc: h_acc_f,
+           v_acc: v_acc_f,
+           vel_acc: vel_acc_f,
+           update_rate: update_rate_f,
+           uas_id:
+             unpack_array(uas_id_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end),
+           flight_state: decode(flight_state_f, :utm_flight_state),
+           flags: unpack_bitmask(flags_f, :utm_data_avail_flags, &decode/2)
+         }}
+
+  def unpack(
+        340,
+        2,
+        <<time_f::little-integer-size(64), lat_f::little-signed-integer-size(32),
+          lon_f::little-signed-integer-size(32), alt_f::little-signed-integer-size(32),
+          relative_alt_f::little-signed-integer-size(32),
+          next_lat_f::little-signed-integer-size(32), next_lon_f::little-signed-integer-size(32),
+          next_alt_f::little-signed-integer-size(32), vx_f::little-signed-integer-size(16),
+          vy_f::little-signed-integer-size(16), vz_f::little-signed-integer-size(16),
+          h_acc_f::little-integer-size(16), v_acc_f::little-integer-size(16),
+          vel_acc_f::little-integer-size(16), update_rate_f::little-integer-size(16),
+          uas_id_f::binary-size(18), flight_state_f::integer-size(8), flags_f::integer-size(8),
+          _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28359,7 +31263,7 @@ defmodule Common do
         350,
         2,
         <<time_usec_f::little-integer-size(64), array_id_f::little-integer-size(16),
-          name_f::binary-size(10), data_f::binary-size(232)>>
+          name_f::binary-size(10), data_f::binary-size(232), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28373,10 +31277,28 @@ defmodule Common do
 
   def unpack(
         360,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), radius_f::binary-size(4),
           x_f::little-signed-integer-size(32), y_f::little-signed-integer-size(32),
           z_f::binary-size(4), frame_f::integer-size(8)>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OrbitExecutionStatus{
+           time_usec: time_usec_f,
+           radius: unpack_float(radius_f),
+           x: x_f,
+           y: y_f,
+           z: unpack_float(z_f),
+           frame: decode(frame_f, :mav_frame)
+         }}
+
+  def unpack(
+        360,
+        2,
+        <<time_usec_f::little-integer-size(64), radius_f::binary-size(4),
+          x_f::little-signed-integer-size(32), y_f::little-signed-integer-size(32),
+          z_f::binary-size(4), frame_f::integer-size(8), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28430,7 +31352,7 @@ defmodule Common do
           charging_maximum_voltage_f::little-integer-size(16), cells_in_series_f::integer-size(8),
           discharge_maximum_current_f::little-integer-size(32),
           discharge_maximum_burst_current_f::little-integer-size(32),
-          manufacture_date_f::binary-size(11)>>
+          manufacture_date_f::binary-size(11), _future_extension_fields::binary>>
       ),
       do:
         {:ok,
@@ -28456,7 +31378,7 @@ defmodule Common do
 
   def unpack(
         373,
-        _,
+        1,
         <<status_f::little-integer-size(64), battery_current_f::binary-size(4),
           load_current_f::binary-size(4), power_generated_f::binary-size(4),
           bus_voltage_f::binary-size(4), bat_current_setpoint_f::binary-size(4),
@@ -28483,8 +31405,37 @@ defmodule Common do
          }}
 
   def unpack(
+        373,
+        2,
+        <<status_f::little-integer-size(64), battery_current_f::binary-size(4),
+          load_current_f::binary-size(4), power_generated_f::binary-size(4),
+          bus_voltage_f::binary-size(4), bat_current_setpoint_f::binary-size(4),
+          runtime_f::little-integer-size(32),
+          time_until_maintenance_f::little-signed-integer-size(32),
+          generator_speed_f::little-integer-size(16),
+          rectifier_temperature_f::little-signed-integer-size(16),
+          generator_temperature_f::little-signed-integer-size(16),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.GeneratorStatus{
+           status: unpack_bitmask(status_f, :mav_generator_status_flag, &decode/2),
+           battery_current: unpack_float(battery_current_f),
+           load_current: unpack_float(load_current_f),
+           power_generated: unpack_float(power_generated_f),
+           bus_voltage: unpack_float(bus_voltage_f),
+           bat_current_setpoint: unpack_float(bat_current_setpoint_f),
+           runtime: runtime_f,
+           time_until_maintenance: time_until_maintenance_f,
+           generator_speed: generator_speed_f,
+           rectifier_temperature: rectifier_temperature_f,
+           generator_temperature: generator_temperature_f
+         }}
+
+  def unpack(
         375,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), active_f::little-integer-size(32),
           actuator_f::binary-size(128)>>
       ),
@@ -28500,8 +31451,25 @@ defmodule Common do
          }}
 
   def unpack(
+        375,
+        2,
+        <<time_usec_f::little-integer-size(64), active_f::little-integer-size(32),
+          actuator_f::binary-size(128), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ActuatorOutputStatus{
+           time_usec: time_usec_f,
+           active: active_f,
+           actuator:
+             unpack_array(actuator_f, fn <<elem::binary-size(4), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         380,
-        _,
+        1,
         <<safe_return_f::little-signed-integer-size(32), land_f::little-signed-integer-size(32),
           mission_next_item_f::little-signed-integer-size(32),
           mission_end_f::little-signed-integer-size(32),
@@ -28518,8 +31486,26 @@ defmodule Common do
          }}
 
   def unpack(
+        380,
+        2,
+        <<safe_return_f::little-signed-integer-size(32), land_f::little-signed-integer-size(32),
+          mission_next_item_f::little-signed-integer-size(32),
+          mission_end_f::little-signed-integer-size(32),
+          commanded_action_f::little-signed-integer-size(32), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.TimeEstimateToTarget{
+           safe_return: safe_return_f,
+           land: land_f,
+           mission_next_item: mission_next_item_f,
+           mission_end: mission_end_f,
+           commanded_action: commanded_action_f
+         }}
+
+  def unpack(
         385,
-        _,
+        1,
         <<payload_type_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), payload_length_f::integer-size(8),
           payload_f::binary-size(128)>>
@@ -28538,8 +31524,28 @@ defmodule Common do
          }}
 
   def unpack(
+        385,
+        2,
+        <<payload_type_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), payload_length_f::integer-size(8),
+          payload_f::binary-size(128), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Tunnel{
+           payload_type: decode(payload_type_f, :mav_tunnel_payload_type),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           payload_length: payload_length_f,
+           payload:
+             unpack_array(payload_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         386,
-        _,
+        1,
         <<id_f::little-integer-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8), bus_f::integer-size(8), len_f::integer-size(8),
           data_f::binary-size(8)>>
@@ -28557,8 +31563,27 @@ defmodule Common do
          }}
 
   def unpack(
+        386,
+        2,
+        <<id_f::little-integer-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), bus_f::integer-size(8), len_f::integer-size(8),
+          data_f::binary-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CanFrame{
+           id: id_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           bus: bus_f,
+           len: len_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         387,
-        _,
+        1,
         <<id_f::little-integer-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8), bus_f::integer-size(8), len_f::integer-size(8),
           data_f::binary-size(64)>>
@@ -28576,8 +31601,27 @@ defmodule Common do
          }}
 
   def unpack(
+        387,
+        2,
+        <<id_f::little-integer-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), bus_f::integer-size(8), len_f::integer-size(8),
+          data_f::binary-size(64), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CanfdFrame{
+           id: id_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           bus: bus_f,
+           len: len_f,
+           data:
+             unpack_array(data_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         388,
-        _,
+        1,
         <<ids_f::binary-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8), bus_f::integer-size(8),
           operation_f::integer-size(8), num_ids_f::integer-size(8)>>
@@ -28597,8 +31641,30 @@ defmodule Common do
          }}
 
   def unpack(
+        388,
+        2,
+        <<ids_f::binary-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), bus_f::integer-size(8),
+          operation_f::integer-size(8), num_ids_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CanFilterModify{
+           ids:
+             unpack_array(ids_f, fn <<elem::little-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           bus: bus_f,
+           operation: decode(operation_f, :can_filter_op),
+           num_ids: num_ids_f
+         }}
+
+  def unpack(
         390,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), uptime_f::little-integer-size(32),
           ram_usage_f::little-integer-size(32), ram_total_f::little-integer-size(32),
           storage_type_f::binary-size(16), storage_usage_f::binary-size(16),
@@ -28678,8 +31744,89 @@ defmodule Common do
          }}
 
   def unpack(
+        390,
+        2,
+        <<time_usec_f::little-integer-size(64), uptime_f::little-integer-size(32),
+          ram_usage_f::little-integer-size(32), ram_total_f::little-integer-size(32),
+          storage_type_f::binary-size(16), storage_usage_f::binary-size(16),
+          storage_total_f::binary-size(16), link_type_f::binary-size(24),
+          link_tx_rate_f::binary-size(24), link_rx_rate_f::binary-size(24),
+          link_tx_max_f::binary-size(24), link_rx_max_f::binary-size(24),
+          fan_speed_f::binary-size(8), type_f::integer-size(8), cpu_cores_f::binary-size(8),
+          cpu_combined_f::binary-size(10), gpu_cores_f::binary-size(4),
+          gpu_combined_f::binary-size(10), temperature_board_f::signed-integer-size(8),
+          temperature_core_f::binary-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OnboardComputerStatus{
+           time_usec: time_usec_f,
+           uptime: uptime_f,
+           ram_usage: ram_usage_f,
+           ram_total: ram_total_f,
+           storage_type:
+             unpack_array(storage_type_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           storage_usage:
+             unpack_array(storage_usage_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           storage_total:
+             unpack_array(storage_total_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           link_type:
+             unpack_array(link_type_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           link_tx_rate:
+             unpack_array(link_tx_rate_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           link_rx_rate:
+             unpack_array(link_rx_rate_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           link_tx_max:
+             unpack_array(link_tx_max_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           link_rx_max:
+             unpack_array(link_rx_max_f, fn <<elem::little-integer-size(32), rest::binary>> ->
+               {elem, rest}
+             end),
+           fan_speed:
+             unpack_array(fan_speed_f, fn <<elem::little-signed-integer-size(16), rest::binary>> ->
+               {elem, rest}
+             end),
+           type: type_f,
+           cpu_cores:
+             unpack_array(cpu_cores_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           cpu_combined:
+             unpack_array(cpu_combined_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           gpu_cores:
+             unpack_array(gpu_cores_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           gpu_combined:
+             unpack_array(gpu_combined_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           temperature_board: temperature_board_f,
+           temperature_core:
+             unpack_array(temperature_core_f, fn <<elem::signed-integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         395,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32),
           general_metadata_file_crc_f::little-integer-size(32),
           peripherals_metadata_file_crc_f::little-integer-size(32),
@@ -28696,8 +31843,27 @@ defmodule Common do
          }}
 
   def unpack(
+        395,
+        2,
+        <<time_boot_ms_f::little-integer-size(32),
+          general_metadata_file_crc_f::little-integer-size(32),
+          peripherals_metadata_file_crc_f::little-integer-size(32),
+          general_metadata_uri_f::binary-size(100), peripherals_metadata_uri_f::binary-size(100),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ComponentInformation{
+           time_boot_ms: time_boot_ms_f,
+           general_metadata_file_crc: general_metadata_file_crc_f,
+           peripherals_metadata_file_crc: peripherals_metadata_file_crc_f,
+           general_metadata_uri: replace_trailing(general_metadata_uri_f, <<0>>, ""),
+           peripherals_metadata_uri: replace_trailing(peripherals_metadata_uri_f, <<0>>, "")
+         }}
+
+  def unpack(
         397,
-        _,
+        1,
         <<time_boot_ms_f::little-integer-size(32), file_crc_f::little-integer-size(32),
           uri_f::binary-size(100)>>
       ),
@@ -28710,8 +31876,22 @@ defmodule Common do
          }}
 
   def unpack(
+        397,
+        2,
+        <<time_boot_ms_f::little-integer-size(32), file_crc_f::little-integer-size(32),
+          uri_f::binary-size(100), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ComponentMetadata{
+           time_boot_ms: time_boot_ms_f,
+           file_crc: file_crc_f,
+           uri: replace_trailing(uri_f, <<0>>, "")
+         }}
+
+  def unpack(
         400,
-        _,
+        1,
         <<format_f::little-integer-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8), tune_f::binary-size(248)>>
       ),
@@ -28725,8 +31905,24 @@ defmodule Common do
          }}
 
   def unpack(
+        400,
+        2,
+        <<format_f::little-integer-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), tune_f::binary-size(248),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.PlayTuneV2{
+           format: unpack_bitmask(format_f, :tune_format, &decode/2),
+           target_system: target_system_f,
+           target_component: target_component_f,
+           tune: replace_trailing(tune_f, <<0>>, "")
+         }}
+
+  def unpack(
         401,
-        _,
+        1,
         <<format_f::little-integer-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8)>>
       ),
@@ -28739,8 +31935,22 @@ defmodule Common do
          }}
 
   def unpack(
+        401,
+        2,
+        <<format_f::little-integer-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.SupportedTunes{
+           format: unpack_bitmask(format_f, :tune_format, &decode/2),
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         410,
-        _,
+        1,
         <<id_f::little-integer-size(32), event_time_boot_ms_f::little-integer-size(32),
           sequence_f::little-integer-size(16), destination_component_f::integer-size(8),
           destination_system_f::integer-size(8), log_levels_f::integer-size(8),
@@ -28761,7 +31971,30 @@ defmodule Common do
              end)
          }}
 
-  def unpack(411, _, <<sequence_f::little-integer-size(16), flags_f::integer-size(8)>>),
+  def unpack(
+        410,
+        2,
+        <<id_f::little-integer-size(32), event_time_boot_ms_f::little-integer-size(32),
+          sequence_f::little-integer-size(16), destination_component_f::integer-size(8),
+          destination_system_f::integer-size(8), log_levels_f::integer-size(8),
+          arguments_f::binary-size(40), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.Event{
+           id: id_f,
+           event_time_boot_ms: event_time_boot_ms_f,
+           sequence: sequence_f,
+           destination_component: destination_component_f,
+           destination_system: destination_system_f,
+           log_levels: log_levels_f,
+           arguments:
+             unpack_array(arguments_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(411, 1, <<sequence_f::little-integer-size(16), flags_f::integer-size(8)>>),
     do:
       {:ok,
        %Common.Message.CurrentEventSequence{
@@ -28770,8 +32003,21 @@ defmodule Common do
        }}
 
   def unpack(
+        411,
+        2,
+        <<sequence_f::little-integer-size(16), flags_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.CurrentEventSequence{
+           sequence: sequence_f,
+           flags: unpack_bitmask(flags_f, :mav_event_current_sequence_flags, &decode/2)
+         }}
+
+  def unpack(
         412,
-        _,
+        1,
         <<first_sequence_f::little-integer-size(16), last_sequence_f::little-integer-size(16),
           target_system_f::integer-size(8), target_component_f::integer-size(8)>>
       ),
@@ -28785,8 +32031,24 @@ defmodule Common do
          }}
 
   def unpack(
+        412,
+        2,
+        <<first_sequence_f::little-integer-size(16), last_sequence_f::little-integer-size(16),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.RequestEvent{
+           first_sequence: first_sequence_f,
+           last_sequence: last_sequence_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         413,
-        _,
+        1,
         <<sequence_f::little-integer-size(16),
           sequence_oldest_available_f::little-integer-size(16), target_system_f::integer-size(8),
           target_component_f::integer-size(8), reason_f::integer-size(8)>>
@@ -28802,8 +32064,26 @@ defmodule Common do
          }}
 
   def unpack(
+        413,
+        2,
+        <<sequence_f::little-integer-size(16),
+          sequence_oldest_available_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), reason_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.ResponseEventError{
+           sequence: sequence_f,
+           sequence_oldest_available: sequence_oldest_available_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           reason: decode(reason_f, :mav_event_error_reason)
+         }}
+
+  def unpack(
         9000,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), distance_f::binary-size(128),
           count_f::integer-size(8)>>
       ),
@@ -28819,8 +32099,25 @@ defmodule Common do
          }}
 
   def unpack(
+        9000,
+        2,
+        <<time_usec_f::little-integer-size(64), distance_f::binary-size(128),
+          count_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.WheelDistance{
+           time_usec: time_usec_f,
+           distance:
+             unpack_array(distance_f, fn <<elem::binary-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           count: count_f
+         }}
+
+  def unpack(
         9005,
-        _,
+        1,
         <<time_usec_f::little-integer-size(64), line_length_f::binary-size(4),
           speed_f::binary-size(4), tension_f::binary-size(4), voltage_f::binary-size(4),
           current_f::binary-size(4), status_f::little-integer-size(32),
@@ -28840,8 +32137,29 @@ defmodule Common do
          }}
 
   def unpack(
+        9005,
+        2,
+        <<time_usec_f::little-integer-size(64), line_length_f::binary-size(4),
+          speed_f::binary-size(4), tension_f::binary-size(4), voltage_f::binary-size(4),
+          current_f::binary-size(4), status_f::little-integer-size(32),
+          temperature_f::little-signed-integer-size(16), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.WinchStatus{
+           time_usec: time_usec_f,
+           line_length: unpack_float(line_length_f),
+           speed: unpack_float(speed_f),
+           tension: unpack_float(tension_f),
+           voltage: unpack_float(voltage_f),
+           current: unpack_float(current_f),
+           status: unpack_bitmask(status_f, :mav_winch_status_flag, &decode/2),
+           temperature: temperature_f
+         }}
+
+  def unpack(
         12900,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           id_or_mac_f::binary-size(20), id_type_f::integer-size(8), ua_type_f::integer-size(8),
           uas_id_f::binary-size(20)>>
@@ -28862,8 +32180,30 @@ defmodule Common do
          }}
 
   def unpack(
+        12900,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          id_or_mac_f::binary-size(20), id_type_f::integer-size(8), ua_type_f::integer-size(8),
+          uas_id_f::binary-size(20), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdBasicId{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           id_type: decode(id_type_f, :mav_odid_id_type),
+           ua_type: decode(ua_type_f, :mav_odid_ua_type),
+           uas_id:
+             unpack_array(uas_id_f, fn <<elem::integer-size(8), rest::binary>> -> {elem, rest} end)
+         }}
+
+  def unpack(
         12901,
-        _,
+        1,
         <<latitude_f::little-signed-integer-size(32), longitude_f::little-signed-integer-size(32),
           altitude_barometric_f::binary-size(4), altitude_geodetic_f::binary-size(4),
           height_f::binary-size(4), timestamp_f::binary-size(4),
@@ -28903,8 +32243,49 @@ defmodule Common do
          }}
 
   def unpack(
+        12901,
+        2,
+        <<latitude_f::little-signed-integer-size(32), longitude_f::little-signed-integer-size(32),
+          altitude_barometric_f::binary-size(4), altitude_geodetic_f::binary-size(4),
+          height_f::binary-size(4), timestamp_f::binary-size(4),
+          direction_f::little-integer-size(16), speed_horizontal_f::little-integer-size(16),
+          speed_vertical_f::little-signed-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), id_or_mac_f::binary-size(20),
+          status_f::integer-size(8), height_reference_f::integer-size(8),
+          horizontal_accuracy_f::integer-size(8), vertical_accuracy_f::integer-size(8),
+          barometer_accuracy_f::integer-size(8), speed_accuracy_f::integer-size(8),
+          timestamp_accuracy_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdLocation{
+           latitude: latitude_f,
+           longitude: longitude_f,
+           altitude_barometric: unpack_float(altitude_barometric_f),
+           altitude_geodetic: unpack_float(altitude_geodetic_f),
+           height: unpack_float(height_f),
+           timestamp: unpack_float(timestamp_f),
+           direction: direction_f,
+           speed_horizontal: speed_horizontal_f,
+           speed_vertical: speed_vertical_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           status: decode(status_f, :mav_odid_status),
+           height_reference: decode(height_reference_f, :mav_odid_height_ref),
+           horizontal_accuracy: decode(horizontal_accuracy_f, :mav_odid_hor_acc),
+           vertical_accuracy: decode(vertical_accuracy_f, :mav_odid_ver_acc),
+           barometer_accuracy: decode(barometer_accuracy_f, :mav_odid_ver_acc),
+           speed_accuracy: decode(speed_accuracy_f, :mav_odid_speed_acc),
+           timestamp_accuracy: decode(timestamp_accuracy_f, :mav_odid_time_acc)
+         }}
+
+  def unpack(
         12902,
-        _,
+        1,
         <<timestamp_f::little-integer-size(32), target_system_f::integer-size(8),
           target_component_f::integer-size(8), id_or_mac_f::binary-size(20),
           authentication_type_f::integer-size(8), data_page_f::integer-size(8),
@@ -28932,8 +32313,37 @@ defmodule Common do
          }}
 
   def unpack(
+        12902,
+        2,
+        <<timestamp_f::little-integer-size(32), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), id_or_mac_f::binary-size(20),
+          authentication_type_f::integer-size(8), data_page_f::integer-size(8),
+          last_page_index_f::integer-size(8), length_f::integer-size(8),
+          authentication_data_f::binary-size(23), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdAuthentication{
+           timestamp: timestamp_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           authentication_type: decode(authentication_type_f, :mav_odid_auth_type),
+           data_page: data_page_f,
+           last_page_index: last_page_index_f,
+           length: length_f,
+           authentication_data:
+             unpack_array(authentication_data_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(
         12903,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           id_or_mac_f::binary-size(20), description_type_f::integer-size(8),
           description_f::binary-size(23)>>
@@ -28952,8 +32362,28 @@ defmodule Common do
          }}
 
   def unpack(
+        12903,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          id_or_mac_f::binary-size(20), description_type_f::integer-size(8),
+          description_f::binary-size(23), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdSelfId{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           description_type: decode(description_type_f, :mav_odid_desc_type),
+           description: replace_trailing(description_f, <<0>>, "")
+         }}
+
+  def unpack(
         12904,
-        _,
+        1,
         <<operator_latitude_f::little-signed-integer-size(32),
           operator_longitude_f::little-signed-integer-size(32), area_ceiling_f::binary-size(4),
           area_floor_f::binary-size(4), operator_altitude_geo_f::binary-size(4),
@@ -28988,8 +32418,45 @@ defmodule Common do
          }}
 
   def unpack(
+        12904,
+        2,
+        <<operator_latitude_f::little-signed-integer-size(32),
+          operator_longitude_f::little-signed-integer-size(32), area_ceiling_f::binary-size(4),
+          area_floor_f::binary-size(4), operator_altitude_geo_f::binary-size(4),
+          timestamp_f::little-integer-size(32), area_count_f::little-integer-size(16),
+          area_radius_f::little-integer-size(16), target_system_f::integer-size(8),
+          target_component_f::integer-size(8), id_or_mac_f::binary-size(20),
+          operator_location_type_f::integer-size(8), classification_type_f::integer-size(8),
+          category_eu_f::integer-size(8), class_eu_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdSystem{
+           operator_latitude: operator_latitude_f,
+           operator_longitude: operator_longitude_f,
+           area_ceiling: unpack_float(area_ceiling_f),
+           area_floor: unpack_float(area_floor_f),
+           operator_altitude_geo: unpack_float(operator_altitude_geo_f),
+           timestamp: timestamp_f,
+           area_count: area_count_f,
+           area_radius: area_radius_f,
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           operator_location_type:
+             decode(operator_location_type_f, :mav_odid_operator_location_type),
+           classification_type: decode(classification_type_f, :mav_odid_classification_type),
+           category_eu: decode(category_eu_f, :mav_odid_category_eu),
+           class_eu: decode(class_eu_f, :mav_odid_class_eu)
+         }}
+
+  def unpack(
         12905,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           id_or_mac_f::binary-size(20), operator_id_type_f::integer-size(8),
           operator_id_f::binary-size(20)>>
@@ -29008,8 +32475,28 @@ defmodule Common do
          }}
 
   def unpack(
+        12905,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          id_or_mac_f::binary-size(20), operator_id_type_f::integer-size(8),
+          operator_id_f::binary-size(20), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdOperatorId{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           operator_id_type: decode(operator_id_type_f, :mav_odid_operator_id_type),
+           operator_id: replace_trailing(operator_id_f, <<0>>, "")
+         }}
+
+  def unpack(
         12915,
-        _,
+        1,
         <<target_system_f::integer-size(8), target_component_f::integer-size(8),
           id_or_mac_f::binary-size(20), single_message_size_f::integer-size(8),
           msg_pack_size_f::integer-size(8), messages_f::binary-size(225)>>
@@ -29031,7 +32518,32 @@ defmodule Common do
              end)
          }}
 
-  def unpack(12918, _, <<status_f::integer-size(8), error_f::binary-size(50)>>),
+  def unpack(
+        12915,
+        2,
+        <<target_system_f::integer-size(8), target_component_f::integer-size(8),
+          id_or_mac_f::binary-size(20), single_message_size_f::integer-size(8),
+          msg_pack_size_f::integer-size(8), messages_f::binary-size(225),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdMessagePack{
+           target_system: target_system_f,
+           target_component: target_component_f,
+           id_or_mac:
+             unpack_array(id_or_mac_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end),
+           single_message_size: single_message_size_f,
+           msg_pack_size: msg_pack_size_f,
+           messages:
+             unpack_array(messages_f, fn <<elem::integer-size(8), rest::binary>> ->
+               {elem, rest}
+             end)
+         }}
+
+  def unpack(12918, 1, <<status_f::integer-size(8), error_f::binary-size(50)>>),
     do:
       {:ok,
        %Common.Message.OpenDroneIdArmStatus{
@@ -29040,8 +32552,20 @@ defmodule Common do
        }}
 
   def unpack(
+        12918,
+        2,
+        <<status_f::integer-size(8), error_f::binary-size(50), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdArmStatus{
+           status: decode(status_f, :mav_odid_arm_status),
+           error: replace_trailing(error_f, <<0>>, "")
+         }}
+
+  def unpack(
         12919,
-        _,
+        1,
         <<operator_latitude_f::little-signed-integer-size(32),
           operator_longitude_f::little-signed-integer-size(32),
           operator_altitude_geo_f::binary-size(4), timestamp_f::little-integer-size(32),
@@ -29059,8 +32583,28 @@ defmodule Common do
          }}
 
   def unpack(
+        12919,
+        2,
+        <<operator_latitude_f::little-signed-integer-size(32),
+          operator_longitude_f::little-signed-integer-size(32),
+          operator_altitude_geo_f::binary-size(4), timestamp_f::little-integer-size(32),
+          target_system_f::integer-size(8), target_component_f::integer-size(8),
+          _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.OpenDroneIdSystemUpdate{
+           operator_latitude: operator_latitude_f,
+           operator_longitude: operator_longitude_f,
+           operator_altitude_geo: unpack_float(operator_altitude_geo_f),
+           timestamp: timestamp_f,
+           target_system: target_system_f,
+           target_component: target_component_f
+         }}
+
+  def unpack(
         12920,
-        _,
+        1,
         <<temperature_f::little-signed-integer-size(16), humidity_f::little-integer-size(16),
           id_f::integer-size(8)>>
       ),
@@ -29072,5 +32616,19 @@ defmodule Common do
            id: id_f
          }}
 
-  def unpack(_, _), do: {:error, :unknown_message}
+  def unpack(
+        12920,
+        2,
+        <<temperature_f::little-signed-integer-size(16), humidity_f::little-integer-size(16),
+          id_f::integer-size(8), _future_extension_fields::binary>>
+      ),
+      do:
+        {:ok,
+         %Common.Message.HygrometerSensor{
+           temperature: temperature_f,
+           humidity: humidity_f,
+           id: id_f
+         }}
+
+  def unpack(_, _, _), do: {:error, :unknown_message}
 end

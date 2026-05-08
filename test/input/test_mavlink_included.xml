@@ -3,7 +3,7 @@
   <version>3</version>
   <dialect>0</dialect>
   <enums>
-    <enum name="MAV_AUTOPILOT">
+    <enum name="MAV_AUTOPILOT" bitmask="true">
       <description>An enum included from an include file</description>
       <entry value="1" name="MAV_AUTOPILOT_INCLUDED">
         <description>An autopilot entry included from an include file</description>

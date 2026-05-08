@@ -359,6 +359,15 @@ defmodule XMAVLink.Test.Parser do
            } = parse_mavlink_xml("#{@root_dir}/test/input/test_extensions.xml")
   end
 
+  test "enum bitmask attribute is preserved" do
+    definition = parse_mavlink_xml("#{@root_dir}/config/minimal.xml")
+
+    assert %{bitmask: true} = Enum.find(definition.enums, &(&1.name == :mav_mode_flag))
+
+    assert %{bitmask: true} =
+             Enum.find(definition.enums, &(&1.name == :mav_mode_flag_decode_position))
+  end
+
   test "parse mini mavlink with include" do
     assert %{
              dialect: "0",
@@ -429,5 +438,11 @@ defmodule XMAVLink.Test.Parser do
              ],
              version: "3"
            } = parse_mavlink_xml("#{@root_dir}/test/input/test_mavlink_include.xml")
+  end
+
+  test "merged enums preserve bitmask declarations from includes" do
+    definition = parse_mavlink_xml("#{@root_dir}/test/input/test_mavlink_include.xml")
+
+    assert %{bitmask: true} = Enum.find(definition.enums, &(&1.name == :mav_autopilot))
   end
 end

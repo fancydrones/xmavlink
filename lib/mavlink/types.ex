@@ -52,7 +52,7 @@ defmodule XMAVLink.Types do
   @type int16_t :: -32_768..32_767
 
   @typedoc "32-bit signed integer"
-  @type int32_t :: -2_147_483_647..2_147_483_647
+  @type int32_t :: -2_147_483_648..2_147_483_647
 
   @typedoc "64-bit signed integer"
   @type int64_t :: integer
@@ -67,7 +67,7 @@ defmodule XMAVLink.Types do
   @type uint32_t :: 0..4_294_967_295
 
   @typedoc "64-bit unsigned integer"
-  @type uint64_t :: pos_integer
+  @type uint64_t :: 0..18_446_744_073_709_551_615
 
   @typedoc "64-bit signed float"
   @type double :: Float64

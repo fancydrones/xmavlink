@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.10.2"}
+     {:xmavlink, "~> 0.11.0"}
    ]
  end
  ```
@@ -54,6 +54,12 @@ do not set incompatible flags. MAVLink 2 signing is not implemented; inbound
 MAVLink 2 frames with incompatible flags are discarded. Supported configured
 transports are serial, UDP client (`udpout`), UDP server (`udpin`), and TCP
 client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
+
+MAVLink 2 is the primary 1.0 compatibility target. MAVLink 1 remains supported
+for existing frame parsing, packing, and routing behavior while that support
+stays cheap to maintain, but new MAVLink 1-only work may be declined or moved
+out of scope if it competes with MAVLink 2 correctness. The 1.0 spec alignment
+checklist is maintained in [MAVLINK_SPEC_ALIGNMENT.md](MAVLINK_SPEC_ALIGNMENT.md).
 
 ## Generating MAVLink Dialect Modules
 

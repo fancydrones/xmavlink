@@ -5,7 +5,11 @@ defmodule XMAVLink.Frame do
 
   require Logger
 
+  import Bitwise
   import XMAVLink.Utils, only: [x25_crc: 1, x25_crc: 2]
+
+  @mavlink_2_signature_flag 0x01
+  @mavlink_2_signature_length 13
 
   defstruct [
     # Which raw attributes are populated?
@@ -38,19 +42,19 @@ defmodule XMAVLink.Frame do
   @type version :: 1 | 2
   @type t :: %XMAVLink.Frame{
           version: version,
-          payload_length: 1..255,
+          payload_length: 0..255,
           incompatible_flags: non_neg_integer,
           compatible_flags: non_neg_integer,
           sequence_number: 0..255,
           source_system: 1..255,
           source_component: 1..255,
-          target_system: 1..255,
-          target_component: 1..255,
+          target_system: 0..255,
+          target_component: 0..255,
           target: :broadcast | :system | :system_component | :component,
           message_id: XMAVLink.Types.message_id(),
           crc_extra: XMAVLink.Types.crc_extra(),
           payload: binary,
-          checksum: pos_integer,
+          checksum: 0..65_535,
           mavlink_1_raw: binary,
           mavlink_2_raw: binary,
           message: message
@@ -126,7 +130,11 @@ defmodule XMAVLink.Frame do
       _ ->
         # We don't support any incompatible flags at present
         # e.g. signing, so drop the frame
-        {nil, rest}
+        if signed?(incompatible_flags) do
+          drop_incompatible_signed_frame(raw_and_rest, rest)
+        else
+          {nil, rest}
+        end
     end
   end
 
@@ -272,6 +280,8 @@ defmodule XMAVLink.Frame do
   end
 
   # MAVLink 2 truncate trailing 0s in payload
+  defp truncate_payload(<<>>), do: {0, <<>>}
+
   defp truncate_payload(payload) do
     truncated_payload = String.replace_trailing(payload, <<0>>, "")
 
@@ -287,5 +297,18 @@ defmodule XMAVLink.Frame do
   defp checksum(frame, crc_extra) do
     cs = x25_crc(frame <> <<crc_extra::unsigned-integer-size(8)>>)
     <<cs::little-unsigned-integer-size(16)>>
+  end
+
+  defp signed?(incompatible_flags),
+    do: (incompatible_flags &&& @mavlink_2_signature_flag) != 0
+
+  defp drop_incompatible_signed_frame(raw_and_rest, rest) do
+    case rest do
+      <<_signature::binary-size(@mavlink_2_signature_length), rest_after_signature::binary>> ->
+        {nil, rest_after_signature}
+
+      _ ->
+        {nil, raw_and_rest}
+    end
   end
 end
