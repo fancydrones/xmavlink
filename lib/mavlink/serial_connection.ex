@@ -11,20 +11,22 @@ defmodule XMAVLink.SerialConnection do
   alias XMAVLink.Frame
   alias Circuits.UART
 
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
 
   defstruct port: nil,
             baud: nil,
             uart: nil,
             buffer: <<>>,
-            worker: nil
+            worker: nil,
+            signing: nil
 
   @type t :: %XMAVLink.SerialConnection{
           port: binary,
           baud: non_neg_integer,
           uart: pid,
           buffer: binary,
-          worker: pid | nil
+          worker: pid | nil,
+          signing: XMAVLink.Signing.t() | nil
         }
 
   def handle_info(
@@ -50,25 +52,27 @@ defmodule XMAVLink.SerialConnection do
         if byte_size(rest) >= @smallest_mavlink_message,
           do: send(self(), {:circuits_uart, port, <<>>})
 
-        case validate_and_unpack(received_frame, dialect) do
-          {:ok, valid_frame} ->
-            {:ok, port, struct(receiving_connection, buffer: rest), valid_frame}
+        connection = struct(receiving_connection, buffer: rest)
 
-          :unknown_message ->
+        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
+          {:ok, valid_frame, signing} ->
+            {:ok, port, struct(connection, signing: signing), valid_frame}
+
+          {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
             :ok =
               Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}}")
 
-            {:ok, port, struct(receiving_connection, buffer: rest),
+            {:ok, port, struct(connection, signing: signing),
              struct(received_frame, target: :broadcast)}
 
-          reason ->
+          {:error, reason, signing} ->
             :ok =
               Logger.debug(
                 "SerialConnection.handle_info: frame received failed: #{Atom.to_string(reason)}"
               )
 
-            {:error, reason, port, struct(receiving_connection, buffer: rest)}
+            {:error, reason, port, struct(connection, signing: signing)}
         end
     end
   end

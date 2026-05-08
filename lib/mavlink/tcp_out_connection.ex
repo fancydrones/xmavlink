@@ -10,16 +10,17 @@ defmodule XMAVLink.TCPOutConnection do
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
 
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
 
-  defstruct socket: nil, address: nil, port: nil, buffer: <<>>, worker: nil
+  defstruct socket: nil, address: nil, port: nil, buffer: <<>>, worker: nil, signing: nil
 
   @type t :: %XMAVLink.TCPOutConnection{
           socket: pid,
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
           buffer: binary,
-          worker: pid | nil
+          worker: pid | nil,
+          signing: XMAVLink.Signing.t() | nil
         }
 
   def handle_info(
@@ -44,25 +45,27 @@ defmodule XMAVLink.TCPOutConnection do
         # Rest could be a message, return later to try emptying the buffer
         if byte_size(rest) >= @smallest_mavlink_message, do: send(self(), {:tcp, socket, <<>>})
 
-        case validate_and_unpack(received_frame, dialect) do
-          {:ok, valid_frame} ->
-            {:ok, socket, struct(receiving_connection, buffer: rest), valid_frame}
+        connection = struct(receiving_connection, buffer: rest)
 
-          :unknown_message ->
+        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
+          {:ok, valid_frame, signing} ->
+            {:ok, socket, struct(connection, signing: signing), valid_frame}
+
+          {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
             :ok =
               Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}}")
 
-            {:ok, socket, struct(receiving_connection, buffer: rest),
+            {:ok, socket, struct(connection, signing: signing),
              struct(received_frame, target: :broadcast)}
 
-          reason ->
+          {:error, reason, signing} ->
             :ok =
               Logger.debug(
                 "TCPOutConnection.handle_info: frame received failed: #{Atom.to_string(reason)}"
               )
 
-            {:error, reason, socket, struct(receiving_connection, buffer: rest)}
+            {:error, reason, socket, struct(connection, signing: signing)}
         end
     end
   end

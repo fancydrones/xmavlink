@@ -12,9 +12,8 @@ frame-shape feature and extracts the 13-byte signing trailer into
 `XMAVLink.Frame.Signature`.
 
 `XMAVLink.Frame.sign_frame/4` can sign an already packed MAVLink 2 frame when
-given a 32-byte key, link id, and timestamp. This is a low-level utility for the
-remaining signing implementation; router and connection configuration do not
-use it yet.
+given a 32-byte key, link id, and timestamp. This remains a low-level utility;
+outbound router and connection signing does not use it yet.
 
 `XMAVLink.Frame.validate_signature/2` verifies the 48-bit signature for a
 parsed signed frame. `XMAVLink.Signing.validate_inbound/2` adds the policy
@@ -22,10 +21,15 @@ state needed for replay protection by tracking the last accepted timestamp per
 `{source_system, source_component, link_id}` stream and rejecting first-seen
 streams more than 6,000,000 ticks behind the local signing timestamp.
 
-Frames received by the router are still not authenticated, unpacked, delivered
-to subscribers, or forwarded when they are signed. Until router and connection
-policy wiring exists, `XMAVLink.Frame.validate_and_unpack/2` returns
-`:signed_frame_unsupported` for parsed signed frames.
+Routers accept a `:signing` configuration with `:secret_key`, `:link_id`,
+`:timestamp`, and optional `:accept_unsigned`. Receive paths seed each
+connection with that policy. Configured signed MAVLink 2 frames are verified
+before dialect unpacking, delivered to subscribers, forwarded through the normal
+routing logic, and recorded for replay protection. Unsigned MAVLink 2 inbound
+frames are rejected by default while signing is enabled unless
+`accept_unsigned: true` is set. MAVLink 1 frames remain accepted under a signing
+policy. When signing is not configured, signed MAVLink 2 frames still return
+`:signed_frame_unsupported`.
 
 Unknown incompatible flags are still rejected. If a frame has both the signing
 flag and unsupported incompatible flags, XMAVLink consumes the known 13-byte
@@ -47,36 +51,28 @@ link id, and timestamp.
 
 ## Intended Public Policy Shape
 
-Signing should be configured per router or per connection. The likely public
-shape is:
+Signing is currently configured per router and copied into each receive-side
+connection:
 
 - `signing: nil` or omitted: current unsigned behavior, but signed frames remain
   rejected until an explicit acceptance policy is configured.
-- `signing: [secret_key: <<_::256>>, link_id: 0..255, timestamp_source: ...]`:
-  validate inbound signed frames and sign outbound MAVLink 2 frames on that
-  connection.
+- `signing: [secret_key: <<_::256>>, link_id: 0..255, timestamp: non_neg_integer]`:
+  validate inbound signed MAVLink 2 frames and track replay timestamps on the
+  receiving connection.
 - `accept_unsigned: false | true`: explicit policy for unsigned frames when
   signing is enabled. The policy helper defaults to reject.
-- `accept_invalid_signatures: false`: default. Any diagnostic override must be
-  explicit and visible to callers.
 
 ## Required Follow-Up Work
 
-1. Router and connection policy:
-   - decide where per-link timestamp state lives;
-   - make unsigned-frame acceptance explicit;
-   - avoid forwarding `SETUP_SIGNING` from a secure link to other links.
-2. Signed unpack/routing:
-   - call `XMAVLink.Signing.validate_inbound/2` before unpacking signed frames;
-   - allow validated signed frames through checksum validation and dialect
-     unpacking;
-   - keep invalid signed frames invisible to subscribers and route tables.
-3. Outbound signing policy:
+1. Outbound signing policy:
    - call the low-level frame signing utility from router/connection send paths;
    - monotonically increment timestamps per outbound link;
    - keep MAVLink 1 behavior unsigned and unchanged.
-4. Persistence hooks:
+2. Persistence hooks:
    - expose timestamp load/save integration points;
    - document that applications must store keys and timestamps securely.
+3. `SETUP_SIGNING` handling:
+   - avoid forwarding `SETUP_SIGNING` from a secure link to other links;
+   - document any explicit provisioning workflow XMAVLink supports.
 
 Each step should land with focused tests before #47 is closed.

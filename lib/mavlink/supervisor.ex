@@ -29,7 +29,8 @@ defmodule XMAVLink.Supervisor do
             system: Application.get_env(:xmavlink, :system_id),
             component: Application.get_env(:xmavlink, :component_id),
             connection_strings: Application.get_env(:xmavlink, :connections),
-            connection_retry_ms: Application.get_env(:xmavlink, :connection_retry_ms, 1_000)
+            connection_retry_ms: Application.get_env(:xmavlink, :connection_retry_ms, 1_000),
+            signing: Application.get_env(:xmavlink, :signing)
           }
         }
       ] ++ heartbeat_child_specs(router_name)

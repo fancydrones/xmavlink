@@ -4,7 +4,7 @@ defmodule XMAVLink.UDPInConnection do
   """
 
   require Logger
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
 
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
@@ -15,13 +15,15 @@ defmodule XMAVLink.UDPInConnection do
   defstruct address: nil,
             port: nil,
             socket: nil,
-            worker: nil
+            worker: nil,
+            signing: nil
 
   @type t :: %XMAVLink.UDPInConnection{
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
           socket: pid,
-          worker: pid | nil
+          worker: pid | nil,
+          signing: XMAVLink.Signing.t() | nil
         }
 
   # Create connection if this is the first time we've received on it
@@ -47,47 +49,55 @@ defmodule XMAVLink.UDPInConnection do
 
       # UDP sends frame per packet, so ignore rest
       {received_frame, _rest} ->
-        case validate_and_unpack(received_frame, dialect) do
-          {:ok, valid_frame} ->
+        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
+          {:ok, valid_frame, signing} ->
             # Include address and port in connection key because multiple
             # clients can connect to a UDP "in" port.
-            {:ok, {socket, source_addr, source_port}, receiving_connection, valid_frame}
+            {:ok, {socket, source_addr, source_port},
+             struct(receiving_connection, signing: signing), valid_frame}
 
-          :unknown_message ->
+          {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
             :ok =
               Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}}")
 
-            {:ok, {socket, source_addr, source_port}, receiving_connection,
+            {:ok, {socket, source_addr, source_port},
+             struct(receiving_connection, signing: signing),
              struct(received_frame, target: :broadcast)}
 
-          reason ->
+          {:error, reason, signing} ->
             :ok =
               Logger.debug(
                 "UDPInConnection.handle_info: frame received from " <>
                   "#{Enum.join(Tuple.to_list(source_addr), ".")}:#{source_port} failed: #{Atom.to_string(reason)}"
               )
 
-            {:error, reason, {socket, source_addr, source_port}, receiving_connection}
+            {:error, reason, {socket, source_addr, source_port},
+             struct(receiving_connection, signing: signing)}
         end
     end
   end
 
   def handle_info({:udp, socket, source_addr, source_port, raw}, nil, dialect, worker) do
+    handle_info({:udp, socket, source_addr, source_port, raw}, nil, dialect, worker, nil)
+  end
+
+  def handle_info(message, receiving_connection, dialect, _worker) do
+    handle_info(message, receiving_connection, dialect)
+  end
+
+  def handle_info({:udp, socket, source_addr, source_port, raw}, nil, dialect, worker, signing) do
     handle_info(
       {:udp, socket, source_addr, source_port, raw},
       %XMAVLink.UDPInConnection{
         address: source_addr,
         port: source_port,
         socket: socket,
-        worker: worker
+        worker: worker,
+        signing: signing
       },
       dialect
     )
-  end
-
-  def handle_info(message, receiving_connection, dialect, _worker) do
-    handle_info(message, receiving_connection, dialect)
   end
 
   defp frame_parse_error(
