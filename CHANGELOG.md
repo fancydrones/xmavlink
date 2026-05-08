@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.10.2 - 2026-05-08
+
+- Dropped unsupported MAVLink 2 frames with incompatible flags on UDP receive
+  paths instead of crashing while attempting to validate a nil frame.
+- Added `auto_param_request: false` utility configuration for deployments that
+  need to discover vehicles before automatically requesting parameter lists.
+- Documented security reporting, MAVLink trust boundaries, and trusted-input
+  expectations for dialect XML generation.
+
 ## 0.10.1 - 2026-05-07
 
 - Made generated dialect source deterministic and formatter-compatible by

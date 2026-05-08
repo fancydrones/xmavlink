@@ -15,8 +15,29 @@ defmodule XMAVLink.Application do
 
   defp utility_child_specs(router_name) do
     case Application.get_env(:xmavlink, :utilities, false) do
-      true -> [{XMAVLink.Util.Supervisor, router: router_name}]
-      _ -> []
+      false ->
+        []
+
+      nil ->
+        []
+
+      true ->
+        [{XMAVLink.Util.Supervisor, router: router_name}]
+
+      opts when is_list(opts) ->
+        if Keyword.keyword?(opts) do
+          [{XMAVLink.Util.Supervisor, Keyword.put_new(opts, :router, router_name)}]
+        else
+          invalid_utilities_config!(opts)
+        end
+
+      invalid ->
+        invalid_utilities_config!(invalid)
     end
+  end
+
+  defp invalid_utilities_config!(value) do
+    raise ArgumentError,
+          ":utilities must be true, false, nil, or a keyword list, got: #{inspect(value)}"
   end
 end

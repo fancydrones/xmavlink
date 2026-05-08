@@ -37,6 +37,11 @@ defmodule XMAVLink.UDPInConnection do
         :ok = Logger.debug("UDPInConnection.handle_info: Not a frame #{inspect(raw)}")
         {:error, :not_a_frame, {socket, source_addr, source_port}, receiving_connection}
 
+      {nil, _rest} ->
+        reason = frame_parse_error(raw)
+        :ok = Logger.debug("UDPInConnection.handle_info: #{parse_error_message(reason)}")
+        {:error, reason, {socket, source_addr, source_port}, receiving_connection}
+
       # UDP sends frame per packet, so ignore rest
       {received_frame, _rest} ->
         case validate_and_unpack(received_frame, dialect) do
@@ -81,6 +86,19 @@ defmodule XMAVLink.UDPInConnection do
   def handle_info(message, receiving_connection, dialect, _worker) do
     handle_info(message, receiving_connection, dialect)
   end
+
+  defp frame_parse_error(
+         raw =
+           <<0xFD, payload_length::unsigned-integer-size(8),
+             incompatible_flags::unsigned-integer-size(8), _rest::binary>>
+       )
+       when incompatible_flags != 0 and byte_size(raw) >= payload_length + 12,
+       do: :incompatible_flags
+
+  defp frame_parse_error(_raw), do: :incomplete_frame
+
+  defp parse_error_message(:incompatible_flags), do: "Incompatible MAVLink 2 frame"
+  defp parse_error_message(:incomplete_frame), do: "Incomplete MAVLink frame"
 
   def open(["udpin", address, port], controlling_process) do
     # Do not add to connections, we don't want to forward to ourselves
