@@ -41,7 +41,7 @@ Known non-goals for 1.0 unless separately implemented:
 | MAVLink 2 payload truncation | Supported | Outbound payloads trim trailing zero bytes while preserving a non-empty all-zero payload's first byte; inbound v2 payloads are padded back to known dialect length before unpacking. |
 | MAVLink 2 future extension bytes | Supported | Generated v2 unpack clauses now ignore trailing extension bytes that are unknown to the local dialect. This preserves extension-field forward compatibility. |
 | MAVLink 2 extension CRC behavior | Supported | `CRC_EXTRA` generation excludes extension fields, matching the serialization guide. |
-| MAVLink 2 extension field packing defaults | Partial | Callers must currently provide usable values for known extension fields when packing v2 messages. Zero/default extension field filling should be added separately. |
+| MAVLink 2 extension field packing defaults | Supported | Omitted known extension fields are packed as zero-equivalent values for v2 messages while remaining omitted from v1 payloads. |
 | MAVLink 1 frame shape | Supported | Existing parser/packer handles v1 framing, checksum, and 8-bit message ids. New MAVLink 1-only expansion is not a priority for 1.0. |
 | CRC_EXTRA calculation | Supported | Field ordering is size-stable for base fields, arrays are ordered by element size, and extension fields are excluded. |
 | Field ordering | Supported | Base fields are stably sorted by native type size; extension fields remain in XML declaration order. |
@@ -67,6 +67,8 @@ Known non-goals for 1.0 unless separately implemented:
 - Generated modules now compile for XML dialects with no enums or units.
 - Enum-level `bitmask="true"` is parsed and reflected in generated field types,
   packing, and unpacking.
+- Generated MAVLink 2 packers use zero-equivalent defaults for omitted known
+  extension fields.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.
@@ -77,7 +79,6 @@ Known non-goals for 1.0 unless separately implemented:
 ## Follow-Up Issues
 
 - #47: Implement MAVLink 2 packet signing and signed-frame routing behavior.
-- #51: Add default/zero packing behavior for omitted MAVLink 2 extension fields.
 - #52: Add route invalidation when `SYSTEM_TIME.time_boot_ms` decreases for a
   known system/component.
 - #53: Align XML parser/generator validation with `mavgen` for missing

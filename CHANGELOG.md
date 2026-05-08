@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.1 - 2026-05-08
+
+- Made generated MAVLink 2 packers use zero-equivalent defaults for omitted
+  extension fields while preserving MAVLink 1 packing behavior.
+- Added generator coverage for omitted and provided MAVLink 2 extension values,
+  including scalar, array, enum, bitmask, float, double, and char fields.
+
 ## 0.11.0 - 2026-05-08
 
 - Added the MAVLink 1.0 spec alignment checklist and support statement, with

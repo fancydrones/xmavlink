@@ -6,6 +6,7 @@ defmodule XMAVLink.Test.Tasks do
 
   @input "#{File.cwd!()}/test/input/test_mavlink.xml"
   @extensions_input "#{File.cwd!()}/test/input/test_extensions.xml"
+  @extension_defaults_input "#{File.cwd!()}/test/input/test_extension_defaults.xml"
   @output_dir "#{Mix.Project.build_path()}/generated"
   @output "#{@output_dir}/test_mavlink.ex"
   @output_module "TestMavlink"
@@ -116,6 +117,74 @@ defmodule XMAVLink.Test.Tasks do
 
     assert {:ok, message} = apply(TestNoKnownExtensions, :unpack, [0, 2, <<0, 9, 8, 7>>])
     assert message.type == :mav_type_generic
+  end
+
+  test "generated MAVLink 2 pack defaults omitted extension fields to zero-equivalent values" do
+    output = Path.join(@output_dir, "test_extension_defaults.ex")
+
+    capture_io(fn ->
+      assert :ok = run([@extension_defaults_input, output, "TestExtensionDefaults"])
+    end)
+
+    with_module_conflict_ignored(fn -> Code.compile_file(output) end)
+
+    message = struct(TestExtensionDefaults.Message.ExtensionDefaults, base_value: 9)
+
+    assert {:ok, 200, {:ok, _crc_extra, _expected_size, :broadcast}, <<9>>} =
+             XMAVLink.Message.pack(message, 1)
+
+    expected_mavlink_2_payload =
+      <<9, 0::little-unsigned-integer-size(16), 0.0::little-float-size(32),
+        0.0::little-float-size(64), 0::size(32), 0::little-unsigned-integer-size(16),
+        0::little-unsigned-integer-size(16), 0::little-unsigned-integer-size(16),
+        0.0::little-float-size(32), 0.0::little-float-size(32), 0.0::little-float-size(64),
+        0.0::little-float-size(64), 0, 0>>
+
+    assert {:ok, 200, {:ok, _crc_extra, _expected_size, :broadcast}, ^expected_mavlink_2_payload} =
+             XMAVLink.Message.pack(message, 2)
+  end
+
+  test "generated MAVLink 2 pack preserves provided extension field values" do
+    output = Path.join(@output_dir, "test_extension_values.ex")
+
+    capture_io(fn ->
+      assert :ok = run([@extension_defaults_input, output, "TestExtensionValues"])
+    end)
+
+    with_module_conflict_ignored(fn -> Code.compile_file(output) end)
+
+    message =
+      struct(TestExtensionValues.Message.ExtensionDefaults,
+        base_value: 9,
+        scalar_value: 513,
+        float_value: 1.25,
+        double_value: 2.5,
+        label: "AB",
+        counts: [1, 2, 3],
+        ratios: [4.5, 5.5],
+        precisions: [6.5, 7.5],
+        mode: :test_mode_active,
+        flags: MapSet.new([:test_flag_one, :test_flag_two])
+      )
+
+    expected_mavlink_2_payload =
+      <<9, 513::little-unsigned-integer-size(16), 1.25::little-float-size(32),
+        2.5::little-float-size(64), "AB", 0, 0, 1::little-unsigned-integer-size(16),
+        2::little-unsigned-integer-size(16), 3::little-unsigned-integer-size(16),
+        4.5::little-float-size(32), 5.5::little-float-size(32), 6.5::little-float-size(64),
+        7.5::little-float-size(64), 1, 3>>
+
+    assert {:ok, 200, {:ok, _crc_extra, _expected_size, :broadcast}, ^expected_mavlink_2_payload} =
+             XMAVLink.Message.pack(message, 2)
+
+    assert {:ok, decoded} =
+             apply(TestExtensionValues, :unpack, [200, 2, expected_mavlink_2_payload])
+
+    assert decoded.ratios == [4.5, 5.5]
+    assert decoded.precisions == [6.5, 7.5]
+
+    assert {:ok, 200, {:ok, _crc_extra, _expected_size, :broadcast}, ^expected_mavlink_2_payload} =
+             XMAVLink.Message.pack(decoded, 2)
   end
 
   defp formatted(source) do

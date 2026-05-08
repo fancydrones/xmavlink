@@ -491,7 +491,7 @@ defmodule Mix.Tasks.Xmavlink do
   end
 
   defp unpack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: "double"}, _) do
-    "unpack_double(#{downcase(name)}_f)"
+    "XMAVLink.Utils.unpack_double(#{downcase(name)}_f)"
   end
 
   defp unpack_field_code_fragment(%{name: name, ordinality: 1, enum: ""}, _) do
@@ -523,59 +523,131 @@ defmodule Mix.Tasks.Xmavlink do
     ~s[replace_trailing(#{downcase(name)}_f, <<0>>, "")]
   end
 
+  defp unpack_field_code_fragment(%{name: name, type: "float"}, _) do
+    "unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(4),rest::binary>>) -> {unpack_float(elem), rest} end)"
+  end
+
+  defp unpack_field_code_fragment(%{name: name, type: "double"}, _) do
+    "unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(8),rest::binary>>) -> {XMAVLink.Utils.unpack_double(elem), rest} end)"
+  end
+
   defp unpack_field_code_fragment(%{name: name, type: type}, _) do
     "unpack_array(#{downcase(name)}_f, fn(<<elem::#{type_to_binary(type).pattern},rest::binary>>) ->  {elem, rest} end)"
   end
 
   # Pack Message Fields
 
-  defp pack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: "float"}, _, _) do
-    "XMAVLink.Utils.pack_float(msg.#{downcase(name)})::binary-size(4)"
-  end
-
-  defp pack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: "double"}, _, _) do
-    "XMAVLink.Utils.pack_double(msg.#{downcase(name)})::binary-size(8)"
-  end
-
-  defp pack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: type}, _, _) do
-    "msg.#{downcase(name)}::#{type_to_binary(type).pattern}"
+  defp pack_field_code_fragment(
+         field = %{ordinality: 1, enum: "", type: "float"},
+         enums_by_name,
+         _
+       ) do
+    "XMAVLink.Utils.pack_float(#{pack_field_value(field, enums_by_name)})::binary-size(4)"
   end
 
   defp pack_field_code_fragment(
-         %{name: name, ordinality: 1, enum: enum, display: :bitmask, type: type},
-         _,
+         field = %{ordinality: 1, enum: "", type: "double"},
+         enums_by_name,
+         _
+       ) do
+    "XMAVLink.Utils.pack_double(#{pack_field_value(field, enums_by_name)})::binary-size(8)"
+  end
+
+  defp pack_field_code_fragment(field = %{ordinality: 1, enum: "", type: type}, enums_by_name, _) do
+    "#{pack_field_value(field, enums_by_name)}::#{type_to_binary(type).pattern}"
+  end
+
+  defp pack_field_code_fragment(
+         field = %{ordinality: 1, enum: enum, display: :bitmask, type: type},
+         enums_by_name,
          module_name
        )
        when enum != "" do
-    "#{module_name}.pack_bitmask(msg.#{downcase(name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
+    "#{module_name}.pack_bitmask(#{pack_field_value(field, enums_by_name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
   end
 
   defp pack_field_code_fragment(
-         %{name: name, ordinality: 1, enum: enum, type: type},
+         field = %{ordinality: 1, enum: enum, type: type},
          enums_by_name,
          module_name
        ) do
     enum_definition = enums_by_name[enum]
+    field_value = pack_field_value(field, enums_by_name)
 
     cond do
       enum_bitmask?(enum_definition) ->
-        "#{module_name}.pack_bitmask(msg.#{downcase(name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
+        "#{module_name}.pack_bitmask(#{field_value}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
 
       looks_like_a_bitmask?(enum_definition) ->
-        "#{module_name}.pack_bitmask(msg.#{downcase(name)}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
+        "#{module_name}.pack_bitmask(#{field_value}, :#{enum}, &#{module_name}.encode/2)::#{type_to_binary(type).pattern}"
 
       true ->
-        "#{module_name}.encode(msg.#{downcase(name)}, :#{enum})::#{type_to_binary(type).pattern}"
+        "#{module_name}.encode(#{field_value}, :#{enum})::#{type_to_binary(type).pattern}"
     end
   end
 
-  defp pack_field_code_fragment(%{name: name, ordinality: ordinality, type: "char"}, _, _) do
-    "XMAVLink.Utils.pack_string(msg.#{downcase(name)}, #{ordinality})::binary-size(#{ordinality})"
+  defp pack_field_code_fragment(
+         field = %{ordinality: ordinality, type: "float"},
+         enums_by_name,
+         _
+       )
+       when ordinality > 1 do
+    "XMAVLink.Utils.pack_array(#{pack_field_value(field, enums_by_name)}, #{ordinality}, &XMAVLink.Utils.pack_float/1)::binary-size(#{type_to_binary(field.type).size * ordinality})"
   end
 
-  defp pack_field_code_fragment(%{name: name, ordinality: ordinality, type: type}, _, _) do
-    "XMAVLink.Utils.pack_array(msg.#{downcase(name)}, #{ordinality}, fn(elem) -> <<elem::#{type_to_binary(type).pattern}>> end)::binary-size(#{type_to_binary(type).size * ordinality})"
+  defp pack_field_code_fragment(
+         field = %{ordinality: ordinality, type: "double"},
+         enums_by_name,
+         _
+       )
+       when ordinality > 1 do
+    "XMAVLink.Utils.pack_array(#{pack_field_value(field, enums_by_name)}, #{ordinality}, &XMAVLink.Utils.pack_double/1)::binary-size(#{type_to_binary(field.type).size * ordinality})"
   end
+
+  defp pack_field_code_fragment(field = %{ordinality: ordinality, type: "char"}, enums_by_name, _) do
+    "XMAVLink.Utils.pack_string(#{pack_field_value(field, enums_by_name)}, #{ordinality})::binary-size(#{ordinality})"
+  end
+
+  defp pack_field_code_fragment(field = %{ordinality: ordinality, type: type}, enums_by_name, _) do
+    "XMAVLink.Utils.pack_array(#{pack_field_value(field, enums_by_name)}, #{ordinality}, fn(elem) -> <<elem::#{type_to_binary(type).pattern}>> end)::binary-size(#{type_to_binary(type).size * ordinality})"
+  end
+
+  defp pack_field_value(field = %{is_extension: true}, enums_by_name) do
+    "(msg.#{downcase(field.name)} || #{extension_field_default(field, enums_by_name)})"
+  end
+
+  defp pack_field_value(%{name: name}, _enums_by_name), do: "msg.#{downcase(name)}"
+
+  defp extension_field_default(%{ordinality: ordinality, type: "char"}, _enums_by_name)
+       when ordinality > 1,
+       do: ~s("")
+
+  defp extension_field_default(field = %{ordinality: ordinality}, enums_by_name)
+       when ordinality > 1,
+       do:
+         "List.duplicate(#{extension_array_element_default(field, enums_by_name)}, #{ordinality})"
+
+  defp extension_field_default(%{enum: enum, display: :bitmask}, _enums_by_name) when enum != "",
+    do: "MapSet.new()"
+
+  defp extension_field_default(%{enum: enum}, enums_by_name) when enum != "" do
+    if enum_bitmask?(enums_by_name[enum]) or looks_like_a_bitmask?(enums_by_name[enum]) do
+      "MapSet.new()"
+    else
+      "0"
+    end
+  end
+
+  defp extension_field_default(%{type: type}, _enums_by_name) when type in ["float", "double"],
+    do: "0.0"
+
+  defp extension_field_default(_field, _enums_by_name), do: "0"
+
+  defp extension_array_element_default(%{type: type}, _enums_by_name)
+       when type in ["float", "double"],
+       do: "0.0"
+
+  defp extension_array_element_default(_field, _enums_by_name), do: "0"
 
   @spec get_unit_code_fragments([XMAVLink.Parser.message_description()]) :: [String.t()]
   defp get_unit_code_fragments(messages) do
