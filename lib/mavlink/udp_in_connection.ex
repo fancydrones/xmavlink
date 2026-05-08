@@ -59,7 +59,7 @@ defmodule XMAVLink.UDPInConnection do
           {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
             :ok =
-              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}}")
+              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}")
 
             {:ok, {socket, source_addr, source_port},
              struct(receiving_connection, signing: signing),

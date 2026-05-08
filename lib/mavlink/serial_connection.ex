@@ -61,7 +61,7 @@ defmodule XMAVLink.SerialConnection do
           {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
             :ok =
-              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}}")
+              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}")
 
             {:ok, port, struct(connection, signing: signing),
              struct(received_frame, target: :broadcast)}
