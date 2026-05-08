@@ -473,8 +473,6 @@ defmodule XMAVLink.Frame do
     end
   end
 
-  defp validate_signed_frame_shape(_frame), do: {:error, :invalid_mavlink_2_frame}
-
   defp signed_packet_without_signature(raw)
        when is_binary(raw) and byte_size(raw) >= 12 + @mavlink_2_signature_length do
     signed_packet_size = byte_size(raw) - 6
