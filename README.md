@@ -57,9 +57,12 @@ rejected by default while signing is enabled unless `accept_unsigned: true` is
 set. Unsigned outbound MAVLink 2 frames sent over a signing-enabled connection
 are signed with a monotonically incremented per-connection timestamp. MAVLink 1
 inbound and outbound frames remain unsigned and accepted under a signing policy.
-MAVLink 2 frames with other incompatible flags are discarded. Supported
-configured transports are serial, UDP client (`udpout`), UDP server (`udpin`),
-and TCP client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
+Applications can configure timestamp load/save callbacks to preserve local
+signing timestamps across restarts. Inbound `SETUP_SIGNING` frames are delivered
+locally but are not forwarded between MAVLink links by generic routing. MAVLink
+2 frames with other incompatible flags are discarded. Supported configured
+transports are serial, UDP client (`udpout`), UDP server (`udpin`), and TCP
+client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
 
 MAVLink 2 is the primary 1.0 compatibility target. MAVLink 1 remains supported
 for existing frame parsing, packing, and routing behavior while that support

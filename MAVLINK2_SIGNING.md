@@ -23,24 +23,33 @@ state needed for replay protection by tracking the last accepted timestamp per
 streams more than 6,000,000 ticks behind the local signing timestamp.
 
 Routers accept a `:signing` configuration with `:secret_key`, `:link_id`,
-`:timestamp`, and optional `:accept_unsigned`. Receive paths seed each
-connection with that policy. Configured signed MAVLink 2 frames are verified
-before dialect unpacking, delivered to subscribers, forwarded through the normal
-routing logic, and recorded for replay protection. Unsigned MAVLink 2 inbound
-frames are rejected by default while signing is enabled unless
-`accept_unsigned: true` is set. MAVLink 1 frames remain accepted under a signing
-policy. When signing is not configured, signed MAVLink 2 frames still return
-`:signed_frame_unsupported`.
+`:timestamp`, optional `:accept_unsigned`, and optional timestamp persistence
+callbacks. Receive paths seed each connection with that policy. Configured
+signed MAVLink 2 frames are verified before dialect unpacking, delivered to
+subscribers, forwarded through the normal routing logic, and recorded for replay
+protection. Unsigned MAVLink 2 inbound frames are rejected by default while
+signing is enabled unless `accept_unsigned: true` is set. MAVLink 1 frames
+remain accepted under a signing policy. When signing is not configured, signed
+MAVLink 2 frames still return `:signed_frame_unsupported`.
 
 Outbound routing signs unsigned MAVLink 2 frames on signing-enabled
 connections, updates that connection's local timestamp after each signed send,
 and leaves MAVLink 1 frames unsigned. Already signed MAVLink 2 frames are
-forwarded with their existing signature rather than being re-signed.
+forwarded with their existing signature rather than being re-signed. If a
+timestamp save callback is configured and the local timestamp advances, the
+callback must succeed before a signed inbound frame is accepted or an outbound
+signed frame is emitted.
 
 Unknown incompatible flags are still rejected. If a frame has both the signing
 flag and unsupported incompatible flags, XMAVLink consumes the known 13-byte
 signature trailer when present so stream transports keep frame boundaries, but
 the packet is not accepted.
+
+`SETUP_SIGNING` frames carry key material. Inbound `SETUP_SIGNING` frames are
+delivered to local subscribers but are not forwarded from one MAVLink connection
+to another by generic routing. Locally originated `SETUP_SIGNING` frames are
+still routed normally so applications can build an intentional provisioning
+flow, but XMAVLink does not automate key provisioning or key rotation.
 
 ## Signature Frame Shape
 
@@ -66,14 +75,21 @@ Signing is currently configured per router and copied into each connection:
   sign unsigned outbound MAVLink 2 frames on each connection.
 - `accept_unsigned: false | true`: explicit policy for unsigned frames when
   signing is enabled. The policy helper defaults to reject.
+- `timestamp_load: fun | {module, function, args}`: optional zero-arity callback
+  that returns a previously saved timestamp, `{:ok, timestamp}`, or `nil` when
+  no timestamp has been saved yet. Loaded timestamps are combined with the
+  configured or current timestamp by taking the maximum value. `:error`,
+  `{:error, reason}`, invalid timestamps, or callback failures reject the
+  signing configuration.
+- `timestamp_save: fun | {module, function, args}`: optional one-arity callback
+  that receives each advanced local timestamp and returns `:ok` or
+  `{:ok, result}`. MFA callbacks receive the timestamp appended to `args`.
+  Save failures return `:timestamp_save_failed` to the caller and prevent that
+  state-advancing frame from being accepted or emitted.
 
-## Required Follow-Up Work
+## Operational Notes
 
-1. Persistence hooks:
-   - expose timestamp load/save integration points;
-   - document that applications must store keys and timestamps securely.
-2. `SETUP_SIGNING` handling:
-   - avoid forwarding `SETUP_SIGNING` from a secure link to other links;
-   - document any explicit provisioning workflow XMAVLink supports.
-
-Each step should land with focused tests before #47 is closed.
+Applications are responsible for storing shared keys and persisted timestamps
+securely. Timestamp persistence callbacks should write to durable storage before
+returning `:ok`; otherwise XMAVLink will treat the save as failed and reject
+the state-advancing frame.

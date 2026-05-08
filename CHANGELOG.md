@@ -11,6 +11,10 @@
   and reject unsigned MAVLink 2 frames by default while signing is enabled.
 - Added outbound router signing for unsigned MAVLink 2 frames sent over
   signing-enabled connections, with per-connection timestamp increments.
+- Added MAVLink 2 signing timestamp load/save callbacks so applications can
+  persist local signing timestamps across restarts.
+- Made inbound `SETUP_SIGNING` frames local-only so key material is not
+  forwarded between MAVLink links by generic routing.
 
 ## 0.11.1 - 2026-05-08
 

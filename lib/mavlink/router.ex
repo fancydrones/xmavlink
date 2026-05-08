@@ -30,6 +30,8 @@ defmodule XMAVLink.Router do
   alias XMAVLink.UDPInConnection
   alias XMAVLink.UDPOutConnection
 
+  @setup_signing_message_id 256
+
   @typedoc """
   Represents the state of the XMAVLink.Router. Initial values should be set in config.exs.
 
@@ -908,6 +910,17 @@ defmodule XMAVLink.Router do
       )
       |> track_connection_worker(connection_key, connection)
     }
+  end
+
+  # SETUP_SIGNING carries key material. Inbound provisioning messages are
+  # delivered locally for application handling, but never bridged to another
+  # MAVLink connection by generic routing.
+  defp route(
+         {:ok, source_connection_key, frame = %Frame{message_id: @setup_signing_message_id},
+          state = %Router{connections: connections}}
+       )
+       when source_connection_key != :local do
+    forward_and_update(:local, connections.local, frame, state)
   end
 
   # Broadcast un-targeted messages to all connections except the
