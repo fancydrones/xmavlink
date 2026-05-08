@@ -531,13 +531,13 @@ defmodule XMAVLink.Parser do
   end
 
   defp validate_unique_message_modules(messages) do
-    case duplicate_by(messages, &(&1.name |> downcase)) do
+    case duplicate_by(messages, &generated_message_module_name(&1.name)) do
       nil ->
         :ok
 
-      {name, duplicate_messages} ->
+      {module_name, duplicate_messages} ->
         names = duplicate_messages |> map(& &1.name) |> Enum.join(", ")
-        {:error, "Duplicate generated message identifier #{inspect(name)} for #{names}"}
+        {:error, "Duplicate generated message module #{module_name} for #{names}"}
     end
   end
 
@@ -620,6 +620,13 @@ defmodule XMAVLink.Parser do
 
   defp preferred_description(_a, b) when b not in [nil, ""], do: b
   defp preferred_description(a, _b), do: a
+
+  defp generated_message_module_name(message_name) do
+    message_name
+    |> String.split("_")
+    |> map(&String.capitalize/1)
+    |> Enum.join("")
+  end
 
   defp required_identifier(nil, kind, context), do: {:error, "Missing #{kind} in #{context}"}
   defp required_identifier("", kind, context), do: {:error, "Missing #{kind} in #{context}"}

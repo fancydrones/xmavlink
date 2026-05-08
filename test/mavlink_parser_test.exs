@@ -522,6 +522,34 @@ defmodule XMAVLink.Test.Parser do
     )
   end
 
+  test "duplicate generated message modules are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="FOO_BAR">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+            <message id="2" name="FOO__BAR">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Duplicate generated message module FooBar"
+        assert message =~ "FOO_BAR"
+        assert message =~ "FOO__BAR"
+      end
+    )
+  end
+
   test "duplicate enum entries are rejected" do
     with_xml(
       %{
