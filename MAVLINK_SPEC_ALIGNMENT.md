@@ -23,14 +23,15 @@ Supported runtime scope:
 - MAVLink 2 unsigned frames without incompatible flags.
 - MAVLink 2 signed-frame boundary parsing and signature trailer
   representation. Configured inbound signed frames are authenticated before
-  unpacking and routed with replay protection.
+  unpacking and routed with replay protection, and unsigned outbound MAVLink 2
+  frames are signed on signing-enabled connections.
 - MAVLink 1 frames for existing users and legacy links.
 - Serial, `udpin`, `udpout`, and outbound TCP (`tcpout`) transports.
 - Generated dialect modules from trusted MAVLink XML build inputs.
 
 Known non-goals for 1.0 unless separately implemented:
 
-- Outbound MAVLink 2 packet signing and timestamp persistence.
+- Signing timestamp persistence.
 - TCP server (`tcpin`) transport.
 - Treating untrusted XML dialect files as safe input.
 - Full `mavgen` feature parity for XML validation, WIP filtering, and every
@@ -41,7 +42,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Area | Status | Notes |
 | --- | --- | --- |
 | MAVLink 2 frame shape | Supported | Parses and emits the v2 header, 24-bit message id, payload, checksum, and compatible flags. Unsupported incompatible flags are discarded. |
-| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Configured inbound signed frames are verified before unpacking and routed with per-connection replay checks. Unsigned MAVLink 2 inbound frames are rejected by default while signing is enabled unless explicitly accepted. Outbound signing and timestamp persistence remain follow-up work. See #47 and `MAVLINK2_SIGNING.md`. |
+| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Configured inbound signed frames are verified before unpacking and routed with per-connection replay checks. Unsigned MAVLink 2 inbound frames are rejected by default while signing is enabled unless explicitly accepted. Unsigned outbound MAVLink 2 frames are signed on signing-enabled connections with per-connection timestamp increments. Timestamp persistence remains follow-up work. See #47 and `MAVLINK2_SIGNING.md`. |
 | MAVLink 2 payload truncation | Supported | Outbound payloads trim trailing zero bytes while preserving a non-empty all-zero payload's first byte; inbound v2 payloads are padded back to known dialect length before unpacking. |
 | MAVLink 2 future extension bytes | Supported | Generated v2 unpack clauses now ignore trailing extension bytes that are unknown to the local dialect. This preserves extension-field forward compatibility. |
 | MAVLink 2 extension CRC behavior | Supported | `CRC_EXTRA` generation excludes extension fields, matching the serialization guide. |
@@ -52,7 +53,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Unknown message handling | Partial | Unknown known-shape frames are forwarded as broadcast when the message id is not present in the dialect. Unknown messages cannot expose target fields because the payload cannot be decoded. |
 | Compatible flags | Supported | MAVLink 2 compatible flags are retained and otherwise ignored. |
 | Incompatible flags | Partial | Unknown incompatible flags are discarded as required. Signing's known 13-byte trailer is consumed, but full signing support is tracked separately. |
-| Routing unchanged packets | Supported for decoded/unknown unsigned frames and configured signed inbound frames | Forwarding uses the original raw frame bytes. Outbound generation of signed frames is not wired yet. |
+| Routing unchanged packets | Supported with signing caveat | Forwarding generally uses the original raw frame bytes. Unsigned MAVLink 2 frames sent over signing-enabled connections are signed for that outbound link; already signed MAVLink 2 frames are forwarded unchanged. |
 | Target inference | Supported | Generated metadata classifies broadcast, system, component, and system-component targets from `target_system` and `target_component` fields. |
 | Route reset after reboot | Partial | Routing learns source system/component locations but does not yet clear routes on `SYSTEM_TIME.time_boot_ms` decrease. |
 | XML includes | Partial | Includes are recursive and deterministic, but missing include errors and duplicate handling are not yet aligned with `mavgen`. |
@@ -83,6 +84,8 @@ Known non-goals for 1.0 unless separately implemented:
 - Inbound router and connection signing policy can verify signed MAVLink 2
   frames before unpacking, track replay state per connection, and reject
   unsigned MAVLink 2 frames by default while signing is enabled.
+- Outbound router signing can sign unsigned MAVLink 2 frames on signing-enabled
+  connections while leaving MAVLink 1 frames unsigned.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.
@@ -92,8 +95,8 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #47: Continue MAVLink 2 packet signing with outbound signing, timestamp
-  persistence hooks, and `SETUP_SIGNING` handling.
+- #47: Continue MAVLink 2 packet signing with timestamp persistence hooks and
+  `SETUP_SIGNING` handling.
 - #52: Add route invalidation when `SYSTEM_TIME.time_boot_ms` decreases for a
   known system/component.
 - #53: Align XML parser/generator validation with `mavgen` for missing

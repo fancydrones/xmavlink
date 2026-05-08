@@ -2,10 +2,9 @@ defmodule XMAVLink.Signing do
   @moduledoc """
   Stateful MAVLink 2 signing policy helpers.
 
-  This module validates parsed signed frames against a shared key and tracks
-  inbound replay state by `{source_system, source_component, link_id}`. It is
-  intentionally independent from router/connection wiring so the policy can be
-  tested before transports start accepting signed traffic.
+  This module validates parsed signed frames against a shared key, tracks
+  inbound replay state by `{source_system, source_component, link_id}`, and
+  signs unsigned outbound MAVLink 2 frames with a per-connection timestamp.
   """
 
   alias XMAVLink.Frame
@@ -48,6 +47,20 @@ defmodule XMAVLink.Signing do
           | :signed_frame_unsupported
           | :unsigned_frame
           | :unsigned_frame_rejected
+
+  @type sign_error ::
+          :already_signed
+          | :checksum_invalid
+          | :invalid_crc_extra
+          | :invalid_link_id
+          | :invalid_mavlink_2_frame
+          | :invalid_secret_key
+          | :invalid_timestamp
+          | :mavlink_1_not_signable
+          | :missing_crc_extra
+          | :missing_mavlink_2_raw
+          | :timestamp_exhausted
+          | :unsupported_incompatible_flags
 
   @spec new(nil | keyword()) :: {:ok, t | nil} | {:error, new_error}
   def new(nil), do: {:ok, nil}
@@ -104,6 +117,27 @@ defmodule XMAVLink.Signing do
     end
   end
 
+  @spec sign_outbound(Frame.t(), t | nil) ::
+          {:ok, Frame.t(), t | nil} | {:error, sign_error, t | nil}
+  def sign_outbound(frame = %Frame{}, nil), do: {:ok, frame, nil}
+
+  def sign_outbound(frame = %Frame{version: 1}, signing = %Signing{}),
+    do: {:ok, frame, signing}
+
+  def sign_outbound(frame = %Frame{version: 2}, signing = %Signing{}) do
+    if Frame.signed?(frame) do
+      {:ok, frame, signing}
+    else
+      with {:ok, timestamp} <- next_outbound_timestamp(signing),
+           {:ok, signed_frame} <-
+             Frame.sign_frame(frame, signing.secret_key, signing.link_id, timestamp) do
+        {:ok, signed_frame, %Signing{signing | timestamp: timestamp}}
+      else
+        {:error, reason} -> {:error, reason, signing}
+      end
+    end
+  end
+
   @spec now_timestamp() :: 0..281_474_976_710_655
   def now_timestamp do
     timestamp =
@@ -149,6 +183,11 @@ defmodule XMAVLink.Signing do
         end
     end
   end
+
+  defp next_outbound_timestamp(%Signing{timestamp: @signature_timestamp_max}),
+    do: {:error, :timestamp_exhausted}
+
+  defp next_outbound_timestamp(%Signing{timestamp: timestamp}), do: {:ok, timestamp + 1}
 
   defp record_inbound_timestamp(
          frame = %Frame{signature: %{timestamp: timestamp}},

@@ -149,6 +149,54 @@ defmodule XMAVLink.Test.Signing do
     end
   end
 
+  describe "sign_outbound/2" do
+    test "signs unsigned MAVLink 2 frames with the next local timestamp" do
+      frame = unsigned_frame()
+      signing = signing()
+
+      assert {:ok, signed_frame, updated_signing} = Signing.sign_outbound(frame, signing)
+      assert Frame.signed?(signed_frame)
+      assert signed_frame.signature.link_id == @link_id
+      assert signed_frame.signature.timestamp == @local_timestamp + 1
+      assert updated_signing.timestamp == @local_timestamp + 1
+      assert :ok = Frame.validate_signature(signed_frame, @secret_key)
+
+      assert {:ok, newer_frame, newer_signing} =
+               Signing.sign_outbound(unsigned_frame(), updated_signing)
+
+      assert newer_frame.signature.timestamp == @local_timestamp + 2
+      assert newer_signing.timestamp == @local_timestamp + 2
+    end
+
+    test "leaves MAVLink 1 and already signed frames unchanged" do
+      mavlink_1_frame =
+        Frame.pack_frame(%Frame{
+          version: 1,
+          sequence_number: 7,
+          source_system: 1,
+          source_component: 1,
+          message_id: 24,
+          payload: <<1, 2, 3>>,
+          crc_extra: 0
+        })
+
+      signing = signing()
+
+      assert {:ok, ^mavlink_1_frame, ^signing} = Signing.sign_outbound(mavlink_1_frame, signing)
+
+      signed_frame = signed_frame(@valid_timestamp)
+
+      assert {:ok, ^signed_frame, ^signing} = Signing.sign_outbound(signed_frame, signing)
+    end
+
+    test "rejects outbound signing when the timestamp space is exhausted" do
+      %Signing{} = signing = %{signing() | timestamp: 0xFFFF_FFFF_FFFF}
+
+      assert {:error, :timestamp_exhausted, ^signing} =
+               Signing.sign_outbound(unsigned_frame(), signing)
+    end
+  end
+
   defp signing do
     {:ok, signing} =
       Signing.new(

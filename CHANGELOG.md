@@ -3,13 +3,14 @@
 ## Unreleased
 
 - Added MAVLink 2 signed-frame parsing and signature trailer representation.
-- Added a low-level MAVLink 2 frame signing helper for already packed frames;
-  outbound router signing policy is still pending.
+- Added a low-level MAVLink 2 frame signing helper for already packed frames.
 - Added reusable MAVLink 2 signature validation and inbound replay-policy
   helpers.
 - Added inbound router and connection signing policy wiring so configured
   receive paths can verify signed MAVLink 2 frames, reject replayed signatures,
   and reject unsigned MAVLink 2 frames by default while signing is enabled.
+- Added outbound router signing for unsigned MAVLink 2 frames sent over
+  signing-enabled connections, with per-connection timestamp increments.
 
 ## 0.11.1 - 2026-05-08
 

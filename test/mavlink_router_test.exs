@@ -731,6 +731,95 @@ defmodule XMAVLink.Test.Router do
     end
   end
 
+  describe "outbound signing policy" do
+    test "signs outbound MAVLink 2 frames on signing-enabled UDP connections" do
+      {udp_socket, udp_port} = open_udp_socket()
+      :ok = :inet.setopts(udp_socket, active: true)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:#{udp_port}"],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp
+            ]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(udp_socket)
+        stop_router(router_pid)
+      end)
+
+      udpout_socket = wait_for_udpout_socket(router_pid)
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 2)
+
+      assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, raw}, 500
+      assert {%Frame{} = frame, <<>>} = Frame.binary_to_frame_and_tail(raw)
+      assert Frame.signed?(frame)
+      assert frame.signature.link_id == @link_id
+      assert frame.signature.timestamp == @local_timestamp + 1
+      assert :ok = Frame.validate_signature(frame, @secret_key)
+
+      state = :sys.get_state(router_pid)
+      assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 1
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 2)
+
+      assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, raw}, 500
+      assert {%Frame{} = frame, <<>>} = Frame.binary_to_frame_and_tail(raw)
+      assert frame.signature.timestamp == @local_timestamp + 2
+
+      state = :sys.get_state(router_pid)
+      assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 2
+    end
+
+    test "keeps outbound MAVLink 1 frames unsigned when signing is enabled" do
+      {udp_socket, udp_port} = open_udp_socket()
+      :ok = :inet.setopts(udp_socket, active: true)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:#{udp_port}"],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp
+            ]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(udp_socket)
+        stop_router(router_pid)
+      end)
+
+      udpout_socket = wait_for_udpout_socket(router_pid)
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 1)
+
+      assert_receive {:udp, ^udp_socket, {127, 0, 0, 1}, _source_port, <<0xFE, _rest::binary>>},
+                     500
+
+      state = :sys.get_state(router_pid)
+      assert state.connections[udpout_socket].signing.timestamp == @local_timestamp
+    end
+  end
+
   describe "subscribe/1" do
     test "is synchronous - subscription is committed when call returns" do
       {udp_socket, udp_port} = open_udp_socket()

@@ -12,8 +12,9 @@ frame-shape feature and extracts the 13-byte signing trailer into
 `XMAVLink.Frame.Signature`.
 
 `XMAVLink.Frame.sign_frame/4` can sign an already packed MAVLink 2 frame when
-given a 32-byte key, link id, and timestamp. This remains a low-level utility;
-outbound router and connection signing does not use it yet.
+given a 32-byte key, link id, and timestamp. Router forwarding uses it through
+`XMAVLink.Signing.sign_outbound/2` when a signing-enabled connection sends an
+unsigned MAVLink 2 frame.
 
 `XMAVLink.Frame.validate_signature/2` verifies the 48-bit signature for a
 parsed signed frame. `XMAVLink.Signing.validate_inbound/2` adds the policy
@@ -30,6 +31,11 @@ frames are rejected by default while signing is enabled unless
 `accept_unsigned: true` is set. MAVLink 1 frames remain accepted under a signing
 policy. When signing is not configured, signed MAVLink 2 frames still return
 `:signed_frame_unsupported`.
+
+Outbound routing signs unsigned MAVLink 2 frames on signing-enabled
+connections, updates that connection's local timestamp after each signed send,
+and leaves MAVLink 1 frames unsigned. Already signed MAVLink 2 frames are
+forwarded with their existing signature rather than being re-signed.
 
 Unknown incompatible flags are still rejected. If a frame has both the signing
 flag and unsupported incompatible flags, XMAVLink consumes the known 13-byte
@@ -51,27 +57,22 @@ link id, and timestamp.
 
 ## Intended Public Policy Shape
 
-Signing is currently configured per router and copied into each receive-side
-connection:
+Signing is currently configured per router and copied into each connection:
 
 - `signing: nil` or omitted: current unsigned behavior, but signed frames remain
   rejected until an explicit acceptance policy is configured.
 - `signing: [secret_key: <<_::256>>, link_id: 0..255, timestamp: non_neg_integer]`:
-  validate inbound signed MAVLink 2 frames and track replay timestamps on the
-  receiving connection.
+  validate inbound signed MAVLink 2 frames, track inbound replay timestamps, and
+  sign unsigned outbound MAVLink 2 frames on each connection.
 - `accept_unsigned: false | true`: explicit policy for unsigned frames when
   signing is enabled. The policy helper defaults to reject.
 
 ## Required Follow-Up Work
 
-1. Outbound signing policy:
-   - call the low-level frame signing utility from router/connection send paths;
-   - monotonically increment timestamps per outbound link;
-   - keep MAVLink 1 behavior unsigned and unchanged.
-2. Persistence hooks:
+1. Persistence hooks:
    - expose timestamp load/save integration points;
    - document that applications must store keys and timestamps securely.
-3. `SETUP_SIGNING` handling:
+2. `SETUP_SIGNING` handling:
    - avoid forwarding `SETUP_SIGNING` from a secure link to other links;
    - document any explicit provisioning workflow XMAVLink supports.
 
