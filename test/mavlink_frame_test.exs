@@ -120,6 +120,10 @@ defmodule XMAVLink.Test.Frame do
     assert {%Frame{} = parsed_frame, <<>>} = Frame.binary_to_frame_and_tail(expected_raw)
     assert parsed_frame.signature == signed_frame.signature
     assert :signed_frame_unsupported = Frame.validate_and_unpack(parsed_frame, Common)
+    assert :ok = Frame.validate_signature(parsed_frame, @secret_key)
+
+    assert {:error, :signature_invalid} =
+             Frame.validate_signature(parsed_frame, wrong_secret_key())
   end
 
   test "MAVLink 2 frame signing rejects invalid inputs" do
@@ -207,6 +211,26 @@ defmodule XMAVLink.Test.Frame do
              Frame.sign_frame(signed_frame, @secret_key, @link_id, @timestamp)
   end
 
+  test "MAVLink 2 signature validation rejects unsigned and corrupted frames" do
+    frame =
+      Frame.pack_frame(%Frame{
+        version: 2,
+        sequence_number: 7,
+        source_system: 1,
+        source_component: 1,
+        message_id: 24,
+        payload: <<1, 2, 3>>,
+        crc_extra: 0
+      })
+
+    assert {:error, :unsigned_frame} = Frame.validate_signature(frame, @secret_key)
+
+    assert {:ok, signed_frame} = Frame.sign_frame(frame, @secret_key, @link_id, @timestamp)
+
+    assert {:error, :signature_invalid} =
+             Frame.validate_signature(corrupt_signature(signed_frame), @secret_key)
+  end
+
   defp signed_frame_raw(incompatible_flags \\ @signed_incompatible_flags) do
     <<0xFD, 0, incompatible_flags, 0, 7, 1, 1, 0::little-unsigned-integer-size(24),
       0::little-unsigned-integer-size(16)>> <> @signature
@@ -232,4 +256,18 @@ defmodule XMAVLink.Test.Frame do
           prefix <> <<Bitwise.bxor(checksum, 0xFFFF)::little-unsigned-integer-size(16)>>
     }
   end
+
+  defp corrupt_signature(%Frame{mavlink_2_raw: raw} = frame) do
+    signature_offset = byte_size(raw) - 6
+
+    <<prefix::binary-size(signature_offset), signature_head, signature_tail::binary-size(5)>> =
+      raw
+
+    %Frame{
+      frame
+      | mavlink_2_raw: prefix <> <<Bitwise.bxor(signature_head, 0xFF)>> <> signature_tail
+    }
+  end
+
+  defp wrong_secret_key, do: :binary.copy(<<43>>, 32)
 end
