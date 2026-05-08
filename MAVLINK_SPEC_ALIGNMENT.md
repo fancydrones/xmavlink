@@ -58,7 +58,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Incompatible flags | Supported | Unknown incompatible flags are discarded as required. Signing's known 13-byte trailer is consumed when present so stream boundaries stay aligned. |
 | Routing unchanged packets | Supported with signing caveat | Forwarding generally uses the original raw frame bytes. Unsigned MAVLink 2 frames sent over signing-enabled connections are signed for that outbound link; already signed MAVLink 2 frames are forwarded unchanged. |
 | Target inference | Supported | Generated metadata classifies broadcast, system, component, and system-component targets from `target_system` and `target_component` fields. |
-| Route reset after reboot | Partial | Routing learns source system/component locations but does not yet clear routes on `SYSTEM_TIME.time_boot_ms` decrease. |
+| Route reset after reboot | Supported | Routing tracks `SYSTEM_TIME.time_boot_ms` per source system/component and clears learned routes for that system when the same source reports a lower boot time. |
 | XML includes | Partial | Includes are recursive and deterministic, but missing include errors and duplicate handling are not yet aligned with `mavgen`. |
 | Enum merging | Partial | Matching enum names are merged and sorted by value. Duplicate enum entries are not rejected yet. |
 | Duplicate message ids | Unsupported validation | The parser/generator does not currently reject duplicate message ids across includes. |
@@ -94,6 +94,9 @@ Known non-goals for 1.0 unless separately implemented:
   fails.
 - Inbound `SETUP_SIGNING` frames are delivered locally but not forwarded between
   MAVLink connections by generic routing.
+- Learned routes are cleared for a remote system when the same
+  system/component reports a lower `SYSTEM_TIME.time_boot_ms`, preventing stale
+  targeted forwarding after reboot.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.
@@ -103,8 +106,6 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #52: Add route invalidation when `SYSTEM_TIME.time_boot_ms` decreases for a
-  known system/component.
 - #53: Align XML parser/generator validation with `mavgen` for missing
   includes, duplicate message ids, duplicate enum entries, and reserved names.
 

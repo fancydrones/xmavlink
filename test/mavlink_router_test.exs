@@ -801,6 +801,78 @@ defmodule XMAVLink.Test.Router do
     end
   end
 
+  describe "route reboot handling" do
+    test "clears learned system routes when SYSTEM_TIME time_boot_ms decreases" do
+      {:ok, router_socket} = :gen_udp.open(0, [:binary, active: false])
+      {:ok, old_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, old_peer_port} = :inet.port(old_peer_socket)
+      {:ok, new_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, new_peer_port} = :inet.port(new_peer_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(router_socket)
+        :gen_udp.close(old_peer_socket)
+        :gen_udp.close(new_peer_socket)
+        stop_router(router_pid)
+      end)
+
+      address = {127, 0, 0, 1}
+      old_route = {router_socket, address, old_peer_port}
+      new_route = {router_socket, address, new_peer_port}
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, old_peer_port,
+         system_time_frame(10_000, 2, 1).mavlink_2_raw}
+      )
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, old_peer_port,
+         unsigned_heartbeat_frame(2, 42).mavlink_2_raw}
+      )
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{2, 1}] == old_route
+      assert state.routes[{2, 42}] == old_route
+      assert state.system_time_boot_ms[{2, 1}] == 10_000
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, new_peer_port,
+         system_time_frame(2_000, 2, 1).mavlink_2_raw}
+      )
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{2, 1}] == new_route
+      refute Map.has_key?(state.routes, {2, 42})
+      assert state.system_time_boot_ms == %{{2, 1} => 2_000}
+
+      assert_receive {:udp, ^old_peer_socket, _, _, _}, 200
+      flush_udp(old_peer_socket)
+      flush_udp(new_peer_socket)
+
+      assert :ok = Router.pack_and_send(router_pid, param_request_list(2, 42), 2)
+      refute_receive {:udp, ^old_peer_socket, _, _, _}, 50
+
+      assert :ok = Router.pack_and_send(router_pid, param_request_list(2, 1), 2)
+      assert_receive {:udp, ^new_peer_socket, _, _, _}, 200
+      refute_receive {:udp, ^old_peer_socket, _, _, _}, 50
+    end
+  end
+
   describe "outbound signing policy" do
     test "signs outbound MAVLink 2 frames on signing-enabled UDP connections" do
       {udp_socket, udp_port} = open_udp_socket()
@@ -1095,6 +1167,33 @@ defmodule XMAVLink.Test.Router do
     }
   end
 
+  defp param_request_list(target_system, target_component) do
+    %Common.Message.ParamRequestList{
+      target_system: target_system,
+      target_component: target_component
+    }
+  end
+
+  defp system_time_frame(time_boot_ms, source_system, source_component) do
+    message = %Common.Message.SystemTime{
+      time_unix_usec: 0,
+      time_boot_ms: time_boot_ms
+    }
+
+    {:ok, message_id, {:ok, crc_extra, _expected_length, _target}, payload} =
+      XMAVLink.Message.pack(message, 2)
+
+    Frame.pack_frame(%Frame{
+      version: 2,
+      sequence_number: 9,
+      source_system: source_system,
+      source_component: source_component,
+      message_id: message_id,
+      payload: payload,
+      crc_extra: crc_extra
+    })
+  end
+
   defp signed_heartbeat_frame(
          timestamp \\ @valid_timestamp,
          source_system \\ 1,
@@ -1166,6 +1265,14 @@ defmodule XMAVLink.Test.Router do
     {:ok, socket} = :gen_udp.open(0, [:binary, active: false])
     {:ok, port} = :inet.port(socket)
     {socket, port}
+  end
+
+  defp flush_udp(socket) do
+    receive do
+      {:udp, ^socket, _, _, _} -> flush_udp(socket)
+    after
+      0 -> :ok
+    end
   end
 
   defp open_tcp_listener do
