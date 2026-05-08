@@ -32,6 +32,7 @@ defmodule XMAVLink.Signing do
 
   @type new_error ::
           :invalid_accept_unsigned
+          | :invalid_options
           | :invalid_link_id
           | :invalid_secret_key
           | :invalid_timestamp
@@ -52,6 +53,16 @@ defmodule XMAVLink.Signing do
   def new(nil), do: {:ok, nil}
 
   def new(opts) when is_list(opts) do
+    if Keyword.keyword?(opts) do
+      new_keyword(opts)
+    else
+      {:error, :invalid_options}
+    end
+  end
+
+  def new(_opts), do: {:error, :invalid_options}
+
+  defp new_keyword(opts) do
     with {:ok, secret_key} <- fetch_secret_key(opts),
          {:ok, link_id} <- fetch_link_id(opts),
          {:ok, timestamp} <- validate_timestamp(Keyword.get(opts, :timestamp, now_timestamp())),
@@ -79,6 +90,9 @@ defmodule XMAVLink.Signing do
 
   def validate_inbound(frame = %Frame{}, signing = %Signing{}) do
     cond do
+      frame.version == 1 ->
+        {:ok, frame, signing}
+
       Frame.signed?(frame) ->
         validate_signed_inbound(frame, signing)
 

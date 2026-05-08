@@ -45,6 +45,9 @@ defmodule XMAVLink.Test.Signing do
                  link_id: @link_id,
                  accept_unsigned: :sometimes
                )
+
+      assert {:error, :invalid_options} = Signing.new([1, 2])
+      assert {:error, :invalid_options} = Signing.new(:invalid)
     end
   end
 
@@ -116,6 +119,23 @@ defmodule XMAVLink.Test.Signing do
 
       assert {:ok, ^unsigned_frame, ^permissive_signing} =
                Signing.validate_inbound(unsigned_frame, permissive_signing)
+    end
+
+    test "keeps MAVLink 1 frames accepted when signing policy is enabled" do
+      frame =
+        Frame.pack_frame(%Frame{
+          version: 1,
+          sequence_number: 7,
+          source_system: 1,
+          source_component: 1,
+          message_id: 24,
+          payload: <<1, 2, 3>>,
+          crc_extra: 0
+        })
+
+      signing = signing()
+
+      assert {:ok, ^frame, ^signing} = Signing.validate_inbound(frame, signing)
     end
 
     test "disabled policy keeps unsigned frames accepted and signed frames unsupported" do

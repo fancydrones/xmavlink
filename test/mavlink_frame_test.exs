@@ -87,7 +87,9 @@ defmodule XMAVLink.Test.Frame do
         crc_extra: 0
       })
 
-    assert {:ok, signed_frame} = Frame.sign_frame(frame, @secret_key, @link_id, @timestamp)
+    assert {:ok, %Frame{} = signed_frame} =
+             Frame.sign_frame(frame, @secret_key, @link_id, @timestamp)
+
     assert Frame.signed?(signed_frame)
 
     expected_payload = <<1, 2>>
@@ -225,10 +227,17 @@ defmodule XMAVLink.Test.Frame do
 
     assert {:error, :unsigned_frame} = Frame.validate_signature(frame, @secret_key)
 
-    assert {:ok, signed_frame} = Frame.sign_frame(frame, @secret_key, @link_id, @timestamp)
+    assert {:ok, %Frame{} = signed_frame} =
+             Frame.sign_frame(frame, @secret_key, @link_id, @timestamp)
 
     assert {:error, :signature_invalid} =
              Frame.validate_signature(corrupt_signature(signed_frame), @secret_key)
+
+    assert {:error, :invalid_mavlink_2_frame} =
+             Frame.validate_signature(
+               %Frame{signed_frame | mavlink_2_raw: nil},
+               @secret_key
+             )
   end
 
   defp signed_frame_raw(incompatible_flags \\ @signed_incompatible_flags) do

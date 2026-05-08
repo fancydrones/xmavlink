@@ -77,9 +77,9 @@ defmodule XMAVLink.Frame do
           payload: binary,
           checksum: 0..65_535,
           signature: XMAVLink.Frame.Signature.t() | nil,
-          mavlink_1_raw: binary,
-          mavlink_2_raw: binary,
-          message: message
+          mavlink_1_raw: binary | nil,
+          mavlink_2_raw: binary | nil,
+          message: message | nil
         }
 
   @spec binary_to_frame_and_tail(binary) ::
@@ -472,6 +472,8 @@ defmodule XMAVLink.Frame do
         error
     end
   end
+
+  defp validate_signed_frame_shape(%XMAVLink.Frame{}), do: {:error, :invalid_mavlink_2_frame}
 
   defp signed_packet_without_signature(raw)
        when is_binary(raw) and byte_size(raw) >= 12 + @mavlink_2_signature_length do
