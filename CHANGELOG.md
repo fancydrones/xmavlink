@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.12.1 - 2026-05-08
+
 - Added router route invalidation when a `SYSTEM_TIME.time_boot_ms` decrease
   indicates a remote system rebooted.
 
