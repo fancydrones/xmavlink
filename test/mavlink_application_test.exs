@@ -51,6 +51,28 @@ defmodule XMAVLink.ApplicationTest do
     assert %XMAVLink.Util.CacheManager{auto_param_request: false} = :sys.get_state(cache_manager)
   end
 
+  test "rejects invalid utility options with a clear error" do
+    previous_env =
+      save_env([:dialect, :router_name, :connections, :utilities, :heartbeat, :heartbeats])
+
+    Application.put_env(:xmavlink, :dialect, Common)
+    Application.put_env(:xmavlink, :router_name, XMAVLink.Router)
+    Application.put_env(:xmavlink, :connections, [])
+    Application.put_env(:xmavlink, :utilities, [:auto_param_request])
+    Application.delete_env(:xmavlink, :heartbeat)
+    Application.delete_env(:xmavlink, :heartbeats)
+
+    on_exit(fn ->
+      cleanup_process(XMAVLink.SubscriptionCache)
+      delete_utility_tables()
+      restore_env(previous_env)
+    end)
+
+    assert_raise ArgumentError, ~r/:utilities must be true, false, nil, or a keyword list/, fn ->
+      XMAVLink.Application.start(:normal, [])
+    end
+  end
+
   defp save_env(keys) do
     Map.new(keys, &{&1, Application.fetch_env(:xmavlink, &1)})
   end

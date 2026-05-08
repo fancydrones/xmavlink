@@ -76,7 +76,7 @@ defmodule XMAVLink.Mixfile do
       files: ["lib", "priv", "mix.exs", "README.md", "CHANGELOG.md", "LICENSE", "SECURITY.md"],
       exclude_patterns: [".DS_Store"],
       licenses: ["MIT"],
-      links: %{"Github" => "https://github.com/fancydrones/xmavlink"},
+      links: %{"GitHub" => "https://github.com/fancydrones/xmavlink"},
       maintainers: ["Roy Veshovda"]
     ]
   end
