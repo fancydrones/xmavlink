@@ -4,7 +4,7 @@ defmodule XMAVLink.UDPOutConnection do
   """
 
   require Logger
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 2]
+  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
 
@@ -14,13 +14,15 @@ defmodule XMAVLink.UDPOutConnection do
   defstruct address: nil,
             port: nil,
             socket: nil,
-            worker: nil
+            worker: nil,
+            signing: nil
 
   @type t :: %XMAVLink.UDPOutConnection{
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
           socket: pid,
-          worker: pid | nil
+          worker: pid | nil,
+          signing: XMAVLink.Signing.t() | nil
         }
 
   # Create connection if this is the first time we've received on it
@@ -46,8 +48,8 @@ defmodule XMAVLink.UDPOutConnection do
 
       # UDP sends frame per packet, so ignore rest
       {received_frame, _rest} ->
-        case validate_and_unpack(received_frame, dialect) do
-          {:ok, valid_frame} ->
+        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
+          {:ok, valid_frame, signing} ->
             # A udpout connection is single-target, single-socket. Key it by
             # the bare `socket` so update_route_info/2 updates the existing
             # connection entry rather than creating a sibling under
@@ -55,22 +57,23 @@ defmodule XMAVLink.UDPOutConnection do
             # broadcast `route/1` clause to forward back out the same UDPOut
             # (echo) when the reply's source IP differs from the configured
             # target (NAT / masquerade / kube-proxy DNAT).
-            {:ok, socket, receiving_connection, valid_frame}
+            {:ok, socket, struct(receiving_connection, signing: signing), valid_frame}
 
-          :unknown_message ->
+          {:unknown_message, signing} ->
             # We re-broadcast valid frames with unknown messages
-            :ok = Logger.debug("relaying unknown message with id #{received_frame.message_id}}")
+            :ok = Logger.debug("relaying unknown message with id #{received_frame.message_id}")
 
-            {:ok, socket, receiving_connection, struct(received_frame, target: :broadcast)}
+            {:ok, socket, struct(receiving_connection, signing: signing),
+             struct(received_frame, target: :broadcast)}
 
-          reason ->
+          {:error, reason, signing} ->
             :ok =
               Logger.debug(
                 "UDPOutConnection.handle_info: frame received from " <>
                   "#{Enum.join(Tuple.to_list(source_addr), ".")}:#{source_port} failed: #{Atom.to_string(reason)}"
               )
 
-            {:error, reason, socket, receiving_connection}
+            {:error, reason, socket, struct(receiving_connection, signing: signing)}
         end
     end
   end

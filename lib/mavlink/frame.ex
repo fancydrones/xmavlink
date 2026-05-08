@@ -188,6 +188,27 @@ defmodule XMAVLink.Frame do
 
   def validate_and_unpack(frame, dialect), do: validate_unsigned_and_unpack(frame, dialect)
 
+  @spec validate_and_unpack(XMAVLink.Frame.t(), module, XMAVLink.Signing.t() | nil) ::
+          {:ok, XMAVLink.Frame.t(), XMAVLink.Signing.t() | nil}
+          | {:unknown_message, XMAVLink.Signing.t() | nil}
+          | {:error,
+             :failed_to_unpack
+             | :checksum_invalid
+             | :unknown_message
+             | XMAVLink.Signing.validate_error(), XMAVLink.Signing.t() | nil}
+  def validate_and_unpack(frame, dialect, signing) do
+    with {:ok, validated_frame, updated_signing} <-
+           XMAVLink.Signing.validate_inbound(frame, signing) do
+      case validate_unsigned_and_unpack(validated_frame, dialect) do
+        {:ok, valid_frame} -> {:ok, valid_frame, updated_signing}
+        :unknown_message -> {:unknown_message, updated_signing}
+        reason -> {:error, reason, updated_signing}
+      end
+    else
+      {:error, reason, updated_signing} -> {:error, reason, updated_signing}
+    end
+  end
+
   defp validate_unsigned_and_unpack(
          frame = %XMAVLink.Frame{message_id: message_id, version: version, payload: payload},
          dialect

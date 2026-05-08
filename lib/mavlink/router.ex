@@ -23,6 +23,7 @@ defmodule XMAVLink.Router do
   alias XMAVLink.Frame
   alias XMAVLink.Message
   alias XMAVLink.Router
+  alias XMAVLink.Signing
   alias XMAVLink.LocalConnection
   alias XMAVLink.SerialConnection
   alias XMAVLink.TCPOutConnection
@@ -65,6 +66,8 @@ defmodule XMAVLink.Router do
     connection_retry_ms: 1_000,
     # Subscription cache name for restart restoration, if any
     subscription_cache: nil,
+    # Per-connection MAVLink 2 signing policy seed
+    signing: nil,
     # Per-router supervised connection workers
     connection_supervisor: nil,
     connection_workers: %{},
@@ -91,6 +94,7 @@ defmodule XMAVLink.Router do
           dialect: module | nil,
           connection_strings: [String.t()],
           connection_retry_ms: non_neg_integer,
+          signing: Signing.t() | nil,
           subscription_cache: router_name | nil,
           connection_supervisor: pid | nil,
           connection_workers: %{connection_key() => pid},
@@ -147,7 +151,8 @@ defmodule XMAVLink.Router do
             optional(:name) => router_name | nil,
             optional(:connection_strings) => [String.t()],
             optional(:connections) => [String.t()],
-            optional(:connection_retry_ms) => non_neg_integer
+            optional(:connection_retry_ms) => non_neg_integer,
+            optional(:signing) => keyword() | nil
           },
           [{atom, any}]
         ) :: {:ok, pid}
@@ -400,6 +405,7 @@ defmodule XMAVLink.Router do
     args = Map.new(args)
     connection_strings = Map.get(args, :connection_strings, Map.get(args, :connections, [])) || []
     connection_retry_ms = Map.get(args, :connection_retry_ms, 1_000)
+    signing = normalize_signing!(Map.get(args, :signing))
 
     if not (is_integer(connection_retry_ms) and connection_retry_ms >= 0) do
       raise ArgumentError, "connection_retry_ms must be a non-negative integer"
@@ -408,6 +414,14 @@ defmodule XMAVLink.Router do
     args
     |> Map.put(:connection_strings, connection_strings)
     |> Map.put(:connection_retry_ms, connection_retry_ms)
+    |> Map.put(:signing, signing)
+  end
+
+  defp normalize_signing!(signing) do
+    case Signing.new(signing) do
+      {:ok, signing} -> signing
+      {:error, reason} -> raise ArgumentError, "invalid signing config: #{inspect(reason)}"
+    end
   end
 
   defp start_options(opts, nil), do: Keyword.delete(opts, :name)
@@ -498,6 +512,7 @@ defmodule XMAVLink.Router do
        connection_retry_ms: args.connection_retry_ms,
        connection_supervisor: connection_supervisor,
        subscription_cache: subscription_cache,
+       signing: args.signing,
        connections: %{local: local_connection}
      }}
   end
@@ -604,6 +619,8 @@ defmodule XMAVLink.Router do
         {:add_connection, connection_key, connection},
         state = %Router{connections: connections}
       ) do
+    connection = connection_with_signing(connection, state.signing)
+
     {
       :noreply,
       struct(
@@ -617,6 +634,8 @@ defmodule XMAVLink.Router do
         {:add_connection, connection_key, connection, worker},
         state = %Router{connections: connections}
       ) do
+    connection = connection_with_signing(connection, state.signing)
+
     {
       :noreply,
       state
@@ -636,7 +655,7 @@ defmodule XMAVLink.Router do
   defp handle_udp_message(
          message = {:udp, socket, address, port, _},
          worker,
-         state = %Router{connections: connections, dialect: dialect}
+         state = %Router{connections: connections, dialect: dialect, signing: signing}
        ) do
     {
       :noreply,
@@ -664,7 +683,7 @@ defmodule XMAVLink.Router do
 
             nil ->
               # New previously unseen UDPIn client
-              UDPInConnection.handle_info(message, nil, dialect, worker)
+              UDPInConnection.handle_info(message, nil, dialect, worker, signing)
           end
       end
       |> update_route_info(state)
@@ -705,6 +724,14 @@ defmodule XMAVLink.Router do
   ####################
   # Helper Functions #
   ####################
+
+  defp connection_with_signing(connection, signing) do
+    if Map.has_key?(connection, :signing) do
+      struct(connection, signing: signing)
+    else
+      connection
+    end
+  end
 
   # Handle user configured connections with supervised workers. If
   # successful they send us an :add_connection message with the details. The

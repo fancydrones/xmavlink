@@ -1,6 +1,13 @@
 defmodule XMAVLink.Test.Router do
   use ExUnit.Case
+
+  alias XMAVLink.Frame
   alias XMAVLink.Router
+
+  @secret_key :binary.copy(<<42>>, 32)
+  @link_id 9
+  @local_timestamp 10_000_000
+  @valid_timestamp 10_000_001
 
   describe "connection string parsing" do
     test "accepts IP address in udpout connection string" do
@@ -152,6 +159,21 @@ defmodule XMAVLink.Test.Router do
             dialect: APM.Dialect,
             connection_strings: [],
             connection_retry_ms: -1
+          },
+          []
+        )
+      end
+    end
+
+    test "rejects invalid signing config" do
+      assert_raise ArgumentError, ~r/invalid signing config: :invalid_secret_key/, fn ->
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            signing: [secret_key: <<1>>, link_id: @link_id]
           },
           []
         )
@@ -627,6 +649,88 @@ defmodule XMAVLink.Test.Router do
     end
   end
 
+  describe "inbound signing policy" do
+    test "valid signed UDP frames are unpacked, routed, and recorded for replay protection" do
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp
+            ]
+          },
+          []
+        )
+
+      on_exit(fn -> stop_router(router_pid) end)
+
+      assert :ok = Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true)
+
+      socket = :signed_udp_socket
+      address = {127, 0, 0, 1}
+      port = 14_550
+      raw = signed_heartbeat_frame().mavlink_2_raw
+
+      send(router_pid, {:udp, socket, address, port, raw})
+
+      assert_receive %Frame{
+                       source_system: 1,
+                       source_component: 1,
+                       signature: %{link_id: @link_id, timestamp: @valid_timestamp},
+                       message: %Common.Message.Heartbeat{}
+                     },
+                     200
+
+      state = :sys.get_state(router_pid)
+      connection_key = {socket, address, port}
+
+      assert state.routes[{1, 1}] == connection_key
+
+      assert state.connections[connection_key].signing.stream_timestamps[{1, 1, @link_id}] ==
+               @valid_timestamp
+    end
+
+    test "unsigned MAVLink 2 UDP frames are rejected when signing requires signed input" do
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp
+            ]
+          },
+          []
+        )
+
+      on_exit(fn -> stop_router(router_pid) end)
+
+      assert :ok = Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true)
+
+      socket = :unsigned_udp_socket
+      address = {127, 0, 0, 1}
+      port = 14_550
+
+      send(router_pid, {:udp, socket, address, port, unsigned_heartbeat_frame().mavlink_2_raw})
+
+      refute_receive %Frame{message: %Common.Message.Heartbeat{}}, 50
+
+      state = :sys.get_state(router_pid)
+      refute Map.has_key?(state.routes, {1, 1})
+    end
+  end
+
   describe "subscribe/1" do
     test "is synchronous - subscription is committed when call returns" do
       {udp_socket, udp_port} = open_udp_socket()
@@ -821,6 +925,26 @@ defmodule XMAVLink.Test.Router do
       system_status: :mav_state_active,
       mavlink_version: 3
     }
+  end
+
+  defp signed_heartbeat_frame(timestamp \\ @valid_timestamp) do
+    {:ok, frame} = Frame.sign_frame(unsigned_heartbeat_frame(), @secret_key, @link_id, timestamp)
+    frame
+  end
+
+  defp unsigned_heartbeat_frame do
+    {:ok, message_id, {:ok, crc_extra, _expected_length, _target}, payload} =
+      XMAVLink.Message.pack(sample_heartbeat(), 2)
+
+    Frame.pack_frame(%Frame{
+      version: 2,
+      sequence_number: 7,
+      source_system: 1,
+      source_component: 1,
+      message_id: message_id,
+      payload: payload,
+      crc_extra: crc_extra
+    })
   end
 
   defp open_udp_socket do
