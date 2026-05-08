@@ -134,7 +134,7 @@ defmodule XMAVLink.Test.Parser do
                    %{
                      constant_val: nil,
                      description:
-                       "Password / Key, depending on version plaintext or encrypted. 25 or less characters, NULL terminated. The characters may involve A-Z, a-z, 0-9, and '!?,.-'",
+                       "Password / Key, depending on version plaintext or encrypted. 25 or less characters, NULL terminated. The characters may involve A-Z, a-z, 0-9, and \"!?,.-\"",
                      display: nil,
                      enum: "",
                      is_extension: false,
@@ -444,5 +444,246 @@ defmodule XMAVLink.Test.Parser do
     definition = parse_mavlink_xml("#{@root_dir}/test/input/test_mavlink_include.xml")
 
     assert %{bitmask: true} = Enum.find(definition.enums, &(&1.name == :mav_autopilot))
+  end
+
+  test "missing include returns a clear parse error" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>missing.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "missing.xml"
+        assert message =~ "does not exist"
+      end
+    )
+  end
+
+  test "malformed XML returns a clear parse error" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Failed to parse MAVLink XML file"
+        assert message =~ "root.xml"
+      end
+    )
+  end
+
+  test "duplicate message ids across includes are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>included.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="42" name="ROOT_MESSAGE">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """,
+        "included.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="42" name="INCLUDED_MESSAGE">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Duplicate message id 42"
+        assert message =~ "ROOT_MESSAGE"
+        assert message =~ "INCLUDED_MESSAGE"
+      end
+    )
+  end
+
+  test "duplicate generated message modules are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="FOO_BAR">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+            <message id="2" name="FOO__BAR">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Duplicate generated message module FooBar"
+        assert message =~ "FOO_BAR"
+        assert message =~ "FOO__BAR"
+      end
+    )
+  end
+
+  test "duplicate enum entries are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="TEST_ENUM">
+              <entry value="0" name="TEST_ENTRY" />
+              <entry value="1" name="TEST_ENTRY" />
+            </enum>
+          </enums>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Duplicate enum entry :test_entry"
+        assert message =~ ":test_enum"
+      end
+    )
+  end
+
+  test "duplicate enum values are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="TEST_ENUM">
+              <entry value="1" name="TEST_ONE" />
+              <entry value="1" name="TEST_TWO" />
+            </enum>
+          </enums>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Duplicate enum value 1"
+        assert message =~ ":test_one"
+        assert message =~ ":test_two"
+      end
+    )
+  end
+
+  test "invalid generated identifiers are rejected before source generation" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint8_t" name="bad-name">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ ~s(Invalid field name "bad-name")
+        assert message =~ "TEST_MESSAGE"
+      end
+    )
+  end
+
+  test "invalid field display values are rejected before atom creation" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint8_t" name="value" display="not_bitmask" units="bad unit">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ ~s(Invalid field display "not_bitmask")
+        assert message =~ "TEST_MESSAGE"
+      end
+    )
+  end
+
+  test "invalid field units are rejected before atom creation" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint8_t" name="value" units="bad unit">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ ~s(Invalid field unit "bad unit")
+        assert message =~ "TEST_MESSAGE"
+      end
+    )
+  end
+
+  defp with_xml(files, fun) do
+    dir =
+      Path.join(System.tmp_dir!(), "xmavlink_parser_test_#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+
+    for {name, contents} <- files do
+      File.write!(Path.join(dir, name), contents)
+    end
+
+    fun.(dir)
   end
 end

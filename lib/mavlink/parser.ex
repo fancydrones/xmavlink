@@ -49,86 +49,139 @@ defmodule XMAVLink.Parser do
   """
 
   import Enum, only: [empty?: 1, reduce: 3, reverse: 1, map: 2, sort_by: 2, into: 3, filter: 2]
-  import List, only: [first: 1]
   import Record, only: [defrecord: 2, extract: 2]
   import Regex, only: [replace: 3]
   import String, only: [to_integer: 1, downcase: 1, to_atom: 1, split: 3]
+
+  @identifier_regex ~r/\A[A-Za-z][A-Za-z0-9_]*\z/
+  @unit_regex ~r/\A[A-Za-z0-9_%@\/\*\^\.\-]+\z/
+  @scalar_field_types ~w(char uint8_t int8_t uint16_t int16_t uint32_t int32_t uint64_t int64_t float double)
+  @valid_display_values ~w(bitmask)
 
   @xmerl_header "xmerl/include/xmerl.hrl"
   defrecord :xmlElement, extract(:xmlElement, from_lib: @xmerl_header)
   defrecord :xmlAttribute, extract(:xmlAttribute, from_lib: @xmerl_header)
   defrecord :xmlText, extract(:xmlText, from_lib: @xmerl_header)
 
+  @type mavlink_definition :: %{
+          version: String.t(),
+          dialect: String.t(),
+          enums: [enum_description],
+          messages: [message_description]
+        }
+
   @spec parse_mavlink_xml(String.t()) ::
-          %{
-            version: integer,
-            dialect: integer,
-            enums: [enum_description],
-            messages: [message_description]
-          }
-          | {:error, :enoent}
+          mavlink_definition | {:error, String.t()}
   def parse_mavlink_xml(path) do
-    path
-    |> parse_mavlink_xml(%{})
-    |> Enum.sort_by(fn {path, _definition} -> path end)
-    |> Enum.map(fn {_path, definition} -> definition end)
-    |> combine_definitions()
+    case parse_mavlink_xml(path, %{seen: MapSet.new(), definitions: []}) do
+      {:error, _message} = error ->
+        error
+
+      %{definitions: definitions} ->
+        definitions
+        |> reverse()
+        |> combine_definitions()
+        |> validate_definition()
+    end
   end
 
   def parse_mavlink_xml(path, paths) do
-    case Map.has_key?(paths, path) do
+    acc =
+      if Map.has_key?(paths, :seen) and Map.has_key?(paths, :definitions) do
+        paths
+      else
+        %{seen: MapSet.new(Map.keys(paths)), definitions: Map.values(paths)}
+      end
+
+    parse_mavlink_xml_file(path, acc)
+  end
+
+  defp parse_mavlink_xml_file(path, acc) do
+    path_key = Path.expand(path)
+
+    case MapSet.member?(acc.seen, path_key) do
       true ->
         # Don't include a file twice
-        paths
+        acc
 
       false ->
-        case :xmerl_scan.file(path) do
+        case scan_file(path) do
           {defs, []} ->
-            # Recursively add new includes to paths
-            paths =
-              reduce(
-                :xmerl_xpath.string(~c"/mavlink/include/text()", defs) |> map(&extract_text/1),
-                paths,
-                fn next_include, acc ->
-                  include_path = Path.dirname(path) <> "/" <> next_include
-                  parse_mavlink_xml(include_path, acc)
-                end
-              )
+            acc = %{acc | seen: MapSet.put(acc.seen, path_key)}
 
-            # And add ourselves to paths if we're not already there through a circular dependency
-            version =
-              :xmerl_xpath.string(~c"/mavlink/version/text()", defs)
-              |> extract_text
-              |> nil_to_zero_string
-
-            Map.put_new(paths, path, %{
-              version: version,
-              dialect:
-                :xmerl_xpath.string(~c"/mavlink/dialect/text()", defs)
-                |> extract_text
-                |> nil_to_zero_string,
-              enums:
-                for(
-                  enum <- :xmerl_xpath.string(~c"/mavlink/enums/enum", defs),
-                  do: parse_enum(enum)
-                ),
-              messages:
-                for(
-                  msg <- :xmerl_xpath.string(~c"/mavlink/messages/message", defs),
-                  do: parse_message(msg, version)
-                )
-            })
+            with {:ok, acc} <- parse_includes(defs, path, acc),
+                 {:ok, definition} <- parse_definition(defs) do
+              %{acc | definitions: [definition | acc.definitions]}
+            end
 
           {:error, :enoent} ->
-            Map.put(paths, path, {:error, "File '#{path}' does not exist"})
+            {:error, "File '#{path}' does not exist"}
+
+          {:error, message} when is_binary(message) ->
+            {:error, message}
+
+          {:error, message} ->
+            {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect(message)}"}
         end
     end
   end
 
-  # See https://mavlink.io/en/guide/xml_schema.html, mavparse.py merge_enums() and
-  # check_duplicates() for proper validation. If making changes to definitions test
-  # first with mavgen for now.
-  # TODO Handle missing includes without borking
+  defp parse_includes(defs, path, acc) do
+    :xmerl_xpath.string(~c"/mavlink/include/text()", defs)
+    |> map(&extract_text/1)
+    |> reduce({:ok, acc}, fn
+      _next_include, {:error, _message} = error ->
+        error
+
+      next_include, {:ok, acc} ->
+        include_path = Path.expand(next_include, Path.dirname(path))
+
+        case parse_mavlink_xml_file(include_path, acc) do
+          {:error, _message} = error -> error
+          acc -> {:ok, acc}
+        end
+    end)
+  end
+
+  defp parse_definition(defs) do
+    with {:ok, enums} <-
+           parse_elements(:xmerl_xpath.string(~c"/mavlink/enums/enum", defs), &parse_enum/1) do
+      version =
+        :xmerl_xpath.string(~c"/mavlink/version/text()", defs)
+        |> extract_text
+        |> nil_to_zero_string
+
+      case parse_elements(
+             :xmerl_xpath.string(~c"/mavlink/messages/message", defs),
+             &parse_message(&1, version)
+           ) do
+        {:ok, messages} ->
+          {:ok,
+           %{
+             version: version,
+             dialect:
+               :xmerl_xpath.string(~c"/mavlink/dialect/text()", defs)
+               |> extract_text
+               |> nil_to_zero_string,
+             enums: enums,
+             messages: messages
+           }}
+
+        {:error, _message} = error ->
+          error
+      end
+    end
+  end
+
+  defp scan_file(path) do
+    try do
+      :xmerl_scan.file(path)
+    catch
+      kind, reason ->
+        {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect({kind, reason})}"}
+    end
+  end
+
   def combine_definitions([single_def]) do
     single_def
   end
@@ -174,7 +227,9 @@ defmodule XMAVLink.Parser do
       for name <- filter(Map.keys(a_index), &Map.has_key?(b_index, &1)) do
         %{
           a_index[name]
-          | bitmask: a_index[name].bitmask or b_index[name].bitmask,
+          | description:
+              preferred_description(a_index[name].description, b_index[name].description),
+            bitmask: a_index[name].bitmask or b_index[name].bitmask,
             entries: sort_by(a_index[name].entries ++ b_index[name].entries, & &1.value)
         }
       end
@@ -189,17 +244,27 @@ defmodule XMAVLink.Parser do
           entries: [entry_description]
         }
 
-  @spec parse_enum(tuple) :: enum_description
+  @spec parse_enum(tuple) :: {:ok, enum_description} | {:error, String.t()}
   defp parse_enum(element) do
-    %{
-      name: :xmerl_xpath.string(~c"@name", element) |> extract_text |> downcase |> to_atom,
-      bitmask: :xmerl_xpath.string(~c"@bitmask", element) |> extract_text |> true_string?,
-      description:
-        :xmerl_xpath.string(~c"/enum/description/text()", element)
-        |> extract_text
-        |> nil_to_empty_string,
-      entries: for(entry <- :xmerl_xpath.string(~c"/enum/entry", element), do: parse_entry(entry))
-    }
+    raw_name = :xmerl_xpath.string(~c"@name", element) |> extract_text
+
+    with {:ok, enum_name} <- required_identifier(raw_name, "enum name", "enum"),
+         {:ok, entries} <-
+           parse_elements(
+             :xmerl_xpath.string(~c"/enum/entry", element),
+             &parse_entry(&1, enum_name)
+           ) do
+      {:ok,
+       %{
+         name: enum_name |> downcase |> to_atom,
+         bitmask: :xmerl_xpath.string(~c"@bitmask", element) |> extract_text |> true_string?,
+         description:
+           :xmerl_xpath.string(~c"/enum/description/text()", element)
+           |> extract_text
+           |> nil_to_empty_string,
+         entries: entries
+       }}
+    end
   end
 
   @type entry_description :: %{
@@ -209,20 +274,32 @@ defmodule XMAVLink.Parser do
           params: [param_description]
         }
 
-  @spec parse_entry(tuple) :: entry_description
-  defp parse_entry(element) do
+  @spec parse_entry(tuple, String.t()) :: {:ok, entry_description} | {:error, String.t()}
+  defp parse_entry(element, enum_name) do
     # Apparently optional in common.xml?
     value_attr = :xmerl_xpath.string(~c"@value", element)
+    raw_name = :xmerl_xpath.string(~c"@name", element) |> extract_text
+    context = "enum #{enum_name}"
 
-    %{
-      value: if(not empty?(value_attr), do: extract_text(value_attr) |> to_integer, else: nil),
-      name: :xmerl_xpath.string(~c"@name", element) |> extract_text |> downcase |> to_atom,
-      description:
-        :xmerl_xpath.string(~c"/entry/description/text()", element)
-        |> extract_text
-        |> nil_to_empty_string,
-      params: for(param <- :xmerl_xpath.string(~c"/entry/param", element), do: parse_param(param))
-    }
+    with {:ok, entry_name} <- required_identifier(raw_name, "enum entry name", context),
+         {:ok, value} <-
+           optional_integer(value_attr, "enum entry value", "#{context} entry #{entry_name}"),
+         {:ok, params} <-
+           parse_elements(
+             :xmerl_xpath.string(~c"/entry/param", element),
+             &parse_param(&1, entry_name)
+           ) do
+      {:ok,
+       %{
+         value: value,
+         name: entry_name |> downcase |> to_atom,
+         description:
+           :xmerl_xpath.string(~c"/entry/description/text()", element)
+           |> extract_text
+           |> nil_to_empty_string,
+         params: params
+       }}
+    end
   end
 
   @type param_description :: %{
@@ -230,12 +307,23 @@ defmodule XMAVLink.Parser do
           description: String.t()
         }
 
-  @spec parse_param(tuple) :: param_description
-  defp parse_param(element) do
-    %{
-      index: :xmerl_xpath.string(~c"@index", element) |> extract_text |> to_integer,
-      description: :xmerl_xpath.string(~c"/param/text()", element) |> extract_text
-    }
+  @spec parse_param(tuple, String.t()) :: {:ok, param_description} | {:error, String.t()}
+  defp parse_param(element, entry_name) do
+    with {:ok, index} <-
+           required_integer(
+             :xmerl_xpath.string(~c"@index", element) |> extract_text,
+             "param index",
+             "entry #{entry_name}"
+           ) do
+      {:ok,
+       %{
+         index: index,
+         description:
+           :xmerl_xpath.string(~c"/param/text()", element)
+           |> extract_text
+           |> nil_to_empty_string
+       }}
+    end
   end
 
   @type message_description :: %{
@@ -246,34 +334,60 @@ defmodule XMAVLink.Parser do
           fields: [field_description]
         }
 
-  @spec parse_message(tuple, String.t()) :: message_description
+  @spec parse_message(tuple, String.t()) :: {:ok, message_description} | {:error, String.t()}
   defp parse_message(element, version) do
-    message_description =
-      reduce(
-        xmlElement(element, :content),
-        %{
-          id: :xmerl_xpath.string(~c"@id", element) |> extract_text |> to_integer,
-          name: :xmerl_xpath.string(~c"@name", element) |> extract_text,
-          description:
-            :xmerl_xpath.string(~c"/message/description/text()", element) |> extract_text,
-          has_ext_fields: false,
-          fields: []
-        },
-        fn next_child, acc ->
-          case xmlElement(next_child, :name) do
-            :field ->
-              %{acc | fields: [parse_field(next_child, version, acc.has_ext_fields) | acc.fields]}
+    raw_name = :xmerl_xpath.string(~c"@name", element) |> extract_text
 
-            :extensions ->
-              %{acc | has_ext_fields: true}
+    with {:ok, message_id} <-
+           required_integer(
+             :xmerl_xpath.string(~c"@id", element) |> extract_text,
+             "message id",
+             "message"
+           ),
+         {:ok, message_name} <-
+           required_identifier(raw_name, "message name", "message id #{message_id}") do
+      message_description =
+        reduce(
+          xmlElement(element, :content),
+          %{
+            id: message_id,
+            name: message_name,
+            description:
+              :xmerl_xpath.string(~c"/message/description/text()", element)
+              |> extract_text
+              |> nil_to_empty_string,
+            has_ext_fields: false,
+            fields: []
+          },
+          fn
+            _next_child, {:error, _message} = error ->
+              error
 
-            _ ->
-              acc
+            next_child, acc ->
+              case xmlElement(next_child, :name) do
+                :field ->
+                  case parse_field(next_child, version, acc.has_ext_fields, message_name) do
+                    {:ok, field} -> %{acc | fields: [field | acc.fields]}
+                    {:error, _message} = error -> error
+                  end
+
+                :extensions ->
+                  %{acc | has_ext_fields: true}
+
+                _ ->
+                  acc
+              end
           end
-        end
-      )
+        )
 
-    %{message_description | fields: reverse(message_description.fields)}
+      case message_description do
+        {:error, _message} = error ->
+          error
+
+        message_description ->
+          {:ok, %{message_description | fields: reverse(message_description.fields)}}
+      end
+    end
   end
 
   @type field_description :: %{
@@ -290,56 +404,285 @@ defmodule XMAVLink.Parser do
           description: String.t()
         }
 
-  @spec parse_field(tuple, binary(), boolean) :: field_description
-  defp parse_field(element, version, is_extension_field) do
-    {type, ordinality, omit_arg, constant_val} =
-      :xmerl_xpath.string(~c"@type", element)
-      |> extract_text
-      |> parse_type_ordinality_omit_arg_constant_val(version)
+  @spec parse_field(tuple, binary(), boolean, String.t()) ::
+          {:ok, field_description} | {:error, String.t()}
+  defp parse_field(element, version, is_extension_field, message_name) do
+    context = "message #{message_name}"
 
-    %{
-      type: type,
-      ordinality: ordinality,
-      omit_arg: omit_arg,
-      is_extension: is_extension_field,
-      constant_val: constant_val,
-      # You can't downcase this, wrecks crc_extra calc for POWER_STATUS
-      name: :xmerl_xpath.string(~c"@name", element) |> extract_text,
-      enum:
-        :xmerl_xpath.string(~c"@enum", element) |> extract_text |> nil_to_empty_string |> downcase,
-      display: :xmerl_xpath.string(~c"@display", element) |> extract_text |> to_atom_or_nil,
-      print_format: :xmerl_xpath.string(~c"@print_format", element) |> extract_text,
-      units: :xmerl_xpath.string(~c"@units", element) |> extract_text |> to_atom_or_nil,
-      description:
-        :xmerl_xpath.string(~c"/field/text()", element) |> extract_text |> nil_to_empty_string
-    }
+    with {:ok, {type, ordinality, omit_arg, constant_val}} <-
+           :xmerl_xpath.string(~c"@type", element)
+           |> extract_text
+           |> parse_type_ordinality_omit_arg_constant_val(version, context),
+         {:ok, field_name} <-
+           :xmerl_xpath.string(~c"@name", element)
+           |> extract_text
+           |> required_identifier("field name", context),
+         {:ok, enum} <-
+           :xmerl_xpath.string(~c"@enum", element)
+           |> extract_text
+           |> optional_identifier("field enum", "#{context} field #{field_name}"),
+         {:ok, display} <-
+           :xmerl_xpath.string(~c"@display", element)
+           |> extract_text
+           |> optional_display("#{context} field #{field_name}"),
+         {:ok, units} <-
+           :xmerl_xpath.string(~c"@units", element)
+           |> extract_text
+           |> optional_unit("#{context} field #{field_name}") do
+      {:ok,
+       %{
+         type: type,
+         ordinality: ordinality,
+         omit_arg: omit_arg,
+         is_extension: is_extension_field,
+         constant_val: constant_val,
+         # You can't downcase this, wrecks crc_extra calc for POWER_STATUS
+         name: field_name,
+         enum: enum |> nil_to_empty_string |> downcase,
+         display: display,
+         print_format: :xmerl_xpath.string(~c"@print_format", element) |> extract_text,
+         units: units,
+         description:
+           :xmerl_xpath.string(~c"/field/text()", element) |> extract_text |> nil_to_empty_string
+       }}
+    end
   end
 
-  @spec parse_type_ordinality_omit_arg_constant_val(String.t(), String.t()) ::
-          {String.t(), integer, boolean, String.t() | nil}
-  defp parse_type_ordinality_omit_arg_constant_val(type_string, version) do
+  @spec parse_type_ordinality_omit_arg_constant_val(String.t(), String.t(), String.t()) ::
+          {:ok, {String.t(), integer, boolean, String.t() | nil}} | {:error, String.t()}
+  defp parse_type_ordinality_omit_arg_constant_val(nil, _version, context) do
+    {:error, "Missing field type in #{context}"}
+  end
+
+  defp parse_type_ordinality_omit_arg_constant_val(type_string, version, context) do
     [type | ordinality] =
       type_string
       |> split(["[", "]"], trim: true)
 
     case type do
       "uint8_t_mavlink_version" ->
-        {"uint8_t", 1, true, version}
+        {:ok, {"uint8_t", 1, true, version}}
+
+      type when type in @scalar_field_types ->
+        with {:ok, ordinality} <- parse_ordinality(ordinality, context) do
+          {:ok, {type, ordinality, false, nil}}
+        end
 
       _ ->
-        {
-          type,
-          cond do
-            ordinality |> empty? ->
-              1
-
-            true ->
-              ordinality |> first |> to_integer
-          end,
-          false,
-          nil
-        }
+        {:error, "Invalid field type #{inspect(type_string)} in #{context}"}
     end
+  end
+
+  defp parse_ordinality([], _context), do: {:ok, 1}
+
+  defp parse_ordinality([raw_ordinality], context) do
+    case required_integer(raw_ordinality, "field array length", context) do
+      {:ok, ordinality} when ordinality > 0 ->
+        {:ok, ordinality}
+
+      {:ok, _ordinality} ->
+        {:error, "Invalid field array length #{inspect(raw_ordinality)} in #{context}"}
+
+      {:error, _message} = error ->
+        error
+    end
+  end
+
+  defp parse_ordinality(_ordinality, context),
+    do: {:error, "Invalid field type array declaration in #{context}"}
+
+  defp parse_elements(elements, parser) do
+    elements
+    |> reduce({:ok, []}, fn
+      _element, {:error, _message} = error ->
+        error
+
+      element, {:ok, acc} ->
+        case parser.(element) do
+          {:ok, parsed} -> {:ok, [parsed | acc]}
+          {:error, _message} = error -> error
+        end
+    end)
+    |> case do
+      {:ok, parsed} -> {:ok, reverse(parsed)}
+      {:error, _message} = error -> error
+    end
+  end
+
+  defp validate_definition(definition) do
+    with :ok <- validate_unique_message_ids(definition.messages),
+         :ok <- validate_unique_message_modules(definition.messages),
+         :ok <- validate_unique_enums(definition.enums),
+         :ok <- validate_enum_entries(definition.enums),
+         :ok <- validate_message_fields(definition.messages) do
+      definition
+    end
+  end
+
+  defp validate_unique_message_ids(messages) do
+    case duplicate_by(messages, & &1.id) do
+      nil ->
+        :ok
+
+      {id, duplicate_messages} ->
+        names = duplicate_messages |> map(& &1.name) |> Enum.join(", ")
+        {:error, "Duplicate message id #{id} for #{names}"}
+    end
+  end
+
+  defp validate_unique_message_modules(messages) do
+    case duplicate_by(messages, &generated_message_module_name(&1.name)) do
+      nil ->
+        :ok
+
+      {module_name, duplicate_messages} ->
+        names = duplicate_messages |> map(& &1.name) |> Enum.join(", ")
+        {:error, "Duplicate generated message module #{module_name} for #{names}"}
+    end
+  end
+
+  defp validate_unique_enums(enums) do
+    case duplicate_by(enums, & &1.name) do
+      nil ->
+        :ok
+
+      {name, _duplicate_enums} ->
+        {:error, "Duplicate enum #{inspect(name)}"}
+    end
+  end
+
+  defp validate_enum_entries(enums) do
+    reduce(enums, :ok, fn
+      _enum, {:error, _message} = error ->
+        error
+
+      enum, :ok ->
+        with :ok <- validate_unique_enum_entry_names(enum),
+             :ok <- validate_unique_enum_entry_values(enum) do
+          :ok
+        end
+    end)
+  end
+
+  defp validate_unique_enum_entry_names(enum) do
+    case duplicate_by(enum.entries, & &1.name) do
+      nil ->
+        :ok
+
+      {name, _duplicate_entries} ->
+        {:error, "Duplicate enum entry #{inspect(name)} in enum #{inspect(enum.name)}"}
+    end
+  end
+
+  defp validate_unique_enum_entry_values(enum) do
+    resolved_entries = resolve_enum_entry_values(enum.entries)
+
+    case duplicate_by(resolved_entries, & &1.value) do
+      nil ->
+        :ok
+
+      {value, duplicate_entries} ->
+        names = duplicate_entries |> map(&inspect(&1.name)) |> Enum.join(", ")
+        {:error, "Duplicate enum value #{value} in enum #{inspect(enum.name)} for #{names}"}
+    end
+  end
+
+  defp validate_message_fields(messages) do
+    reduce(messages, :ok, fn
+      _message, {:error, _reason} = error ->
+        error
+
+      message, :ok ->
+        case duplicate_by(message.fields, &(&1.name |> downcase)) do
+          nil ->
+            :ok
+
+          {name, _duplicate_fields} ->
+            {:error, "Duplicate field #{inspect(name)} in message #{message.name}"}
+        end
+    end)
+  end
+
+  defp resolve_enum_entry_values(entries) do
+    entries
+    |> Enum.map_reduce(0, fn entry, next_value ->
+      value = entry.value || next_value
+      {%{entry | value: value}, value + 1}
+    end)
+    |> elem(0)
+  end
+
+  defp duplicate_by(values, fun) do
+    values
+    |> Enum.group_by(fun)
+    |> Enum.find(fn {_key, grouped_values} -> length(grouped_values) > 1 end)
+  end
+
+  defp preferred_description(_a, b) when b not in [nil, ""], do: b
+  defp preferred_description(a, _b), do: a
+
+  defp generated_message_module_name(message_name) do
+    message_name
+    |> String.split("_")
+    |> map(&String.capitalize/1)
+    |> Enum.join("")
+  end
+
+  defp required_identifier(nil, kind, context), do: {:error, "Missing #{kind} in #{context}"}
+  defp required_identifier("", kind, context), do: {:error, "Missing #{kind} in #{context}"}
+
+  defp required_identifier(value, kind, context) when is_binary(value) do
+    if Regex.match?(@identifier_regex, value) do
+      {:ok, value}
+    else
+      {:error, "Invalid #{kind} #{inspect(value)} in #{context}"}
+    end
+  end
+
+  defp optional_identifier(nil, _kind, _context), do: {:ok, nil}
+  defp optional_identifier("", _kind, _context), do: {:ok, nil}
+  defp optional_identifier(value, kind, context), do: required_identifier(value, kind, context)
+
+  defp optional_display(nil, _context), do: {:ok, nil}
+  defp optional_display("", _context), do: {:ok, nil}
+
+  defp optional_display(value, _context) when value in @valid_display_values do
+    {:ok, to_atom(value)}
+  end
+
+  defp optional_display(value, context),
+    do: {:error, "Invalid field display #{inspect(value)} in #{context}"}
+
+  defp optional_unit(nil, _context), do: {:ok, nil}
+  defp optional_unit("", _context), do: {:ok, nil}
+
+  defp optional_unit(value, context) do
+    if Regex.match?(@unit_regex, value) do
+      {:ok, to_atom(value)}
+    else
+      {:error, "Invalid field unit #{inspect(value)} in #{context}"}
+    end
+  end
+
+  defp optional_integer([], _kind, _context), do: {:ok, nil}
+
+  defp optional_integer(value_attr, kind, context) do
+    if empty?(value_attr) do
+      {:ok, nil}
+    else
+      value_attr
+      |> extract_text
+      |> required_integer(kind, context)
+    end
+  end
+
+  defp required_integer(nil, kind, context), do: {:error, "Missing #{kind} in #{context}"}
+  defp required_integer("", kind, context), do: {:error, "Missing #{kind} in #{context}"}
+
+  defp required_integer(value, kind, context) when is_binary(value) do
+    {:ok, to_integer(value)}
+  rescue
+    ArgumentError -> {:error, "Invalid #{kind} #{inspect(value)} in #{context}"}
   end
 
   # TODO Can't spec this without causing dialyzer "nil can't match binary" - Erlang types?
@@ -350,7 +693,7 @@ defmodule XMAVLink.Parser do
 
   @spec clean_string([char] | binary) :: String.t()
   defp clean_string(s) do
-    trimmed = s |> List.to_string() |> String.trim() |> String.replace("\"", "'")
+    trimmed = s |> List.to_string() |> String.trim()
     replace(~r/\s+/, trimmed, " ")
   end
 
@@ -361,11 +704,6 @@ defmodule XMAVLink.Parser do
   @spec nil_to_zero_string(String.t() | nil) :: String.t()
   defp nil_to_zero_string(nil), do: "0"
   defp nil_to_zero_string(value) when is_binary(value), do: value
-
-  @spec to_atom_or_nil(String.t() | nil) :: atom | nil
-  defp to_atom_or_nil(nil), do: nil
-  defp to_atom_or_nil(""), do: nil
-  defp to_atom_or_nil(value) when is_binary(value), do: to_atom(value)
 
   defp true_string?("true"), do: true
   defp true_string?(_), do: false

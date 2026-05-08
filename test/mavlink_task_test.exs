@@ -83,6 +83,72 @@ defmodule XMAVLink.Test.Tasks do
     assert File.exists?(@output)
   end
 
+  test "invalid module name raises a clear generator error" do
+    assert_raise Mix.Error, ~r/Invalid module name "bad.Module"/, fn ->
+      run([@input, @output, "bad.Module"])
+    end
+  end
+
+  test "parser validation errors raise clear generator errors" do
+    input =
+      write_xml("invalid_identifier.xml", """
+      <?xml version="1.0"?>
+      <mavlink>
+        <version>3</version>
+        <dialect>0</dialect>
+        <messages>
+          <message id="1" name="TEST_MESSAGE">
+            <field type="uint8_t" name="bad-name">Value</field>
+          </message>
+        </messages>
+      </mavlink>
+      """)
+
+    assert_raise Mix.Error, ~r/Invalid field name "bad-name"/, fn ->
+      run([input, @output, @output_module])
+    end
+  end
+
+  test "generated docs and descriptions are escaped without interpolation" do
+    input =
+      write_xml("escaped_docs.xml", ~S"""
+      <?xml version="1.0"?>
+      <mavlink>
+        <version>3</version>
+        <dialect>0</dialect>
+        <enums>
+          <enum name="TEST_ENUM">
+            <description>Enum "quoted" #{raise "boom"}</description>
+            <entry value="0" name="TEST_ENTRY">
+              <description>Entry #{raise "boom"}</description>
+              <param index="1">Param #{raise "boom"}</param>
+            </entry>
+          </enum>
+        </enums>
+        <messages>
+          <message id="1" name="TEST_MESSAGE">
+            <description>Message #{raise "boom"}</description>
+            <field type="char[4]" name="label">Field #{raise "boom"}</field>
+            <field type="uint8_t[2]" name="values">Array #{raise "boom"}</field>
+            <field type="float" name="ratio">Ratio #{raise "boom"}</field>
+          </message>
+        </messages>
+      </mavlink>
+      """)
+
+    output = Path.join(@output_dir, "escaped_docs.ex")
+
+    capture_io(fn ->
+      assert :ok = run([input, output, "EscapedDocs"])
+    end)
+
+    with_module_conflict_ignored(fn -> Code.compile_file(output) end)
+
+    assert apply(EscapedDocs, :describe, [:test_enum]) == ~S(Enum "quoted" #{raise "boom"})
+    assert apply(EscapedDocs, :describe, [:test_entry]) == ~S(Entry #{raise "boom"})
+    assert apply(EscapedDocs, :describe_params, [:test_entry]) == [{1, ~S(Param #{raise "boom"})}]
+  end
+
   test "generated MAVLink 2 unpack ignores future extension bytes" do
     output = Path.join(@output_dir, "test_extensions.ex")
 
@@ -193,6 +259,12 @@ defmodule XMAVLink.Test.Tasks do
     |> IO.iodata_to_binary()
     |> String.trim_trailing()
     |> Kernel.<>("\n")
+  end
+
+  defp write_xml(name, contents) do
+    path = Path.join(@output_dir, name)
+    File.write!(path, contents)
+    path
   end
 
   defp with_module_conflict_ignored(fun) do
