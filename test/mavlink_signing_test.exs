@@ -168,7 +168,7 @@ defmodule XMAVLink.Test.Signing do
       assert newer_signing.timestamp == @local_timestamp + 2
     end
 
-    test "leaves MAVLink 1 and already signed frames unchanged" do
+    test "leaves MAVLink 1 frames unsigned and unchanged" do
       mavlink_1_frame =
         Frame.pack_frame(%Frame{
           version: 1,
@@ -183,10 +183,21 @@ defmodule XMAVLink.Test.Signing do
       signing = signing()
 
       assert {:ok, ^mavlink_1_frame, ^signing} = Signing.sign_outbound(mavlink_1_frame, signing)
+    end
 
+    test "leaves already signed frames unchanged and catches up local timestamp" do
+      signing = signing()
       signed_frame = signed_frame(@valid_timestamp)
 
-      assert {:ok, ^signed_frame, ^signing} = Signing.sign_outbound(signed_frame, signing)
+      assert {:ok, ^signed_frame, updated_signing} =
+               Signing.sign_outbound(signed_frame, signing)
+
+      assert updated_signing.timestamp == @valid_timestamp
+
+      newer_signing = %{signing | timestamp: @valid_timestamp + 1}
+
+      assert {:ok, ^signed_frame, ^newer_signing} =
+               Signing.sign_outbound(signed_frame, newer_signing)
     end
 
     test "rejects outbound signing when the timestamp space is exhausted" do

@@ -126,11 +126,13 @@ defmodule XMAVLink.Util.CommandTest do
   end
 
   defp stop_router(router) do
-    if Process.alive?(router) do
-      GenServer.stop(router)
+    try do
+      if Process.alive?(router) do
+        GenServer.stop(router)
+      end
+    catch
+      :exit, {:noproc, _} -> :ok
+      :exit, {:normal, _} -> :ok
     end
-  catch
-    :exit, {:noproc, _} -> :ok
-    :exit, {:normal, _} -> :ok
   end
 end

@@ -124,17 +124,21 @@ defmodule XMAVLink.Signing do
   def sign_outbound(frame = %Frame{version: 1}, signing = %Signing{}),
     do: {:ok, frame, signing}
 
+  def sign_outbound(
+        frame = %Frame{version: 2, signature: %{timestamp: timestamp}},
+        signing = %Signing{}
+      )
+      when is_integer(timestamp) do
+    {:ok, frame, %Signing{signing | timestamp: max(signing.timestamp, timestamp)}}
+  end
+
   def sign_outbound(frame = %Frame{version: 2}, signing = %Signing{}) do
-    if Frame.signed?(frame) do
-      {:ok, frame, signing}
+    with {:ok, timestamp} <- next_outbound_timestamp(signing),
+         {:ok, signed_frame} <-
+           Frame.sign_frame(frame, signing.secret_key, signing.link_id, timestamp) do
+      {:ok, signed_frame, %Signing{signing | timestamp: timestamp}}
     else
-      with {:ok, timestamp} <- next_outbound_timestamp(signing),
-           {:ok, signed_frame} <-
-             Frame.sign_frame(frame, signing.secret_key, signing.link_id, timestamp) do
-        {:ok, signed_frame, %Signing{signing | timestamp: timestamp}}
-      else
-        {:error, reason} -> {:error, reason, signing}
-      end
+      {:error, reason} -> {:error, reason, signing}
     end
   end
 
