@@ -77,9 +77,9 @@ defmodule XMAVLink.Frame do
           payload: binary,
           checksum: 0..65_535,
           signature: XMAVLink.Frame.Signature.t() | nil,
-          mavlink_1_raw: binary,
-          mavlink_2_raw: binary,
-          message: message
+          mavlink_1_raw: binary | nil,
+          mavlink_2_raw: binary | nil,
+          message: message | nil
         }
 
   @spec binary_to_frame_and_tail(binary) ::
@@ -355,6 +355,37 @@ defmodule XMAVLink.Frame do
     end
   end
 
+  @doc """
+  Validate the MAVLink 2 signature trailer for an already parsed signed frame.
+
+  This only verifies the cryptographic signature over the signed packet bytes.
+  It does not enforce timestamp replay rules or unpack the frame payload.
+  """
+  @spec validate_signature(XMAVLink.Frame.t(), <<_::256>>) ::
+          :ok
+          | {:error,
+             :invalid_secret_key
+             | :invalid_mavlink_2_frame
+             | :signature_invalid
+             | :unsigned_frame}
+  def validate_signature(frame = %XMAVLink.Frame{version: 2}, secret_key) do
+    with :ok <- validate_secret_key(secret_key),
+         :ok <- validate_signed_frame(frame),
+         {:ok, signed_packet_without_signature, signature} <-
+           signed_packet_without_signature(frame.mavlink_2_raw) do
+      expected_signature =
+        signature_hash(secret_key, signed_packet_without_signature, <<>>)
+
+      if secure_compare(signature, expected_signature) do
+        :ok
+      else
+        {:error, :signature_invalid}
+      end
+    end
+  end
+
+  def validate_signature(%XMAVLink.Frame{}, _secret_key), do: {:error, :unsigned_frame}
+
   defp unsupported_incompatible_flags?(incompatible_flags),
     do: (incompatible_flags &&& @mavlink_2_supported_incompatible_flags) != incompatible_flags
 
@@ -414,6 +445,48 @@ defmodule XMAVLink.Frame do
   defp validate_signable_frame_attrs(%{rest: <<>>}), do: :ok
   defp validate_signable_frame_attrs(_attrs), do: {:error, :invalid_mavlink_2_frame}
 
+  defp validate_signed_frame(frame = %XMAVLink.Frame{}) do
+    if signed?(frame) do
+      validate_signed_frame_shape(frame)
+    else
+      {:error, :unsigned_frame}
+    end
+  end
+
+  defp validate_signed_frame_shape(%XMAVLink.Frame{signature: nil}), do: {:error, :unsigned_frame}
+
+  defp validate_signed_frame_shape(%XMAVLink.Frame{mavlink_2_raw: mavlink_2_raw})
+       when is_binary(mavlink_2_raw) do
+    case parse_mavlink_2_raw(mavlink_2_raw) do
+      {:ok,
+       %{
+         incompatible_flags: incompatible_flags,
+         rest: <<_signature::binary-size(@mavlink_2_signature_length)>>
+       }} ->
+        if signed?(incompatible_flags), do: :ok, else: {:error, :invalid_mavlink_2_frame}
+
+      {:ok, _attrs} ->
+        {:error, :invalid_mavlink_2_frame}
+
+      error ->
+        error
+    end
+  end
+
+  defp validate_signed_frame_shape(%XMAVLink.Frame{}), do: {:error, :invalid_mavlink_2_frame}
+
+  defp signed_packet_without_signature(raw)
+       when is_binary(raw) and byte_size(raw) >= 12 + @mavlink_2_signature_length do
+    signed_packet_size = byte_size(raw) - 6
+
+    <<signed_packet_without_signature::binary-size(signed_packet_size),
+      signature::binary-size(6)>> = raw
+
+    {:ok, signed_packet_without_signature, signature}
+  end
+
+  defp signed_packet_without_signature(_raw), do: {:error, :invalid_mavlink_2_frame}
+
   defp validate_unsigned_checksum(attrs, crc_extra) do
     if checksum(mavlink_2_body(attrs), crc_extra) ==
          <<attrs.checksum::little-unsigned-integer-size(16)>> do
@@ -438,6 +511,18 @@ defmodule XMAVLink.Frame do
   defp signature_hash(secret_key, signed_frame_without_signature, signature_prefix) do
     :crypto.hash(:sha256, secret_key <> signed_frame_without_signature <> signature_prefix)
     |> binary_part(0, 6)
+  end
+
+  defp secure_compare(left, right) when is_binary(left) and is_binary(right) do
+    if byte_size(left) == byte_size(right) do
+      left
+      |> :binary.bin_to_list()
+      |> Enum.zip(:binary.bin_to_list(right))
+      |> Enum.reduce(0, fn {left_byte, right_byte}, acc -> acc ||| bxor(left_byte, right_byte) end)
+      |> Kernel.==(0)
+    else
+      false
+    end
   end
 
   defp signed_frame_and_tail(raw_and_rest, frame, rest) do

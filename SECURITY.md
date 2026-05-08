@@ -22,12 +22,12 @@ control.
 Current trust boundaries:
 
 - MAVLink 1 and unsigned MAVLink 2 frames are parsed and routed.
-- MAVLink 2 signing authentication is not implemented. Signed MAVLink 2 frames
-  are parsed only far enough to preserve frame boundaries and expose the
+- Router-level MAVLink 2 signing authentication is not wired. Signed MAVLink 2
+  frames are parsed only far enough to preserve frame boundaries and expose the
   signature trailer; they are rejected before unpacking, routing, or forwarding.
-  A low-level frame signing helper can generate signed MAVLink 2 bytes, but
-  router and connection signing policy is not wired yet. Frames with other
-  incompatible MAVLink 2 flags are discarded.
+  Low-level helpers can generate signed MAVLink 2 bytes and validate signed
+  frames with replay checks, but router and connection signing policy is not
+  wired yet. Frames with other incompatible MAVLink 2 flags are discarded.
 - UDP listeners should be exposed only to trusted networks unless the application
   adds network-level filtering or validates peers at a higher layer.
 - Utility processes are opt-in. When enabled, `CacheManager` subscribes to

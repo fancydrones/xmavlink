@@ -50,12 +50,14 @@ This library is not officially recognised or supported by MAVLink at this
 time.
 
 XMAVLink parses and emits MAVLink 1 frames and unsigned MAVLink 2 frames.
-MAVLink 2 signing authentication is not implemented; inbound signed frames are
-parsed only far enough to preserve frame boundaries and expose the signature
-trailer, then rejected before unpacking or routing. A low-level
+Router-level MAVLink 2 signing authentication is not wired; inbound signed
+frames are parsed only far enough to preserve frame boundaries and expose the
+signature trailer, then rejected before unpacking or routing. A low-level
 `XMAVLink.Frame.sign_frame/4` helper can generate signed MAVLink 2 frame bytes
-for already packed frames, but router and connection signing policy is not wired
-yet. MAVLink 2 frames with other incompatible flags are discarded. Supported
+for already packed frames. `XMAVLink.Frame.validate_signature/2` and
+`XMAVLink.Signing.validate_inbound/2` provide reusable signature and replay
+validation helpers, but router and connection signing policy is not wired yet.
+MAVLink 2 frames with other incompatible flags are discarded. Supported
 configured transports are serial, UDP client (`udpout`), UDP server (`udpin`),
 and TCP client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
 

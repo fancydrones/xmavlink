@@ -41,7 +41,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Area | Status | Notes |
 | --- | --- | --- |
 | MAVLink 2 frame shape | Supported | Parses and emits the v2 header, 24-bit message id, payload, checksum, and compatible flags. Unsupported incompatible flags are discarded. |
-| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Low-level frame signing can generate signed MAVLink 2 frame bytes for already packed frames. Signed frames are not authenticated, unpacked, routed, or emitted by router policy until validation, replay checks, and policy wiring land. See #47 and `MAVLINK2_SIGNING.md`. |
+| MAVLink 2 signing | Partial | Signed-frame boundaries and the 13-byte signature trailer are parsed and represented. Low-level helpers can generate signed MAVLink 2 frame bytes, verify frame signatures, and enforce replay checks. Signed frames are not unpacked, routed, or emitted by router policy until policy wiring lands. See #47 and `MAVLINK2_SIGNING.md`. |
 | MAVLink 2 payload truncation | Supported | Outbound payloads trim trailing zero bytes while preserving a non-empty all-zero payload's first byte; inbound v2 payloads are padded back to known dialect length before unpacking. |
 | MAVLink 2 future extension bytes | Supported | Generated v2 unpack clauses now ignore trailing extension bytes that are unknown to the local dialect. This preserves extension-field forward compatibility. |
 | MAVLink 2 extension CRC behavior | Supported | `CRC_EXTRA` generation excludes extension fields, matching the serialization guide. |
@@ -78,6 +78,8 @@ Known non-goals for 1.0 unless separately implemented:
 - Low-level MAVLink 2 frame signing can set the signed incompatibility flag,
   recalculate checksum bytes, and append a generated signature trailer for an
   already packed frame.
+- Low-level MAVLink 2 signing validation can verify signed frames and reject
+  replayed or too-old timestamps before router policy wiring lands.
 - Unsupported signed MAVLink 2 frames consume the 13-byte signature trailer when
   present, preventing TCP/serial stream buffers from treating signature bytes as
   a new frame prefix.
@@ -87,7 +89,7 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #47: Continue MAVLink 2 packet signing with inbound validation, replay policy,
+- #47: Continue MAVLink 2 packet signing with router/connection policy wiring,
   outbound signing, and signed-frame routing behavior.
 - #52: Add route invalidation when `SYSTEM_TIME.time_boot_ms` decreases for a
   known system/component.

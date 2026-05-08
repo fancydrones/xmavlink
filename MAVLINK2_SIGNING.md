@@ -16,9 +16,15 @@ given a 32-byte key, link id, and timestamp. This is a low-level utility for the
 remaining signing implementation; router and connection configuration do not
 use it yet.
 
-Signed frames are still not authenticated, unpacked, delivered to subscribers,
-or forwarded by the router. Until key configuration, signature validation, and
-replay checks exist, `XMAVLink.Frame.validate_and_unpack/2` returns
+`XMAVLink.Frame.validate_signature/2` verifies the 48-bit signature for a
+parsed signed frame. `XMAVLink.Signing.validate_inbound/2` adds the policy
+state needed for replay protection by tracking the last accepted timestamp per
+`{source_system, source_component, link_id}` stream and rejecting first-seen
+streams more than 6,000,000 ticks behind the local signing timestamp.
+
+Frames received by the router are still not authenticated, unpacked, delivered
+to subscribers, or forwarded when they are signed. Until router and connection
+policy wiring exists, `XMAVLink.Frame.validate_and_unpack/2` returns
 `:signed_frame_unsupported` for parsed signed frames.
 
 Unknown incompatible flags are still rejected. If a frame has both the signing
@@ -49,24 +55,22 @@ shape is:
 - `signing: [secret_key: <<_::256>>, link_id: 0..255, timestamp_source: ...]`:
   validate inbound signed frames and sign outbound MAVLink 2 frames on that
   connection.
-- `accept_unsigned: ...`: explicit policy for unsigned frames when signing is
-  enabled. This must default to reject or to a narrow documented compatibility
-  rule, not silent accept-all.
+- `accept_unsigned: false | true`: explicit policy for unsigned frames when
+  signing is enabled. The policy helper defaults to reject.
 - `accept_invalid_signatures: false`: default. Any diagnostic override must be
   explicit and visible to callers.
 
 ## Required Follow-Up Work
 
-1. Inbound validation:
-   - verify the 32-byte key shape;
-   - calculate the 48-bit SHA-256 signature;
-   - compare signatures in constant time if practical;
-   - reject stale timestamps by `(source_system, source_component, link_id)`;
-   - reject first-seen timestamps more than 6,000,000 ticks behind local time.
-2. Router and connection policy:
+1. Router and connection policy:
    - decide where per-link timestamp state lives;
    - make unsigned-frame acceptance explicit;
    - avoid forwarding `SETUP_SIGNING` from a secure link to other links.
+2. Signed unpack/routing:
+   - call `XMAVLink.Signing.validate_inbound/2` before unpacking signed frames;
+   - allow validated signed frames through checksum validation and dialect
+     unpacking;
+   - keep invalid signed frames invisible to subscribers and route tables.
 3. Outbound signing policy:
    - call the low-level frame signing utility from router/connection send paths;
    - monotonically increment timestamps per outbound link;
