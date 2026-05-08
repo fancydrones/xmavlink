@@ -261,7 +261,18 @@ jobs:
 
       - name: Verify Hex package
         if: steps.published.outputs.already_published == 'false'
-        run: mix hex.publish --dry-run --yes
+        env:
+          HEX_API_KEY: ${{ secrets.HEX_API_KEY }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${HEX_API_KEY}" ]]; then
+            echo "HEX_API_KEY environment secret is required to verify the Hex package."
+            exit 1
+          fi
+
+          mix hex.publish --dry-run --yes
 
       - name: Publish Hex package
         if: steps.published.outputs.already_published == 'false'
