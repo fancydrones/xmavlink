@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added router route invalidation when a `SYSTEM_TIME.time_boot_ms` decrease
+  indicates a remote system rebooted.
+
 ## 0.12.0 - 2026-05-08
 
 - Added MAVLink 2 signed-frame parsing and signature trailer representation.

@@ -30,6 +30,7 @@ defmodule XMAVLink.Router do
   alias XMAVLink.UDPInConnection
   alias XMAVLink.UDPOutConnection
 
+  @system_time_message_id 2
   @setup_signing_message_id 256
 
   @typedoc """
@@ -56,6 +57,9 @@ defmodule XMAVLink.Router do
                         contains the system/component id, subscriber list and next sequence number.
   - routes:             A map from a {system id, component id} tuple to the connection key a message from that
                         system/component was last received on. Used to forward messages to that system/component.
+  - system_time_boot_ms:
+                        A map from a {system id, component id} tuple to the last SYSTEM_TIME.time_boot_ms seen
+                        from that source. Used to clear stale learned routes when a remote system reboots.
   """
   defstruct [
     # Registered router name, if any
@@ -77,7 +81,9 @@ defmodule XMAVLink.Router do
     # %{socket|port|local: XMAVLink.*_Connection}
     connections: %{},
     # Connection key last observed for each MAVLink address
-    routes: %{}
+    routes: %{},
+    # Last SYSTEM_TIME.time_boot_ms observed for each MAVLink address
+    system_time_boot_ms: %{}
   ]
 
   # Can't used qualified type as map key
@@ -102,7 +108,8 @@ defmodule XMAVLink.Router do
           connection_workers: %{connection_key() => pid},
           connection_worker_monitors: %{reference => pid},
           connections: %{connection_key() => mavlink_connection()},
-          routes: %{mavlink_address() => connection_key()}
+          routes: %{mavlink_address() => connection_key()},
+          system_time_boot_ms: %{mavlink_address() => non_neg_integer}
         }
 
   defguardp is_router_ref(router)
@@ -857,8 +864,10 @@ defmodule XMAVLink.Router do
             source_system: source_system,
             source_component: source_component
           }},
-         state = %Router{routes: routes, connections: connections}
+         state = %Router{}
        ) do
+    state = track_system_time(frame, source_connection_key, state)
+
     {
       :ok,
       source_connection_key,
@@ -871,18 +880,18 @@ defmodule XMAVLink.Router do
         routes:
           case source_connection_key do
             :local ->
-              routes
+              state.routes
 
             _ ->
               Map.put(
-                routes,
+                state.routes,
                 {source_system, source_component},
                 source_connection_key
               )
           end,
         connections:
           Map.put(
-            connections,
+            state.connections,
             source_connection_key,
             source_connection
           )
@@ -910,6 +919,52 @@ defmodule XMAVLink.Router do
       )
       |> track_connection_worker(connection_key, connection)
     }
+  end
+
+  defp track_system_time(_frame, :local, state), do: state
+
+  defp track_system_time(
+         %Frame{
+           message_id: @system_time_message_id,
+           source_system: source_system,
+           source_component: source_component,
+           message: %{time_boot_ms: time_boot_ms}
+         },
+         _source_connection_key,
+         state = %Router{system_time_boot_ms: system_time_boot_ms}
+       )
+       when is_integer(time_boot_ms) do
+    source = {source_system, source_component}
+
+    state =
+      case Map.fetch(system_time_boot_ms, source) do
+        {:ok, previous_time_boot_ms} when time_boot_ms < previous_time_boot_ms ->
+          clear_system_routes(source_system, state)
+
+        _ ->
+          state
+      end
+
+    %Router{
+      state
+      | system_time_boot_ms: Map.put(state.system_time_boot_ms, source, time_boot_ms)
+    }
+  end
+
+  defp track_system_time(_frame, _source_connection_key, state), do: state
+
+  defp clear_system_routes(source_system, state = %Router{}) do
+    %Router{
+      state
+      | routes: reject_system_keys(state.routes, source_system),
+        system_time_boot_ms: reject_system_keys(state.system_time_boot_ms, source_system)
+    }
+  end
+
+  defp reject_system_keys(map, source_system) do
+    map
+    |> Enum.reject(fn {{system, _component}, _value} -> system == source_system end)
+    |> Map.new()
   end
 
   # SETUP_SIGNING carries key material. Inbound provisioning messages are
