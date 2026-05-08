@@ -1,3 +1,22 @@
+defmodule XMAVLink.Frame.Signature do
+  @moduledoc """
+  MAVLink 2 signed-frame trailer.
+
+  MAVLink 2 signing appends a 13-byte trailer after the checksum:
+  one-byte link id, 48-bit timestamp, and 48-bit signature.
+  """
+
+  defstruct link_id: nil,
+            timestamp: nil,
+            signature: nil
+
+  @type t :: %XMAVLink.Frame.Signature{
+          link_id: 0..255,
+          timestamp: 0..281_474_976_710_655,
+          signature: <<_::48>>
+        }
+end
+
 defmodule XMAVLink.Frame do
   @moduledoc """
   Represent and work with MAVLink v1/2 message frames
@@ -10,6 +29,7 @@ defmodule XMAVLink.Frame do
 
   @mavlink_2_signature_flag 0x01
   @mavlink_2_signature_length 13
+  @mavlink_2_supported_incompatible_flags @mavlink_2_signature_flag
 
   defstruct [
     # Which raw attributes are populated?
@@ -30,7 +50,7 @@ defmodule XMAVLink.Frame do
     crc_extra: nil,
     payload: nil,
     checksum: nil,
-    # MAVLink 2 signing only (not implemented)
+    # MAVLink 2 signing only
     signature: nil,
     # Original binary frame
     mavlink_1_raw: nil,
@@ -55,6 +75,7 @@ defmodule XMAVLink.Frame do
           crc_extra: XMAVLink.Types.crc_extra(),
           payload: binary,
           checksum: 0..65_535,
+          signature: XMAVLink.Frame.Signature.t() | nil,
           mavlink_1_raw: binary,
           mavlink_2_raw: binary,
           message: message
@@ -102,21 +123,33 @@ defmodule XMAVLink.Frame do
             message_id::little-unsigned-integer-size(24), payload::binary-size(payload_length),
             checksum::little-unsigned-integer-size(16), rest::binary>>
       ) do
-    case incompatible_flags do
-      0 ->
-        # Vanilla MAVLink 2, we can deal with this
+    frame =
+      struct(XMAVLink.Frame,
+        version: 2,
+        payload_length: payload_length,
+        incompatible_flags: incompatible_flags,
+        compatible_flags: compatible_flags,
+        sequence_number: sequence_number,
+        source_system: source_system,
+        source_component: source_component,
+        message_id: message_id,
+        payload: payload,
+        checksum: checksum
+      )
+
+    cond do
+      unsupported_incompatible_flags?(incompatible_flags) and signed?(incompatible_flags) ->
+        drop_incompatible_signed_frame(raw_and_rest, rest)
+
+      unsupported_incompatible_flags?(incompatible_flags) ->
+        {nil, rest}
+
+      signed?(incompatible_flags) ->
+        signed_frame_and_tail(raw_and_rest, frame, rest)
+
+      true ->
         {
-          struct(XMAVLink.Frame,
-            version: 2,
-            payload_length: payload_length,
-            incompatible_flags: 0,
-            compatible_flags: compatible_flags,
-            sequence_number: sequence_number,
-            source_system: source_system,
-            source_component: source_component,
-            message_id: message_id,
-            payload: payload,
-            checksum: checksum,
+          struct(frame,
             mavlink_2_raw:
               binary_part(
                 raw_and_rest,
@@ -126,15 +159,6 @@ defmodule XMAVLink.Frame do
           ),
           rest
         }
-
-      _ ->
-        # We don't support any incompatible flags at present
-        # e.g. signing, so drop the frame
-        if signed?(incompatible_flags) do
-          drop_incompatible_signed_frame(raw_and_rest, rest)
-        else
-          {nil, rest}
-        end
     end
   end
 
@@ -148,11 +172,25 @@ defmodule XMAVLink.Frame do
   def binary_to_frame_and_tail(<<>>), do: :not_a_frame
 
   @spec validate_and_unpack(XMAVLink.Frame.t(), module) ::
-          {:ok, XMAVLink.Frame.t()} | :failed_to_unpack | :checksum_invalid | :unknown_message
-  def validate_and_unpack(
-        frame = %XMAVLink.Frame{message_id: message_id, version: version, payload: payload},
-        dialect
-      ) do
+          {:ok, XMAVLink.Frame.t()}
+          | :failed_to_unpack
+          | :checksum_invalid
+          | :unknown_message
+          | :signed_frame_unsupported
+  def validate_and_unpack(frame = %XMAVLink.Frame{version: 2}, dialect) do
+    if signed?(frame) do
+      :signed_frame_unsupported
+    else
+      validate_unsigned_and_unpack(frame, dialect)
+    end
+  end
+
+  def validate_and_unpack(frame, dialect), do: validate_unsigned_and_unpack(frame, dialect)
+
+  defp validate_unsigned_and_unpack(
+         frame = %XMAVLink.Frame{message_id: message_id, version: version, payload: payload},
+         dialect
+       ) do
     case apply(dialect, :msg_attributes, [message_id]) do
       {:ok, crc_extra, expected_length, target} ->
         if frame.checksum ==
@@ -241,6 +279,50 @@ defmodule XMAVLink.Frame do
     end
   end
 
+  @spec signed?(XMAVLink.Frame.t() | non_neg_integer) :: boolean
+  def signed?(%XMAVLink.Frame{version: 2, incompatible_flags: incompatible_flags}),
+    do: signed?(incompatible_flags)
+
+  def signed?(%XMAVLink.Frame{}), do: false
+
+  def signed?(incompatible_flags) when is_integer(incompatible_flags),
+    do: (incompatible_flags &&& @mavlink_2_signature_flag) != 0
+
+  defp unsupported_incompatible_flags?(incompatible_flags),
+    do: (incompatible_flags &&& @mavlink_2_supported_incompatible_flags) != incompatible_flags
+
+  defp signed_frame_and_tail(raw_and_rest, frame, rest) do
+    case rest do
+      <<signature_raw::binary-size(@mavlink_2_signature_length), rest_after_signature::binary>> ->
+        {
+          struct(frame,
+            signature: parse_signature(signature_raw),
+            mavlink_2_raw:
+              binary_part(
+                raw_and_rest,
+                0,
+                byte_size(raw_and_rest) - byte_size(rest_after_signature)
+              )
+          ),
+          rest_after_signature
+        }
+
+      _ ->
+        {nil, raw_and_rest}
+    end
+  end
+
+  defp parse_signature(
+         <<link_id::unsigned-integer-size(8), timestamp::little-unsigned-integer-size(48),
+           signature::binary-size(6)>>
+       ) do
+    %XMAVLink.Frame.Signature{
+      link_id: link_id,
+      timestamp: timestamp,
+      signature: signature
+    }
+  end
+
   # Pack message frame
   def pack_frame(frame = %XMAVLink.Frame{version: 1}) do
     payload_length = byte_size(frame.payload)
@@ -298,9 +380,6 @@ defmodule XMAVLink.Frame do
     cs = x25_crc(frame <> <<crc_extra::unsigned-integer-size(8)>>)
     <<cs::little-unsigned-integer-size(16)>>
   end
-
-  defp signed?(incompatible_flags),
-    do: (incompatible_flags &&& @mavlink_2_signature_flag) != 0
 
   defp drop_incompatible_signed_frame(raw_and_rest, rest) do
     case rest do

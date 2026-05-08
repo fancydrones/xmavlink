@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Added MAVLink 2 signed-frame parsing and signature trailer representation
+  while continuing to reject signed frames before unpacking or routing until
+  signature validation and replay checks are implemented.
+
 ## 0.11.1 - 2026-05-08
 
 - Made generated MAVLink 2 packers use zero-equivalent defaults for omitted

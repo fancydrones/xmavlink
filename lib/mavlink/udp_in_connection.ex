@@ -9,6 +9,9 @@ defmodule XMAVLink.UDPInConnection do
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
 
+  @mavlink_2_signature_flag 0x01
+  @mavlink_2_signature_length 13
+
   defstruct address: nil,
             port: nil,
             socket: nil,
@@ -92,8 +95,21 @@ defmodule XMAVLink.UDPInConnection do
            <<0xFD, payload_length::unsigned-integer-size(8),
              incompatible_flags::unsigned-integer-size(8), _rest::binary>>
        )
-       when incompatible_flags != 0 and byte_size(raw) >= payload_length + 12,
-       do: :incompatible_flags
+       when incompatible_flags != 0 do
+    complete_length =
+      payload_length + 12 +
+        if Bitwise.band(incompatible_flags, @mavlink_2_signature_flag) != 0 do
+          @mavlink_2_signature_length
+        else
+          0
+        end
+
+    if byte_size(raw) >= complete_length do
+      :incompatible_flags
+    else
+      :incomplete_frame
+    end
+  end
 
   defp frame_parse_error(_raw), do: :incomplete_frame
 
