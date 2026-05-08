@@ -3,7 +3,7 @@
 This library includes a mix task that generates code from MAVLink XML
 definition files and an application that enables communication with other
 systems using MAVLink 1 frames, unsigned MAVLink 2 frames, and configured
-inbound signed MAVLink 2 frames over serial, UDP, and outbound TCP connections.
+signed MAVLink 2 frames over serial, UDP, and outbound TCP connections.
 
 MAVLink is a Micro Air Vehicle communication protocol used by Pixhawk,
 ArduPilot and other leading autopilot platforms. For more information
@@ -50,17 +50,16 @@ This library is not officially recognised or supported by MAVLink at this
 time.
 
 XMAVLink parses and emits MAVLink 1 frames and unsigned MAVLink 2 frames.
-Router-level MAVLink 2 signing can be configured for inbound frames with a
-32-byte key, link id, and local timestamp. Signed inbound frames are verified
-before unpacking, replay timestamps are tracked per connection, and unsigned
-MAVLink 2 inbound frames are rejected by default while signing is enabled unless
-`accept_unsigned: true` is set. MAVLink 1 inbound frames remain accepted under a
-signing policy. Outbound signing is not wired yet; the low-level
-`XMAVLink.Frame.sign_frame/4` helper can generate signed MAVLink 2 frame bytes
-for already packed frames. MAVLink 2 frames with other incompatible flags are
-discarded. Supported configured transports are serial, UDP client (`udpout`),
-UDP server (`udpin`), and TCP client (`tcpout`). TCP server (`tcpin`)
-connections are not implemented.
+Router-level MAVLink 2 signing can be configured with a 32-byte key, link id,
+and local timestamp. Signed inbound frames are verified before unpacking, replay
+timestamps are tracked per connection, and unsigned MAVLink 2 inbound frames are
+rejected by default while signing is enabled unless `accept_unsigned: true` is
+set. Unsigned outbound MAVLink 2 frames sent over a signing-enabled connection
+are signed with a monotonically incremented per-connection timestamp. MAVLink 1
+inbound and outbound frames remain unsigned and accepted under a signing policy.
+MAVLink 2 frames with other incompatible flags are discarded. Supported
+configured transports are serial, UDP client (`udpout`), UDP server (`udpin`),
+and TCP client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
 
 MAVLink 2 is the primary 1.0 compatibility target. MAVLink 1 remains supported
 for existing frame parsing, packing, and routing behavior while that support

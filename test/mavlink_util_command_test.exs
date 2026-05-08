@@ -20,9 +20,7 @@ defmodule XMAVLink.Util.CommandTest do
         connection_strings: []
       })
 
-    on_exit(fn ->
-      if Process.alive?(router), do: GenServer.stop(router)
-    end)
+    on_exit(fn -> stop_router(router) end)
 
     {:ok, router: router}
   end
@@ -124,6 +122,17 @@ defmodule XMAVLink.Util.CommandTest do
   defp delete_utility_tables do
     for table <- [:messages, :systems, :params, :sessions], :ets.info(table) != :undefined do
       :ets.delete(table)
+    end
+  end
+
+  defp stop_router(router) do
+    try do
+      if Process.alive?(router) do
+        GenServer.stop(router)
+      end
+    catch
+      :exit, {:noproc, _} -> :ok
+      :exit, {:normal, _} -> :ok
     end
   end
 end

@@ -916,13 +916,13 @@ defmodule XMAVLink.Router do
          {:ok, source_connection_key, frame = %Frame{target: :broadcast},
           state = %Router{connections: connections}}
        ) do
-    for {connection_key, connection} <- connections do
+    Enum.reduce(connections, state, fn {connection_key, connection}, routed_state ->
       if match?(:local, connection_key) or !match?(^connection_key, source_connection_key) do
-        forward(connection, frame)
+        forward_and_update(connection_key, connection, frame, routed_state)
+      else
+        routed_state
       end
-    end
-
-    state
+    end)
   end
 
   # Only send targeted messages to observed system/components and local.
@@ -959,11 +959,14 @@ defmodule XMAVLink.Router do
         )
     end
 
-    for connection_key <- recipients do
-      forward(connections[connection_key], frame)
-    end
-
-    state
+    Enum.reduce(recipients, state, fn connection_key, routed_state ->
+      forward_and_update(
+        connection_key,
+        routed_state.connections[connection_key],
+        frame,
+        routed_state
+      )
+    end)
   end
 
   # Swallow any errors from the handle_info |> update_connection_info pipeline
@@ -986,19 +989,52 @@ defmodule XMAVLink.Router do
     ]
   end
 
+  defp forward_and_update(_connection_key, nil, _frame, state), do: state
+
+  defp forward_and_update(connection_key, connection, frame, state) do
+    updated_connection = forward(connection, frame)
+    put_in(state.connections[connection_key], updated_connection)
+  end
+
+  defp forward(connection, frame) do
+    case outbound_frame(connection, frame) do
+      {:ok, updated_connection, outbound_frame} ->
+        _ = forward_raw(updated_connection, outbound_frame)
+        updated_connection
+
+      {:error, reason, updated_connection} ->
+        Logger.debug("Could not sign outbound MAVLink frame: #{inspect(reason)}")
+        updated_connection
+    end
+  end
+
+  defp outbound_frame(connection, frame) do
+    if Map.has_key?(connection, :signing) do
+      case Signing.sign_outbound(frame, connection.signing) do
+        {:ok, outbound_frame, signing} ->
+          {:ok, struct(connection, signing: signing), outbound_frame}
+
+        {:error, reason, signing} ->
+          {:error, reason, struct(connection, signing: signing)}
+      end
+    else
+      {:ok, connection, frame}
+    end
+  end
+
   # Delegate sending a message to connection-type specific code
-  defp forward(connection = %UDPInConnection{}, frame),
+  defp forward_raw(connection = %UDPInConnection{}, frame),
     do: UDPInConnection.forward(connection, frame)
 
-  defp forward(connection = %UDPOutConnection{}, frame),
+  defp forward_raw(connection = %UDPOutConnection{}, frame),
     do: UDPOutConnection.forward(connection, frame)
 
-  defp forward(connection = %TCPOutConnection{}, frame),
+  defp forward_raw(connection = %TCPOutConnection{}, frame),
     do: TCPOutConnection.forward(connection, frame)
 
-  defp forward(connection = %SerialConnection{}, frame),
+  defp forward_raw(connection = %SerialConnection{}, frame),
     do: SerialConnection.forward(connection, frame)
 
-  defp forward(connection = %LocalConnection{}, frame),
+  defp forward_raw(connection = %LocalConnection{}, frame),
     do: LocalConnection.forward(connection, frame)
 end
