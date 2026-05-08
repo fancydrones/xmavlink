@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.12.0 - 2026-05-08
+
 - Added MAVLink 2 signed-frame parsing and signature trailer representation.
 - Added a low-level MAVLink 2 frame signing helper for already packed frames.
 - Added reusable MAVLink 2 signature validation and inbound replay-policy
