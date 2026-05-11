@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.12.2"}
+     {:xmavlink, "~> 0.13.0"}
    ]
  end
  ```
@@ -146,6 +146,25 @@ config :xmavlink,
   connections: ["tcpout:127.0.0.1:5760"],
   connection_retry_ms: 500
 ```
+
+### Remote Forwarding
+
+By default, XMAVLink behaves as a router: frames received from one remote link
+may be forwarded to other remote links as well as local subscribers. For
+endpoint or GCS applications that should receive vehicle traffic without
+bridging it between links, disable remote forwarding:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["udpin:0.0.0.0:14550"],
+  remote_forwarding: false
+```
+
+With `remote_forwarding: false`, inbound remote frames are still decoded,
+learned for routing, and delivered to local subscribers. Local messages sent
+with `XMAVLink.Router.pack_and_send/2` or `/3` can still be forwarded to learned
+remote vehicles.
 
 ### DNS Hostname Support
 

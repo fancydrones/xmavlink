@@ -30,6 +30,7 @@ defmodule XMAVLink.Supervisor do
             component: Application.get_env(:xmavlink, :component_id),
             connection_strings: Application.get_env(:xmavlink, :connections),
             connection_retry_ms: Application.get_env(:xmavlink, :connection_retry_ms, 1_000),
+            remote_forwarding: Application.get_env(:xmavlink, :remote_forwarding, true),
             signing: Application.get_env(:xmavlink, :signing)
           }
         }

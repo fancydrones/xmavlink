@@ -70,6 +70,8 @@ defmodule XMAVLink.Router do
     connection_strings: [],
     # Supervised connection retry delay
     connection_retry_ms: 1_000,
+    # Whether remote inbound frames may be forwarded to other remote links
+    remote_forwarding: true,
     # Subscription cache name for restart restoration, if any
     subscription_cache: nil,
     # Per-connection MAVLink 2 signing policy seed
@@ -102,6 +104,7 @@ defmodule XMAVLink.Router do
           dialect: module | nil,
           connection_strings: [String.t()],
           connection_retry_ms: non_neg_integer,
+          remote_forwarding: boolean,
           signing: Signing.t() | nil,
           subscription_cache: router_name | nil,
           connection_supervisor: pid | nil,
@@ -147,6 +150,11 @@ defmodule XMAVLink.Router do
                         Retry delay for configured connection workers after
                         open failures or TCP/serial disconnects. Defaults to
                         1000 ms.
+  - remote_forwarding:
+                        Whether frames received from remote links are forwarded
+                        to other remote links. Defaults to true. Set false for
+                        endpoint/GCS use cases that should receive remote
+                        traffic locally without bridging it between links.
 
   - opts:               Standard GenServer options. Pass `:name` to register
                         a non-default router, or `name: nil` in the args map to
@@ -161,6 +169,7 @@ defmodule XMAVLink.Router do
             optional(:connection_strings) => [String.t()],
             optional(:connections) => [String.t()],
             optional(:connection_retry_ms) => non_neg_integer,
+            optional(:remote_forwarding) => boolean,
             optional(:signing) => keyword() | nil
           },
           [{atom, any}]
@@ -414,15 +423,21 @@ defmodule XMAVLink.Router do
     args = Map.new(args)
     connection_strings = Map.get(args, :connection_strings, Map.get(args, :connections, [])) || []
     connection_retry_ms = Map.get(args, :connection_retry_ms, 1_000)
+    remote_forwarding = Map.get(args, :remote_forwarding, true)
     signing = normalize_signing!(Map.get(args, :signing))
 
     if not (is_integer(connection_retry_ms) and connection_retry_ms >= 0) do
       raise ArgumentError, "connection_retry_ms must be a non-negative integer"
     end
 
+    if not is_boolean(remote_forwarding) do
+      raise ArgumentError, "remote_forwarding must be a boolean"
+    end
+
     args
     |> Map.put(:connection_strings, connection_strings)
     |> Map.put(:connection_retry_ms, connection_retry_ms)
+    |> Map.put(:remote_forwarding, remote_forwarding)
     |> Map.put(:signing, signing)
   end
 
@@ -519,6 +534,7 @@ defmodule XMAVLink.Router do
        dialect: args.dialect,
        connection_strings: args.connection_strings,
        connection_retry_ms: args.connection_retry_ms,
+       remote_forwarding: args.remote_forwarding,
        connection_supervisor: connection_supervisor,
        subscription_cache: subscription_cache,
        signing: args.signing,
@@ -984,8 +1000,11 @@ defmodule XMAVLink.Router do
          {:ok, source_connection_key, frame = %Frame{target: :broadcast},
           state = %Router{connections: connections}}
        ) do
+    forward_remote? = source_connection_key == :local or state.remote_forwarding
+
     Enum.reduce(connections, state, fn {connection_key, connection}, routed_state ->
-      if match?(:local, connection_key) or !match?(^connection_key, source_connection_key) do
+      if connection_key == :local or
+           (forward_remote? and connection_key != source_connection_key) do
         forward_and_update(connection_key, connection, frame, routed_state)
       else
         routed_state
@@ -1016,6 +1035,7 @@ defmodule XMAVLink.Router do
     recipients =
       matching_system_components(target_system, target_component, state)
       |> Enum.reject(fn key -> key == source_connection_key end)
+      |> remote_forwarding_recipients(source_connection_key, state)
 
     if match?(
          {^recipients, ^source_system, ^source_component},
@@ -1056,6 +1076,18 @@ defmodule XMAVLink.Router do
         |> Enum.map(fn {_, ck} -> ck end)
     ]
   end
+
+  defp remote_forwarding_recipients(recipients, :local, _state), do: recipients
+
+  defp remote_forwarding_recipients(recipients, _source_connection_key, %Router{
+         remote_forwarding: true
+       }),
+       do: recipients
+
+  defp remote_forwarding_recipients(recipients, _source_connection_key, %Router{
+         remote_forwarding: false
+       }),
+       do: Enum.filter(recipients, &(&1 == :local))
 
   defp forward_and_update(_connection_key, nil, _frame, state), do: state
 
