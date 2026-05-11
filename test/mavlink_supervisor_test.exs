@@ -5,15 +5,18 @@ defmodule XMAVLink.SupervisorTest do
     previous_router_name = Application.get_env(:xmavlink, :router_name)
     previous_heartbeat = Application.get_env(:xmavlink, :heartbeat)
     previous_connection_retry_ms = Application.get_env(:xmavlink, :connection_retry_ms)
+    previous_remote_forwarding = Application.get_env(:xmavlink, :remote_forwarding)
 
     Application.put_env(:xmavlink, :router_name, nil)
     Application.put_env(:xmavlink, :connection_retry_ms, 250)
+    Application.put_env(:xmavlink, :remote_forwarding, false)
     Application.put_env(:xmavlink, :heartbeat, interval_ms: 1000, message: sample_heartbeat())
 
     on_exit(fn ->
       restore_env(:router_name, previous_router_name)
       restore_env(:heartbeat, previous_heartbeat)
       restore_env(:connection_retry_ms, previous_connection_retry_ms)
+      restore_env(:remote_forwarding, previous_remote_forwarding)
     end)
 
     assert {:ok, {_supervisor_flags, children}} = XMAVLink.Supervisor.init([])
@@ -21,7 +24,7 @@ defmodule XMAVLink.SupervisorTest do
     assert %{
              start:
                {XMAVLink.Router, :start_link,
-                [%{name: XMAVLink.Router, connection_retry_ms: 250}]}
+                [%{name: XMAVLink.Router, connection_retry_ms: 250, remote_forwarding: false}]}
            } =
              Enum.find(children, &match?(%{id: XMAVLink.Router}, &1))
 

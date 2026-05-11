@@ -165,6 +165,21 @@ defmodule XMAVLink.Test.Router do
       end
     end
 
+    test "rejects invalid remote forwarding config" do
+      assert_raise ArgumentError, ~r/remote_forwarding/, fn ->
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: APM.Dialect,
+            connection_strings: [],
+            remote_forwarding: :nope
+          },
+          []
+        )
+      end
+    end
+
     test "rejects invalid signing config" do
       assert_raise ArgumentError, ~r/invalid signing config: :invalid_secret_key/, fn ->
         Router.start_link(
@@ -489,6 +504,143 @@ defmodule XMAVLink.Test.Router do
                    fn ->
                      Router.pack_and_send({:global, :missing_router}, sample_heartbeat())
                    end
+    end
+  end
+
+  describe "remote forwarding" do
+    test "can be disabled while keeping local delivery and local outbound sends" do
+      {:ok, router_socket} = :gen_udp.open(0, [:binary, active: false])
+      {:ok, first_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, first_peer_port} = :inet.port(first_peer_socket)
+      {:ok, second_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, second_peer_port} = :inet.port(second_peer_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            remote_forwarding: false
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(router_socket)
+        :gen_udp.close(first_peer_socket)
+        :gen_udp.close(second_peer_socket)
+        stop_router(router_pid)
+      end)
+
+      assert :ok = Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true)
+
+      address = {127, 0, 0, 1}
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, second_peer_port,
+         packed_remote_frame(sample_heartbeat(), 3, 1).mavlink_2_raw}
+      )
+
+      assert_receive %Frame{
+                       source_system: 3,
+                       source_component: 1,
+                       message: %Common.Message.Heartbeat{}
+                     },
+                     200
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, first_peer_port,
+         packed_remote_frame(sample_heartbeat(), 2, 1).mavlink_2_raw}
+      )
+
+      assert_receive %Frame{
+                       source_system: 2,
+                       source_component: 1,
+                       message: %Common.Message.Heartbeat{}
+                     },
+                     200
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{2, 1}] == {router_socket, address, first_peer_port}
+      assert state.routes[{3, 1}] == {router_socket, address, second_peer_port}
+
+      refute_receive {:udp, ^second_peer_socket, _, _, _}, 50
+
+      assert :ok = Router.pack_and_send(router_pid, param_request_list(3, 1), 2)
+      assert_receive {:udp, ^second_peer_socket, _, _, _}, 200
+      refute_receive {:udp, ^first_peer_socket, _, _, _}, 50
+
+      Router.unsubscribe(router_pid)
+    end
+
+    test "does not forward remote targeted frames to other remote links when disabled" do
+      {:ok, router_socket} = :gen_udp.open(0, [:binary, active: false])
+      {:ok, source_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, source_peer_port} = :inet.port(source_peer_socket)
+      {:ok, target_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, target_peer_port} = :inet.port(target_peer_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            remote_forwarding: false
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(router_socket)
+        :gen_udp.close(source_peer_socket)
+        :gen_udp.close(target_peer_socket)
+        stop_router(router_pid)
+      end)
+
+      assert :ok =
+               Router.subscribe(router_pid,
+                 message: Common.Message.ParamRequestList,
+                 as_frame: true
+               )
+
+      address = {127, 0, 0, 1}
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, target_peer_port,
+         packed_remote_frame(sample_heartbeat(), 3, 1).mavlink_2_raw}
+      )
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{3, 1}] == {router_socket, address, target_peer_port}
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, source_peer_port,
+         packed_remote_frame(param_request_list(3, 1), 2, 1).mavlink_2_raw}
+      )
+
+      assert_receive %Frame{
+                       source_system: 2,
+                       source_component: 1,
+                       target_system: 3,
+                       target_component: 1,
+                       message: %Common.Message.ParamRequestList{}
+                     },
+                     200
+
+      _state = :sys.get_state(router_pid)
+      refute_receive {:udp, ^target_peer_socket, _, _, _}, 50
+
+      Router.unsubscribe(router_pid)
     end
   end
 
@@ -1172,6 +1324,32 @@ defmodule XMAVLink.Test.Router do
       target_system: target_system,
       target_component: target_component
     }
+  end
+
+  defp packed_remote_frame(message, source_system, source_component) do
+    {:ok, message_id, {:ok, crc_extra, _expected_length, target}, payload} =
+      XMAVLink.Message.pack(message, 2)
+
+    {target_system, target_component} =
+      if target != :broadcast do
+        {message.target_system, Map.get(message, :target_component, 0)}
+      else
+        {0, 0}
+      end
+
+    Frame.pack_frame(%Frame{
+      version: 2,
+      sequence_number: 7,
+      source_system: source_system,
+      source_component: source_component,
+      target_system: target_system,
+      target_component: target_component,
+      target: target,
+      message: message,
+      message_id: message_id,
+      payload: payload,
+      crc_extra: crc_extra
+    })
   end
 
   defp system_time_frame(time_boot_ms, source_system, source_component) do

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.13.0 - 2026-05-11
+
+- Added `remote_forwarding: false` router/application configuration for
+  endpoint or GCS use cases that should receive remote MAVLink traffic locally
+  without forwarding it between remote links.
+
+## 0.12.2 - 2026-05-11
+
+- Hardened MAVLink XML generator validation for duplicate or conflicting
+  message module names.
+
 ## 0.12.1 - 2026-05-08
 
 - Added router route invalidation when a `SYSTEM_TIME.time_boot_ms` decrease

@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.12.2",
+      version: "0.13.0",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       description: description(),
@@ -46,6 +46,9 @@ defmodule XMAVLink.Mixfile do
         # Utility processes are opt-in because CacheManager actively subscribes
         # to MAVLink traffic and requests vehicle parameter lists.
         utilities: false,
+        # Keep router behavior by default. Set false for endpoint/GCS use cases
+        # that should receive remote traffic without bridging remote links.
+        remote_forwarding: true,
         connections: []
       ],
       mod: {XMAVLink.Application, []},
