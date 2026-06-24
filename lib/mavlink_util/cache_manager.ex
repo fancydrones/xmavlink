@@ -40,12 +40,30 @@ defmodule XMAVLink.Util.CacheManager do
     GenServer.start_link(__MODULE__, state, Keyword.put_new(opts, :name, __MODULE__))
   end
 
-  def mavs(opts \\ []) do
-    context = Context.new(opts)
-    systems = context.tables.systems
+  @doc """
+  Return visible MAVLink systems from the utility cache.
+
+  This is the public query API for the utility systems table. Each entry is
+  returned as `{system_component_id, cached_system}` where
+  `system_component_id` is `{system_id, component_id}`.
+  """
+  @spec list_systems(keyword) ::
+          {:ok, [{XMAVLink.Types.mavlink_address(), map}]} | {:error, :not_started}
+  def list_systems(opts \\ []) do
+    systems = Context.new(opts).tables.systems
 
     with :ok <- require_table(systems) do
-      scids = :ets.foldl(fn {scid, _}, acc -> [scid | acc] end, [], systems)
+      entries =
+        :ets.foldl(fn {scid, system}, acc -> [{scid, system} | acc] end, [], systems)
+        |> Enum.sort_by(fn {scid, _system} -> scid end)
+
+      {:ok, entries}
+    end
+  end
+
+  def mavs(opts \\ []) do
+    with {:ok, systems} <- list_systems(opts) do
+      scids = Enum.map(systems, fn {scid, _system} -> scid end)
       Logger.info("Listing #{length(scids)} visible vehicles")
       {:ok, scids}
     end
@@ -110,23 +128,44 @@ defmodule XMAVLink.Util.CacheManager do
   def msg(scid = {_, _, _}, msg_type) when is_atom(msg_type), do: msg(scid, msg_type, [])
 
   def msg({system_id, component_id, _}, msg_type, opts) when is_atom(msg_type) do
-    messages = Context.new(opts).tables.messages
+    case latest_message(system_id, component_id, msg_type, opts) do
+      {:ok, _age_ms, _message} = result ->
+        Logger.info("Most recent \"#{dequalify_msg_type(msg_type)}\" message")
+        result
 
-    with :ok <- require_table(messages),
-         [{_key, {received, message}}] <-
-           :ets.lookup(messages, {system_id, component_id, msg_type}) do
-      Logger.info("Most recent \"#{dequalify_msg_type(msg_type)}\" message")
-      {:ok, now() - received, message}
-    else
       {:error, :not_started} ->
         {:error, :not_started}
 
-      _ ->
+      {:error, :no_such_message} ->
         Logger.warning(
           "Error attempting to retrieve message of type \"#{dequalify_msg_type(msg_type)}\""
         )
 
         {:error, :no_such_message}
+    end
+  end
+
+  @doc """
+  Return the latest cached message for a MAVLink system/component pair.
+
+  The result is `{:ok, age_ms, message}` where `age_ms` is the monotonic age of
+  the cached message at read time.
+  """
+  @spec latest_message(non_neg_integer, non_neg_integer, module, keyword) ::
+          {:ok, non_neg_integer, XMAVLink.Message.t()}
+          | {:error, :not_started | :no_such_message}
+  def latest_message(system_id, component_id, msg_type, opts \\ [])
+      when is_integer(system_id) and is_integer(component_id) and is_atom(msg_type) and
+             is_list(opts) do
+    messages = Context.new(opts).tables.messages
+
+    with :ok <- require_table(messages),
+         [{_key, {received, message}}] <-
+           :ets.lookup(messages, {system_id, component_id, msg_type}) do
+      {:ok, now() - received, message}
+    else
+      {:error, :not_started} -> {:error, :not_started}
+      _ -> {:error, :no_such_message}
     end
   end
 
@@ -192,6 +231,36 @@ defmodule XMAVLink.Util.CacheManager do
       _ ->
         Logger.warning("Error attempting to query params matching \"#{match}\"")
         {:error, :query_failed}
+    end
+  end
+
+  @doc """
+  Return one cached MAVLink parameter by name.
+
+  Parameter names are normalized to uppercase before lookup, matching
+  `XMAVLink.Util.ParamSet` behavior.
+  """
+  @spec get_param(non_neg_integer, non_neg_integer, atom | String.t(), keyword) ::
+          {:ok, non_neg_integer, XMAVLink.Message.t()}
+          | {:error, :not_started | :no_such_param}
+  def get_param(system_id, component_id, param_id, opts \\ [])
+      when is_integer(system_id) and is_integer(component_id) and
+             (is_atom(param_id) or is_binary(param_id)) and is_list(opts) do
+    context = Context.new(opts)
+    params = context.tables.params
+    param = normalize_param_id(param_id)
+    param_value_module = message_module(context.dialect, :ParamValue)
+
+    with :ok <- require_table(params),
+         [
+           {_key,
+            {received, param_value_msg = %{__struct__: ^param_value_module, param_id: ^param}}}
+         ] <-
+           :ets.lookup(params, {system_id, component_id, param}) do
+      {:ok, now() - received, param_value_msg}
+    else
+      {:error, :not_started} -> {:error, :not_started}
+      _ -> {:error, :no_such_param}
     end
   end
 
@@ -422,6 +491,11 @@ defmodule XMAVLink.Util.CacheManager do
     |> String.split(".")
     |> (fn parts -> parts |> Enum.reverse() |> List.first() end).()
   end
+
+  defp normalize_param_id(param) when is_atom(param),
+    do: param |> Atom.to_string() |> String.upcase()
+
+  defp normalize_param_id(param) when is_binary(param), do: String.upcase(param)
 
   defp require_table(table) do
     case :ets.info(table) do

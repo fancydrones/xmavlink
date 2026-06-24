@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- Added public utility cache query APIs for listing cached systems, reading the
+  latest cached message, and reading a cached parameter without direct ETS
+  access.
+- Added a `0.14.0` migration guide and a deployment safety checklist.
+
 ## 0.14.0 - 2026-06-24
 
 ### Breaking Changes

@@ -1,8 +1,24 @@
 defmodule XMAVLink.Util.Tables do
-  @moduledoc false
+  @moduledoc """
+  Utility ETS table name helpers.
+
+  Most applications should use `XMAVLink.Util.CacheManager` query functions
+  instead of reading ETS tables directly. When an integration needs table names
+  for supervision or migration code, use this module rather than hard-coding
+  global names such as `:messages`, `:systems`, `:params`, and `:sessions`.
+  """
 
   @kinds [:messages, :systems, :params, :sessions]
 
+  @type kind :: :messages | :systems | :params | :sessions
+  @type prefix :: atom | String.t() | nil
+  @type opts_or_prefix ::
+          keyword | %{optional(:table_prefix) => prefix} | XMAVLink.Util.Context.t() | prefix
+
+  @doc """
+  Return all utility table names for a context, prefix, or options.
+  """
+  @spec names(opts_or_prefix) :: %{required(kind) => atom}
   def names(opts_or_prefix \\ []) do
     prefix = prefix(opts_or_prefix)
 
@@ -11,6 +27,10 @@ defmodule XMAVLink.Util.Tables do
     end)
   end
 
+  @doc """
+  Return one utility table name for a context, prefix, or options.
+  """
+  @spec name(kind, opts_or_prefix) :: atom
   def name(kind, opts_or_prefix \\ []) when kind in @kinds do
     table_name(kind, prefix(opts_or_prefix))
   end
