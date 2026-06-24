@@ -76,6 +76,32 @@ defmodule XMAVLink.Test.ConnectionWorker do
     GenServer.stop(worker)
   end
 
+  test "tcp close announces the closed connection and schedules reconnect" do
+    {:ok, worker} =
+      ConnectionWorker.start_link(%{
+        router: self(),
+        transport: Transport,
+        tokens: [parent: self(), failures: 0],
+        retry_ms: 5
+      })
+
+    assert_receive {:open_attempt, 1}, 100
+    assert_receive {:add_connection, :fake_connection, %Transport{attempt: 1}, ^worker}, 100
+
+    send(worker, {:tcp_closed, :fake_connection})
+
+    assert_receive {:connection_closed, ^worker, :fake_connection}, 100
+    assert_receive {:closed, 1}, 100
+
+    assert_receive {:open_attempt, 2}, 100
+    assert_receive {:add_connection, :fake_connection, %Transport{attempt: 2}, ^worker}, 100
+
+    assert %{status: :connected, connection_key: :fake_connection} =
+             ConnectionWorker.status(worker)
+
+    GenServer.stop(worker)
+  end
+
   test "ignores stale retry timer messages after an explicit reconnect" do
     {:ok, worker} =
       ConnectionWorker.start_link(%{

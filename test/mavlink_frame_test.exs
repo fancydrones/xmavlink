@@ -27,6 +27,47 @@ defmodule XMAVLink.Test.Frame do
     assert signed_raw == signed_frame_raw()
   end
 
+  test "frame parser resynchronizes after leading non-MAVLink bytes" do
+    frame =
+      Frame.pack_frame(%Frame{
+        version: 2,
+        sequence_number: 7,
+        source_system: 1,
+        source_component: 1,
+        message_id: 24,
+        payload: <<1, 2, 3>>,
+        crc_extra: 0
+      })
+
+    tail = <<10, 11, 12>>
+    raw = <<0, 1, 2, 3>> <> frame.mavlink_2_raw <> tail
+
+    assert {%Frame{} = parsed_frame, ^tail} = Frame.binary_to_frame_and_tail(raw)
+    assert parsed_frame.version == 2
+    assert parsed_frame.sequence_number == 7
+    assert parsed_frame.source_system == 1
+    assert parsed_frame.source_component == 1
+    assert parsed_frame.message_id == 24
+    assert parsed_frame.payload == <<1, 2, 3>>
+  end
+
+  test "malformed byte streams never crash frame parsing or unpack validation" do
+    for seed <- 0..400 do
+      raw = deterministic_binary(seed, rem(seed * 37, 160))
+
+      result = Frame.binary_to_frame_and_tail(raw)
+      assert_frame_parse_result_shape(result, raw)
+
+      case result do
+        {%Frame{} = frame, _tail} ->
+          assert_validate_and_unpack_result_shape(Frame.validate_and_unpack(frame, Common))
+
+        _ ->
+          :ok
+      end
+    end
+  end
+
   test "MAVLink 2 signed frames are not unpacked before signature validation exists" do
     assert {%Frame{} = frame, <<>>} = Frame.binary_to_frame_and_tail(signed_frame_raw())
 
@@ -277,6 +318,42 @@ defmodule XMAVLink.Test.Frame do
       | mavlink_2_raw: prefix <> <<Bitwise.bxor(signature_head, 0xFF)>> <> signature_tail
     }
   end
+
+  defp deterministic_binary(_seed, 0), do: <<>>
+
+  defp deterministic_binary(seed, length) do
+    chunks =
+      0..div(length + 31, 32)
+      |> Enum.map(fn counter ->
+        :crypto.hash(:sha256, :erlang.term_to_binary({seed, counter}))
+      end)
+      |> IO.iodata_to_binary()
+
+    binary_part(chunks, 0, length)
+  end
+
+  defp assert_frame_parse_result_shape(:not_a_frame, _raw), do: :ok
+
+  defp assert_frame_parse_result_shape({nil, rest}, raw) when is_binary(rest) do
+    assert byte_size(rest) <= byte_size(raw)
+  end
+
+  defp assert_frame_parse_result_shape({%Frame{} = frame, rest}, raw) when is_binary(rest) do
+    assert byte_size(rest) <= byte_size(raw)
+    assert frame.version in [1, 2]
+    assert is_integer(frame.payload_length)
+    assert is_integer(frame.sequence_number)
+    assert is_integer(frame.source_system)
+    assert is_integer(frame.source_component)
+    assert is_integer(frame.message_id)
+    assert is_binary(frame.payload)
+  end
+
+  defp assert_validate_and_unpack_result_shape({:ok, %Frame{}}), do: :ok
+  defp assert_validate_and_unpack_result_shape(:failed_to_unpack), do: :ok
+  defp assert_validate_and_unpack_result_shape(:checksum_invalid), do: :ok
+  defp assert_validate_and_unpack_result_shape(:unknown_message), do: :ok
+  defp assert_validate_and_unpack_result_shape(:signed_frame_unsupported), do: :ok
 
   defp wrong_secret_key, do: :binary.copy(<<43>>, 32)
 end
