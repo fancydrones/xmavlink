@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Clarified the public HexDocs API surface and hid internal transport delegate
+  modules from generated documentation.
+
 ## 0.14.1 - 2026-06-25
 
 ### Added

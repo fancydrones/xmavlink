@@ -3,7 +3,7 @@ defmodule XMAVLink.Types do
   Core types that remain the same across dialects.
   """
 
-  @typedoc "Connection delegate modules for XMAVLink.Router"
+  @typedoc "Internal connection state structs owned by `XMAVLink.Router`"
   @type connection ::
           XMAVLink.SerialConnection
           | XMAVLink.TCPOutConnection

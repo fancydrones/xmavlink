@@ -91,6 +91,23 @@ formatter-compatible source for repeatable diffs.
 Treat MAVLink XML dialect files as trusted build inputs. The generator is meant
 for upstream or application-owned dialect files, not arbitrary untrusted XML.
 
+## Public API Surface
+
+The supported API is the documented HexDocs surface:
+
+- Core runtime modules: `XMAVLink.Router`, `XMAVLink.Frame`,
+  `XMAVLink.Message`, `XMAVLink.Signing`, and `XMAVLink.Heartbeat`.
+- Utility modules under `XMAVLink.Util.*`, except modules hidden from HexDocs.
+- Dialect and generator support: `XMAVLink.Dialect`, `XMAVLink.Parser`,
+  `XMAVLink.Types`, `XMAVLink.Utils`, and `mix xmavlink`.
+- Generated dialect modules, including the checked-in `Common` dialect.
+
+Application, supervisor, connection worker, transport delegate, routing helper,
+and inbound parser implementation modules are internal. They may appear in
+types, logs, or stack traces, but downstream applications should use the
+documented router, utility, generated dialect, and message APIs instead of
+depending on those internals.
+
 ## Configuring the XMAVLink Application
 
 Add the `:xmavlink` OTP application with no start arguments to your `mix.exs`.

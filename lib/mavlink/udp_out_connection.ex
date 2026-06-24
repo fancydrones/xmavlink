@@ -1,7 +1,5 @@
 defmodule XMAVLink.UDPOutConnection do
-  @moduledoc """
-  XMAVLink.Router delegate for UDP connections
-  """
+  @moduledoc false
 
   @behaviour XMAVLink.Transport
 

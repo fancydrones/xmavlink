@@ -1,10 +1,5 @@
 defmodule XMAVLink.Transport do
-  @moduledoc """
-  Behaviour for connection transport delegates used by router connection workers.
-
-  Transport modules own external resources such as sockets or UART handles and
-  expose pure-ish frame handling helpers to the router.
-  """
+  @moduledoc false
 
   @type tokens :: [term]
   @type connection_key :: term

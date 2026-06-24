@@ -1,8 +1,5 @@
 defmodule XMAVLink.TCPOutConnection do
-  @moduledoc """
-  MAVLink.Router delegate for TCP connections
-  Typically used to connect to SITL on port 5760
-  """
+  @moduledoc false
 
   @behaviour XMAVLink.Transport
 
