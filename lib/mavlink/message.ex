@@ -1,4 +1,6 @@
 defprotocol XMAVLink.Message do
+  @fallback_to_any true
+
   @spec pack(XMAVLink.Message.t(), 1 | 2) ::
           {
             :ok,
@@ -15,8 +17,11 @@ defprotocol XMAVLink.Message do
   def pack(message, version)
 end
 
-defimpl XMAVLink.Message,
-  for: [Atom, BitString, Float, Function, Integer, List, Map, PID, Port, Reference, Tuple] do
+defimpl XMAVLink.Message, for: Any do
+  def pack(not_a_message = %{__struct__: _}, _) do
+    raise Protocol.UndefinedError, protocol: XMAVLink.Message, value: not_a_message
+  end
+
   def pack(not_a_message, _),
     do: {:error, "pack(): #{inspect(not_a_message)} is not a MAVLink message"}
 end

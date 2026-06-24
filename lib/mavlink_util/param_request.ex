@@ -4,20 +4,20 @@ defmodule XMAVLink.Util.ParamRequest do
 
   The helper watches `XMAVLink.Util.CacheManager` state and resends
   `PARAM_REQUEST_LIST` while the cached parameter count is not progressing.
-  Retries are bounded by default; pass `:retries`, `:retry_interval_ms`, or
-  `:router` in the options to override the defaults.
+  Retries are bounded by default; pass `:context`, `:retries`,
+  `:retry_interval_ms`, or `:router` in the options to override the defaults.
   """
 
-  @systems :systems
   @param_retry_interval 3000
   @param_retries 10
 
   require Logger
   alias XMAVLink.Util.CacheManager
-  import XMAVLink.Util.FocusManager, only: [focus: 0]
+  alias XMAVLink.Util.Context
+  import XMAVLink.Util.FocusManager, only: [focus: 1]
 
   def param_request_list(opts \\ []) when is_list(opts) do
-    with {:ok, {system_id, component_id, mavlink_version}} <- focus() do
+    with {:ok, {system_id, component_id, mavlink_version}} <- focus(opts) do
       Logger.info("Waiting to receive first parameter from vehicle #{system_id}.#{component_id}")
       param_request_list(system_id, component_id, mavlink_version, opts)
     end
@@ -43,9 +43,11 @@ defmodule XMAVLink.Util.ParamRequest do
          last_param_count_loaded,
          opts
        ) do
-    with :ok <- require_table(@systems),
+    systems = opts.context.tables.systems
+
+    with :ok <- require_table(systems),
          [{_, %{param_count: param_count, param_count_loaded: param_count_loaded}}] <-
-           :ets.lookup(@systems, {system_id, component_id}),
+           :ets.lookup(systems, {system_id, component_id}),
          retry <- param_count_loaded == last_param_count_loaded,
          complete <- param_count_loaded == param_count and param_count > 0 do
       cond do
@@ -99,19 +101,23 @@ defmodule XMAVLink.Util.ParamRequest do
   defp maybe_send_param_request(true, system_id, component_id, mavlink_version, opts) do
     XMAVLink.Router.pack_and_send(
       opts.router,
-      %Common.Message.ParamRequestList{
+      struct(message_module(opts.dialect, :ParamRequestList), %{
         target_system: system_id,
         target_component: component_id
-      },
+      }),
       mavlink_version
     )
   end
 
   defp command_opts(opts) do
+    context = opts |> Keyword.put(:router, CacheManager.router(opts)) |> Context.new()
     retries = Keyword.get(opts, :retries, @param_retries)
 
     %{
-      router: Keyword.get(opts, :router, CacheManager.router()),
+      context: context,
+      router: context.router,
+      dialect: context.dialect,
+      table_prefix: context.table_prefix,
       retry_interval_ms: Keyword.get(opts, :retry_interval_ms, @param_retry_interval),
       attempts: attempts(retries),
       source_opts: opts
@@ -130,4 +136,6 @@ defmodule XMAVLink.Util.ParamRequest do
       _ -> :ok
     end
   end
+
+  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 end

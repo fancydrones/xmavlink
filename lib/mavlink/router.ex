@@ -16,13 +16,15 @@ defmodule XMAVLink.Router do
   use GenServer
   require Logger
 
-  import XMAVLink.Utils, only: [resolve_address: 1, parse_positive_integer: 1]
   alias XMAVLink.Types
+  alias XMAVLink.ConnectionSpec
   alias XMAVLink.ConnectionSupervisor
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
   alias XMAVLink.Message
   alias XMAVLink.Router
+  alias XMAVLink.Router.Config
+  alias XMAVLink.Router.Routing
   alias XMAVLink.Signing
   alias XMAVLink.LocalConnection
   alias XMAVLink.SerialConnection
@@ -30,7 +32,6 @@ defmodule XMAVLink.Router do
   alias XMAVLink.UDPInConnection
   alias XMAVLink.UDPOutConnection
 
-  @system_time_message_id 2
   @setup_signing_message_id 256
 
   @typedoc """
@@ -175,7 +176,7 @@ defmodule XMAVLink.Router do
           [{atom, any}]
         ) :: {:ok, pid}
   def start_link(args, opts \\ []) do
-    args = normalize_start_args(args)
+    args = Config.normalize!(args)
     name = Keyword.get(opts, :name, Map.get(args, :name, __MODULE__))
 
     GenServer.start_link(__MODULE__, Map.put(args, :name, name), start_options(opts, name))
@@ -183,7 +184,7 @@ defmodule XMAVLink.Router do
 
   @doc false
   def child_spec(args) do
-    args = normalize_start_args(args)
+    args = Config.normalize!(args)
     name = Map.get(args, :name, __MODULE__)
 
     %{
@@ -359,39 +360,85 @@ defmodule XMAVLink.Router do
   @spec pack_and_send(router_ref, Message.t(), Types.version(), keyword) ::
           :ok | {:error, :protocol_undefined}
   def pack_and_send(router, message, version, opts) when is_router_ref(router) do
+    case build_frame(message, version, opts) do
+      {:ok, frame} ->
+        # Resolve all router target shapes before dispatch so missing global/via
+        # names fail fast instead of being silently dropped by GenServer.cast/2.
+        dispatch_local(router, frame)
+        :ok
+
+      {:error, reason} ->
+        {:error, reason}
+    end
+  end
+
+  def pack_and_send(invalid_router, _message, _version, _opts),
+    do: invalid_router_ref!(invalid_router)
+
+  @doc """
+  Synchronously pack, route, and send a MAVLink message.
+
+  This is the structured alternative to `pack_and_send/2..4`. Pass `:version`
+  in `opts` to select MAVLink 1 or 2, and pass `:source_system` plus
+  `:source_component` to override the router's local identity for this message.
+
+  The success reply includes the selected recipient connection keys. Connection
+  keys are internal runtime identifiers, but they are useful for observability
+  and tests.
+  """
+  @spec send_message(Message.t()) :: {:ok, Routing.delivery()} | {:error, term}
+  def send_message(message), do: send_message(__MODULE__, message, [])
+
+  @spec send_message(Message.t(), keyword) :: {:ok, Routing.delivery()} | {:error, term}
+  def send_message(message, opts) when is_map(message) and is_list(opts),
+    do: send_message(__MODULE__, message, opts)
+
+  @spec send_message(router_ref, Message.t()) :: {:ok, Routing.delivery()} | {:error, term}
+  def send_message(router, message) when is_router_ref(router) and is_map(message),
+    do: send_message(router, message, [])
+
+  @spec send_message(router_ref, Message.t(), keyword) ::
+          {:ok, Routing.delivery()} | {:error, term}
+  def send_message(router, message, opts) when is_router_ref(router) and is_map(message) do
+    version = Keyword.get(opts, :version, 2)
+
+    with {:ok, frame} <- build_frame(message, version, opts) do
+      call_local(router, frame)
+    end
+  end
+
+  def send_message(invalid_router, _message, _opts), do: invalid_router_ref!(invalid_router)
+
+  defp build_frame(message, version, opts) do
     source_identity = source_identity!(opts)
 
-    # We can only pack payload at this point because we need router state to get source
-    # system/component and sequence number for frame
     try do
-      {:ok, message_id, {:ok, crc_extra, _, target}, payload} = Message.pack(message, version)
+      case Message.pack(message, version) do
+        {:ok, message_id, {:ok, crc_extra, _, target}, payload} ->
+          {target_system, target_component} =
+            if target != :broadcast do
+              {message.target_system, Map.get(message, :target_component, 0)}
+            else
+              {0, 0}
+            end
 
-      {target_system, target_component} =
-        if target != :broadcast do
-          {message.target_system, Map.get(message, :target_component, 0)}
-        else
-          {0, 0}
-        end
+          {:ok,
+           struct(Frame,
+             version: version,
+             message_id: message_id,
+             source_system: source_identity[:source_system],
+             source_component: source_identity[:source_component],
+             target_system: target_system,
+             target_component: target_component,
+             target: target,
+             message: message,
+             payload: payload,
+             crc_extra: crc_extra
+           )}
 
-      # Resolve all router target shapes before dispatch so missing global/via
-      # names fail fast instead of being silently dropped by GenServer.cast/2.
-      dispatch_local(
-        router,
-        struct(Frame,
-          version: version,
-          message_id: message_id,
-          source_system: source_identity[:source_system],
-          source_component: source_identity[:source_component],
-          target_system: target_system,
-          target_component: target_component,
-          target: target,
-          message: message,
-          payload: payload,
-          crc_extra: crc_extra
-        )
-      )
-
-      :ok
+        {:error, reason} ->
+          {:error, reason}
+      end
     rescue
       # Need to catch Protocol.UndefinedError - happens with SimState (Common) and Simstate (APM)
       # messages because non-case-sensitive filesystems (including OSX thanks @noobz) can't tell
@@ -402,13 +449,17 @@ defmodule XMAVLink.Router do
     end
   end
 
-  def pack_and_send(invalid_router, _message, _version, _opts),
-    do: invalid_router_ref!(invalid_router)
-
   defp dispatch_local(router, frame) do
     case GenServer.whereis(router) do
       nil -> router_not_running!(router)
       pid -> send(pid, {:local, frame})
+    end
+  end
+
+  defp call_local(router, frame) do
+    case GenServer.whereis(router) do
+      nil -> router_not_running!(router)
+      pid -> GenServer.call(pid, {:local, frame})
     end
   end
 
@@ -418,35 +469,6 @@ defmodule XMAVLink.Router do
     do: raise(ArgumentError, "router child_spec requires :id when :name is nil")
 
   defp child_id(_args, name), do: name
-
-  defp normalize_start_args(args) do
-    args = Map.new(args)
-    connection_strings = Map.get(args, :connection_strings, Map.get(args, :connections, [])) || []
-    connection_retry_ms = Map.get(args, :connection_retry_ms, 1_000)
-    remote_forwarding = Map.get(args, :remote_forwarding, true)
-    signing = normalize_signing!(Map.get(args, :signing))
-
-    if not (is_integer(connection_retry_ms) and connection_retry_ms >= 0) do
-      raise ArgumentError, "connection_retry_ms must be a non-negative integer"
-    end
-
-    if not is_boolean(remote_forwarding) do
-      raise ArgumentError, "remote_forwarding must be a boolean"
-    end
-
-    args
-    |> Map.put(:connection_strings, connection_strings)
-    |> Map.put(:connection_retry_ms, connection_retry_ms)
-    |> Map.put(:remote_forwarding, remote_forwarding)
-    |> Map.put(:signing, signing)
-  end
-
-  defp normalize_signing!(signing) do
-    case Signing.new(signing) do
-      {:ok, signing} -> signing
-      {:error, reason} -> raise ArgumentError, "invalid signing config: #{inspect(reason)}"
-    end
-  end
 
   defp start_options(opts, nil), do: Keyword.delete(opts, :name)
 
@@ -477,9 +499,14 @@ defmodule XMAVLink.Router do
   end
 
   defp route_local(frame, state) do
+    {state, _delivery} = route_local_with_delivery(frame, state)
+    state
+  end
+
+  defp route_local_with_delivery(frame, state) do
     LocalConnection.handle_info({:local, frame}, state.connections.local, state.dialect)
     |> update_route_info(state)
-    |> route
+    |> route_with_delivery()
   end
 
   defp source_identity!(opts) do
@@ -522,7 +549,7 @@ defmodule XMAVLink.Router do
     {:ok, connection_supervisor} = ConnectionSupervisor.start_link()
 
     local_connection = LocalConnection.new(args.system, args.component, subscription_cache)
-    connection_specs = Enum.map(args.connection_strings, &connection_spec/1)
+    connection_specs = Enum.map(args.connection_strings, &ConnectionSpec.parse/1)
 
     for connection_spec <- connection_specs do
       start_connection_worker(connection_supervisor, connection_spec, args.connection_retry_ms)
@@ -540,6 +567,12 @@ defmodule XMAVLink.Router do
        signing: args.signing,
        connections: %{local: local_connection}
      }}
+  end
+
+  @impl true
+  def handle_call({:local, frame}, _from, state) do
+    {state, delivery} = route_local_with_delivery(frame, state)
+    {:reply, {:ok, delivery}, state}
   end
 
   @impl true
@@ -772,53 +805,6 @@ defmodule XMAVLink.Router do
     )
   end
 
-  defp connection_spec(connection_string) when is_binary(connection_string),
-    do: connection_spec(String.split(connection_string, [":", ","]))
-
-  defp connection_spec(tokens = ["udpin" | _]),
-    do: %{transport: UDPInConnection, tokens: validate_address_and_port(tokens)}
-
-  defp connection_spec(tokens = ["udpout" | _]),
-    do: %{transport: UDPOutConnection, tokens: validate_address_and_port(tokens)}
-
-  defp connection_spec(tokens = ["tcpout" | _]),
-    do: %{transport: TCPOutConnection, tokens: validate_address_and_port(tokens)}
-
-  defp connection_spec(tokens = ["serial" | _]),
-    do: %{transport: SerialConnection, tokens: validate_port_and_baud(tokens)}
-
-  defp connection_spec([invalid_protocol | _]),
-    do: raise(ArgumentError, message: "invalid protocol #{invalid_protocol}")
-
-  # Parse network connection strings
-  defp validate_address_and_port([protocol, address, port]) do
-    case {resolve_address(address), parse_positive_integer(port)} do
-      {{:error, reason}, _} ->
-        raise ArgumentError,
-          message: "invalid address #{address}: #{inspect(reason)}"
-
-      {_, :error} ->
-        raise ArgumentError, message: "invalid port #{port}"
-
-      {{:ok, parsed_address}, parsed_port} ->
-        [protocol, parsed_address, parsed_port]
-    end
-  end
-
-  # Parse serial port connection string
-  defp validate_port_and_baud(["serial", port, baud]) do
-    case {is_binary(port), parse_positive_integer(baud)} do
-      {false, _} ->
-        raise ArgumentError, message: "Invalid port #{port}"
-
-      {_, :error} ->
-        raise ArgumentError, message: "invalid baud rate #{baud}"
-
-      {true, parsed_baud} ->
-        ["serial", port, parsed_baud]
-    end
-  end
-
   defp reconnect_worker(nil), do: :ok
   defp reconnect_worker(worker), do: ConnectionWorker.reconnect(worker)
 
@@ -855,198 +841,90 @@ defmodule XMAVLink.Router do
     end)
   end
 
-  # A handle_info() received an error and wants us to forget the borked connection
-  defp remove_connection(
-         connection_key,
-         state = %Router{connections: connections, routes: routes, connection_workers: workers}
-       ) do
-    struct(state,
-      connections: Map.delete(connections, connection_key),
-      connection_workers: Map.delete(workers, connection_key),
-      routes:
-        routes
-        |> Enum.reject(fn {_mavlink_address, route_connection_key} ->
-          route_connection_key == connection_key
-        end)
-        |> Map.new()
-    )
+  defp remove_connection(connection_key, state = %Router{}) do
+    Routing.remove_connection(connection_key, state)
   end
 
-  # Map system/component ids to connections on which they have been seen for targeted messages
-  # Keep a list of all connections we have received messages from for broadcast messages
-  defp update_route_info(
-         {:ok, source_connection_key, source_connection,
-          frame = %Frame{
-            source_system: source_system,
-            source_component: source_component
-          }},
-         state = %Router{}
-       ) do
-    state = track_system_time(frame, source_connection_key, state)
+  defp update_route_info(result, state) do
+    case Routing.update_route_info(result, state) do
+      {:ok, source_connection_key, frame, state} ->
+        {:ok, source_connection_key, frame,
+         track_connection_worker(
+           state,
+           source_connection_key,
+           state.connections[source_connection_key]
+         )}
 
-    {
-      :ok,
-      source_connection_key,
-      frame,
-      state
-      |> struct(
-        # Don't add system/components from local connection to routes because local
-        # automatically matches everything in matching_system_components() and we
-        # don't want to receive messages twice
-        routes:
-          case source_connection_key do
-            :local ->
-              state.routes
-
-            _ ->
-              Map.put(
-                state.routes,
-                {source_system, source_component},
-                source_connection_key
-              )
-          end,
-        connections:
-          Map.put(
-            state.connections,
-            source_connection_key,
-            source_connection
-          )
-      )
-      |> track_connection_worker(source_connection_key, source_connection)
-    }
+      {:error, reason, state} ->
+        {:error, reason, track_workers_for_connections(state)}
+    end
   end
 
-  # Connection state still needs to be updated if there is an error
-  defp update_route_info(
-         {:error, reason, connection_key, connection},
-         state = %Router{connections: connections}
-       ) do
-    {
-      :error,
-      reason,
-      state
-      |> struct(
-        connections:
-          Map.put(
-            connections,
-            connection_key,
-            connection
-          )
-      )
-      |> track_connection_worker(connection_key, connection)
-    }
+  defp track_workers_for_connections(state) do
+    Enum.reduce(state.connections, state, fn {connection_key, connection}, updated_state ->
+      track_connection_worker(updated_state, connection_key, connection)
+    end)
   end
 
-  defp track_system_time(_frame, :local, state), do: state
-
-  defp track_system_time(
-         %Frame{
-           message_id: @system_time_message_id,
-           source_system: source_system,
-           source_component: source_component,
-           message: %{time_boot_ms: time_boot_ms}
-         },
-         _source_connection_key,
-         state = %Router{system_time_boot_ms: system_time_boot_ms}
-       )
-       when is_integer(time_boot_ms) do
-    source = {source_system, source_component}
-
-    state =
-      case Map.fetch(system_time_boot_ms, source) do
-        {:ok, previous_time_boot_ms} when time_boot_ms < previous_time_boot_ms ->
-          clear_system_routes(source_system, state)
-
-        _ ->
-          state
-      end
-
-    %Router{
-      state
-      | system_time_boot_ms: Map.put(state.system_time_boot_ms, source, time_boot_ms)
-    }
-  end
-
-  defp track_system_time(_frame, _source_connection_key, state), do: state
-
-  defp clear_system_routes(source_system, state = %Router{}) do
-    %Router{
-      state
-      | routes: reject_system_keys(state.routes, source_system),
-        system_time_boot_ms: reject_system_keys(state.system_time_boot_ms, source_system)
-    }
-  end
-
-  defp reject_system_keys(map, source_system) do
-    map
-    |> Enum.reject(fn {{system, _component}, _value} -> system == source_system end)
-    |> Map.new()
+  defp route(result) do
+    {state, _delivery} = route_with_delivery(result)
+    state
   end
 
   # SETUP_SIGNING carries key material. Inbound provisioning messages are
   # delivered locally for application handling, but never bridged to another
   # MAVLink connection by generic routing.
-  defp route(
+  defp route_with_delivery(
          {:ok, source_connection_key, frame = %Frame{message_id: @setup_signing_message_id},
           state = %Router{connections: connections}}
        )
        when source_connection_key != :local do
-    forward_and_update(:local, connections.local, frame, state)
+    recipients = [:local]
+
+    {
+      forward_and_update(:local, connections.local, frame, state),
+      Routing.delivery(source_connection_key, recipients, frame, state)
+    }
   end
 
-  # Broadcast un-targeted messages to all connections except the
-  # source we received the message from, unless it was local
-  defp route(
-         {:ok, source_connection_key, frame = %Frame{target: :broadcast},
-          state = %Router{connections: connections}}
+  defp route_with_delivery(
+         {:ok, source_connection_key, frame = %Frame{target: :broadcast}, state = %Router{}}
        ) do
-    forward_remote? = source_connection_key == :local or state.remote_forwarding
+    recipients = Routing.broadcast_recipients(source_connection_key, state)
 
-    Enum.reduce(connections, state, fn {connection_key, connection}, routed_state ->
-      if connection_key == :local or
-           (forward_remote? and connection_key != source_connection_key) do
-        forward_and_update(connection_key, connection, frame, routed_state)
-      else
-        routed_state
-      end
-    end)
+    {
+      forward_to_recipients(recipients, frame, state),
+      Routing.delivery(source_connection_key, recipients, frame, state)
+    }
   end
 
-  # Only send targeted messages to observed system/components and local.
-  # Excludes the source connection so we never echo a frame back to the
-  # connection we received it from — symmetric with the broadcast clause
-  # above. Without this, a frame received via udpout from sysid=N gets
-  # the route `routes[{N, _}] = source_socket` registered, then any
-  # targeted frame with target_system=0 (wildcard) — e.g. TIMESYNC,
-  # which the dialect classifies as `:system_component` even with target
-  # fields set to 0 — would have the source-socket connection in
-  # recipients and forward back out the udpout.
-  # Log warning if a message sent locally cannot reach its remote destination
-  defp route(
+  defp route_with_delivery(
          {:ok, source_connection_key,
           frame = %Frame{
-            source_system: source_system,
-            source_component: source_component,
             target_system: target_system,
             target_component: target_component,
             message: %{__struct__: message_type}
-          }, state = %Router{connections: connections}}
+          }, state = %Router{}}
        ) do
     recipients =
-      matching_system_components(target_system, target_component, state)
-      |> Enum.reject(fn key -> key == source_connection_key end)
-      |> remote_forwarding_recipients(source_connection_key, state)
+      Routing.targeted_recipients(target_system, target_component, source_connection_key, state)
 
-    if match?(
-         {^recipients, ^source_system, ^source_component},
-         {[:local], connections.local.system, connections.local.component}
-       ) do
-      :ok =
-        Logger.debug(
-          "Could not send message #{Atom.to_string(message_type)} to #{target_system}/#{target_component}: destination unreachable"
-        )
+    delivery = Routing.delivery(source_connection_key, recipients, frame, state)
+
+    if delivery.unreachable? do
+      Logger.debug(
+        "Could not send message #{Atom.to_string(message_type)} to #{target_system}/#{target_component}: destination unreachable"
+      )
     end
 
+    {forward_to_recipients(recipients, frame, state), delivery}
+  end
+
+  defp route_with_delivery({:error, reason, state = %Router{}}) do
+    {state, {:error, reason}}
+  end
+
+  defp forward_to_recipients(recipients, frame, state) do
     Enum.reduce(recipients, state, fn connection_key, routed_state ->
       forward_and_update(
         connection_key,
@@ -1056,38 +934,6 @@ defmodule XMAVLink.Router do
       )
     end)
   end
-
-  # Swallow any errors from the handle_info |> update_connection_info pipeline
-  defp route({:error, _reason, state = %Router{}}), do: state
-
-  # Known system/components matching target with 0 wildcard
-  # Always include local connection because we get to snoop
-  # on everybody's messages
-  defp matching_system_components(q_system, q_component, %Router{routes: routes}) do
-    [
-      :local
-      | Enum.filter(
-          routes,
-          fn {{sid, cid}, _} ->
-            (q_system == 0 or q_system == sid) and
-              (q_component == 0 or q_component == cid)
-          end
-        )
-        |> Enum.map(fn {_, ck} -> ck end)
-    ]
-  end
-
-  defp remote_forwarding_recipients(recipients, :local, _state), do: recipients
-
-  defp remote_forwarding_recipients(recipients, _source_connection_key, %Router{
-         remote_forwarding: true
-       }),
-       do: recipients
-
-  defp remote_forwarding_recipients(recipients, _source_connection_key, %Router{
-         remote_forwarding: false
-       }),
-       do: Enum.filter(recipients, &(&1 == :local))
 
   defp forward_and_update(_connection_key, nil, _frame, state), do: state
 

@@ -4,13 +4,12 @@ defmodule XMAVLink.TCPOutConnection do
   Typically used to connect to SITL on port 5760
   """
 
-  @smallest_mavlink_message 8
+  @behaviour XMAVLink.Transport
 
   require Logger
+  alias XMAVLink.Connection.Inbound
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
-
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
 
   defstruct socket: nil, address: nil, port: nil, buffer: <<>>, worker: nil, signing: nil
 
@@ -28,46 +27,14 @@ defmodule XMAVLink.TCPOutConnection do
         receiving_connection = %XMAVLink.TCPOutConnection{buffer: buffer},
         dialect
       ) do
-    case binary_to_frame_and_tail(buffer <> raw) do
-      :not_a_frame ->
-        # Noise or malformed frame
-        if byte_size(buffer) + byte_size(raw) > 0 do
-          :ok =
-            Logger.debug("TCPOutConnection.handle_info: Not a frame #{inspect(buffer <> raw)}")
-        end
-
-        {:error, :not_a_frame, socket, struct(receiving_connection, buffer: <<>>)}
-
-      {nil, rest} ->
-        {:error, :incomplete_frame, socket, struct(receiving_connection, buffer: rest)}
-
-      {received_frame, rest} ->
-        # Rest could be a message, return later to try emptying the buffer
-        if byte_size(rest) >= @smallest_mavlink_message, do: send(self(), {:tcp, socket, <<>>})
-
-        connection = struct(receiving_connection, buffer: rest)
-
-        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
-          {:ok, valid_frame, signing} ->
-            {:ok, socket, struct(connection, signing: signing), valid_frame}
-
-          {:unknown_message, signing} ->
-            # We re-broadcast valid frames with unknown messages
-            :ok =
-              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}")
-
-            {:ok, socket, struct(connection, signing: signing),
-             struct(received_frame, target: :broadcast)}
-
-          {:error, reason, signing} ->
-            :ok =
-              Logger.debug(
-                "TCPOutConnection.handle_info: frame received failed: #{Atom.to_string(reason)}"
-              )
-
-            {:error, reason, socket, struct(connection, signing: signing)}
-        end
-    end
+    Inbound.stream(
+      raw,
+      receiving_connection,
+      buffer,
+      socket,
+      dialect,
+      "TCPOutConnection.handle_info"
+    )
   end
 
   def open(["tcpout", address, port], controlling_process) do

@@ -6,16 +6,15 @@ defmodule XMAVLink.Util.SITL do
   messages and forwards the eight primary channels as little-endian 16-bit
   values to a SITL RC input UDP endpoint. Pass `:router` to target a named
   router and `:destination_address` to forward somewhere other than
-  `{127, 0, 0, 1}`.
+  `{127, 0, 0, 1}`. Pass `:context` to use a scoped utility runtime.
   """
 
   require Logger
   import XMAVLink.Utils, only: [resolve_address: 1]
 
   alias XMAVLink.Util.CacheManager
-  alias Common.Message.RcChannelsRaw
-  alias Common.Message.RequestDataStream
-  import XMAVLink.Util.FocusManager, only: [focus: 0]
+  alias XMAVLink.Util.Context
+  import XMAVLink.Util.FocusManager, only: [focus: 1]
 
   @resend_stream_interval 90
 
@@ -24,19 +23,22 @@ defmodule XMAVLink.Util.SITL do
   def forward_rc(opts, []) when is_list(opts), do: forward_rc(5501, opts)
 
   def forward_rc(sitl_rc_in_port, opts) do
-    with {:ok, {system_id, component_id, mavlink_version}} <- focus() do
+    with {:ok, {system_id, component_id, mavlink_version}} <- focus(opts) do
       forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port, opts)
     end
   end
 
   def forward_rc(system_id, component_id, mavlink_version, sitl_rc_in_port, opts \\ []) do
+    context = opts |> Keyword.put(:router, CacheManager.router(opts)) |> Context.new()
+
     Task.start_link(__MODULE__, :_connect, [
       system_id,
       component_id,
       mavlink_version,
       sitl_rc_in_port,
-      Keyword.get(opts, :router, CacheManager.router()),
-      Keyword.get(opts, :destination_address, {127, 0, 0, 1})
+      context.router,
+      Keyword.get(opts, :destination_address, {127, 0, 0, 1}),
+      context.dialect
     ])
   end
 
@@ -46,14 +48,17 @@ defmodule XMAVLink.Util.SITL do
         mavlink_version,
         sitl_rc_in_port,
         router,
-        destination_address
+        destination_address \\ nil,
+        dialect \\ Context.new().dialect
       ) do
+    rc_channels_raw_module = message_module(dialect, :RcChannelsRaw)
+
     with {:ok, destination_address} <- resolve_destination_address(destination_address),
          {:ok, socket} <- :gen_udp.open(0, [:binary, ip: {127, 0, 0, 1}]),
          :ok <-
            XMAVLink.Router.subscribe(
              router,
-             message: RcChannelsRaw,
+             message: rc_channels_raw_module,
              source_system: system_id,
              source_component: component_id
            ) do
@@ -69,7 +74,8 @@ defmodule XMAVLink.Util.SITL do
         socket,
         0,
         router,
-        destination_address
+        destination_address,
+        dialect
       )
     else
       {:error, reason} ->
@@ -89,19 +95,20 @@ defmodule XMAVLink.Util.SITL do
         socket,
         0,
         router,
-        destination_address
+        destination_address,
+        dialect
       ) do
     XMAVLink.Router.pack_and_send(
       router,
-      %RequestDataStream{
+      struct(message_module(dialect, :RequestDataStream), %{
         target_system: system_id,
         # APM Planner sends this, doesn't work with real component id
         target_component: 0,
         # TODO Not a bitmask, where is clue in MAVlink that this field is related?
-        req_stream_id: Common.encode(:mav_data_stream_rc_channels, :mav_data_stream),
+        req_stream_id: apply(dialect, :encode, [:mav_data_stream_rc_channels, :mav_data_stream]),
         req_message_rate: 18,
         start_stop: 1
-      },
+      }),
       mavlink_version
     )
 
@@ -113,7 +120,8 @@ defmodule XMAVLink.Util.SITL do
       socket,
       @resend_stream_interval,
       router,
-      destination_address
+      destination_address,
+      dialect
     )
   end
 
@@ -125,10 +133,14 @@ defmodule XMAVLink.Util.SITL do
         socket,
         count,
         router,
-        destination_address
+        destination_address,
+        dialect
       ) do
+    rc_channels_raw_module = message_module(dialect, :RcChannelsRaw)
+
     receive do
-      %RcChannelsRaw{
+      %{
+        __struct__: ^rc_channels_raw_module,
         chan1_raw: c1,
         chan2_raw: c2,
         chan3_raw: c3,
@@ -162,7 +174,8 @@ defmodule XMAVLink.Util.SITL do
           socket,
           count - 1,
           router,
-          destination_address
+          destination_address,
+          dialect
         )
     end
   end
@@ -176,4 +189,6 @@ defmodule XMAVLink.Util.SITL do
 
   defp resolve_destination_address(address) when is_binary(address), do: resolve_address(address)
   defp resolve_destination_address(_address), do: {:error, :invalid_destination_address}
+
+  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 end

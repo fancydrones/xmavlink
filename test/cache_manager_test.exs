@@ -2,6 +2,7 @@ defmodule XMAVLink.Util.CacheManager.Test do
   use ExUnit.Case
 
   alias XMAVLink.Util.CacheManager
+  alias XMAVLink.Util.Context
 
   setup do
     delete_utility_tables()
@@ -82,6 +83,57 @@ defmodule XMAVLink.Util.CacheManager.Test do
            ] = :ets.lookup(:systems, {1, 1})
   end
 
+  test "caches and reads messages from prefixed utility tables" do
+    context = Context.new(router: XMAVLink.Router, dialect: Common, table_prefix: :vehicle_a)
+    tables = context.tables
+    delete_tables(Map.values(tables))
+    create_utility_tables(tables)
+
+    on_exit(fn -> delete_tables(Map.values(tables)) end)
+
+    heartbeat = %Common.Message.Heartbeat{
+      type: :mav_type_quadrotor,
+      autopilot: :mav_autopilot_ardupilotmega,
+      base_mode: MapSet.new(),
+      custom_mode: 0,
+      system_status: :mav_state_active,
+      mavlink_version: 3
+    }
+
+    frame = %XMAVLink.Frame{
+      message: heartbeat,
+      source_system: 1,
+      source_component: 1,
+      version: 2
+    }
+
+    state = %CacheManager{
+      context: context,
+      router: context.router,
+      auto_param_request: false,
+      dialect: context.dialect,
+      table_prefix: context.table_prefix,
+      tables: context.tables
+    }
+
+    assert {:noreply, ^state} = CacheManager.handle_info(frame, state)
+
+    assert [
+             {{1, 1},
+              %{
+                mavlink_major_version: 2,
+                mavlink_minor_version: 3,
+                param_count: 0,
+                param_count_loaded: 0
+              }}
+           ] = :ets.lookup(tables.systems, {1, 1})
+
+    assert {:ok, [{1, 1}]} = CacheManager.mavs(context: context)
+
+    assert {:ok, _age_ms, ^heartbeat} =
+             CacheManager.msg({1, 1, 2}, Common.Message.Heartbeat, context: context)
+  end
+
   test "one second loop reschedules one second loop" do
     state = %CacheManager{one_second_interval_ms: 1}
 
@@ -117,12 +169,21 @@ defmodule XMAVLink.Util.CacheManager.Test do
     :ets.new(:params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
   end
 
+  defp create_utility_tables(tables) do
+    :ets.new(tables.messages, [:named_table, :protected, {:read_concurrency, true}, :set])
+    :ets.new(tables.systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+    :ets.new(tables.params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+    :ets.new(tables.sessions, [:named_table, :protected, {:read_concurrency, true}, :set])
+  end
+
   defp delete_utility_tables do
     delete_table(:messages)
     delete_table(:systems)
     delete_table(:params)
     delete_table(:sessions)
   end
+
+  defp delete_tables(tables), do: Enum.each(tables, &delete_table/1)
 
   defp delete_table(table) do
     if :ets.info(table) != :undefined do

@@ -777,6 +777,68 @@ defmodule XMAVLink.Test.Router do
       GenServer.stop(router_pid)
     end
 
+    test "local wildcard targeted sends dedupe learned routes that share a udpout socket" do
+      {:ok, trap_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, trap_port} = :inet.port(trap_socket)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: ["udpout:127.0.0.1:#{trap_port}"]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(trap_socket)
+        stop_router(router_pid)
+      end)
+
+      udpout_socket = wait_for_udpout_socket(router_pid)
+      reply_address = {10, 42, 0, 1}
+
+      send(
+        router_pid,
+        {:udp, udpout_socket, reply_address, trap_port,
+         packed_remote_frame(sample_heartbeat(), 2, 1).mavlink_2_raw}
+      )
+
+      send(
+        router_pid,
+        {:udp, udpout_socket, reply_address, trap_port,
+         packed_remote_frame(sample_heartbeat(), 3, 1).mavlink_2_raw}
+      )
+
+      state = :sys.get_state(router_pid)
+      assert state.routes[{2, 1}] == udpout_socket
+      assert state.routes[{3, 1}] == udpout_socket
+      flush_udp(trap_socket)
+
+      assert {:ok, delivery} =
+               Router.send_message(
+                 router_pid,
+                 %Common.Message.Ping{
+                   time_usec: 0,
+                   seq: 1,
+                   target_system: 0,
+                   target_component: 0
+                 },
+                 version: 2
+               )
+
+      assert delivery.source_connection == :local
+      assert delivery.recipients == [udpout_socket]
+      assert delivery.remote_recipients == [udpout_socket]
+      refute delivery.unreachable?
+
+      assert_receive {:udp, ^trap_socket, _, _, _}, 200
+      refute_receive {:udp, ^trap_socket, _, _, _}, 50
+    end
+
     defp wait_for_udpout_socket(router_pid, attempts \\ 50) do
       state = :sys.get_state(router_pid)
 
@@ -1168,6 +1230,64 @@ defmodule XMAVLink.Test.Router do
   end
 
   describe "pack_and_send/3" do
+    test "wraps local MAVLink sequence numbers after 255" do
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 100,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn -> stop_router(router_pid) end)
+
+      assert :ok = Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true)
+
+      sequence_numbers =
+        for _ <- 0..256 do
+          assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 2)
+          assert_receive %XMAVLink.Frame{sequence_number: sequence_number}, 200
+          sequence_number
+        end
+
+      assert Enum.take(sequence_numbers, 256) == Enum.to_list(0..255)
+      assert List.last(sequence_numbers) == 0
+
+      Router.unsubscribe(router_pid)
+    end
+
+    test "send_message/3 reports unreachable local targeted sends" do
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 100,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn -> stop_router(router_pid) end)
+
+      assert {:ok, delivery} =
+               Router.send_message(
+                 router_pid,
+                 param_request_list(42, 1),
+                 version: 2
+               )
+
+      assert delivery.source_connection == :local
+      assert delivery.recipients == []
+      assert delivery.remote_recipients == []
+      assert delivery.unreachable?
+    end
+
     test "can override the local source identity for one message" do
       {:ok, pid} =
         Router.start_link(
