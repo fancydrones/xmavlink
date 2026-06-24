@@ -42,8 +42,9 @@ Current trust boundaries:
   Use `utilities: [auto_param_request: false]` or pass
   `auto_param_request: false` to `XMAVLink.Util.Supervisor` when vehicle
   discovery happens on a less trusted network.
-- `mix xmavlink` treats MAVLink XML dialect files as trusted build inputs. Do
-  not run the generator on arbitrary untrusted XML.
+- `mix xmavlink` treats MAVLink XML dialect files as trusted build inputs. The
+  parser applies include graph and size limits, but you should not run the
+  generator on arbitrary untrusted XML.
 
 ## Deployment Checklist
 

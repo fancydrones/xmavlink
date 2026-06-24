@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Added MAVLink XML parser hardening for include cycles, conflicting include
+  paths, file-size limits, include-depth limits, and include-count limits.
+
 ## 0.14.1 - 2026-06-25
 
 ### Added
