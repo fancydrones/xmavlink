@@ -137,9 +137,9 @@ defmodule XMAVLink.Util.FocusManager do
       {nil, _monitors} ->
         {:noreply, state}
 
-      {monitored_pid, monitors} ->
-        {session, sessions} = Map.pop(state.sessions, monitored_pid)
-        delete_session(session, monitored_pid)
+      {session_key, monitors} ->
+        {session, sessions} = Map.pop(state.sessions, session_key)
+        delete_session(session, session_pid(session_key))
 
         {:noreply,
          %{
@@ -162,19 +162,20 @@ defmodule XMAVLink.Util.FocusManager do
   end
 
   defp put_focus_session(state, tables, pid, scid) do
-    state = drop_focus_monitor(state, pid)
+    session_key = {pid, tables.sessions}
+    state = drop_focus_monitor(state, session_key)
     ref = Process.monitor(pid)
     :ets.insert(tables.sessions, {pid, scid})
 
     %{
       state
-      | monitors: Map.put(state.monitors, ref, pid),
-        sessions: Map.put(state.sessions, pid, {ref, tables.sessions})
+      | monitors: Map.put(state.monitors, ref, session_key),
+        sessions: Map.put(state.sessions, session_key, {ref, tables.sessions})
     }
   end
 
-  defp drop_focus_monitor(state, pid) do
-    case Map.pop(state.sessions, pid) do
+  defp drop_focus_monitor(state, session_key = {pid, _sessions_table}) do
+    case Map.pop(state.sessions, session_key) do
       {nil, _sessions} ->
         state
 
@@ -200,6 +201,8 @@ defmodule XMAVLink.Util.FocusManager do
       :ets.delete(sessions_table, pid)
     end
   end
+
+  defp session_pid({pid, _sessions_table}), do: pid
 
   defp format({s, c, _}), do: format({s, c})
   defp format({s, c}), do: "#{s}.#{c}"

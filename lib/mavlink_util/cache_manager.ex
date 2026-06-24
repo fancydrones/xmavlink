@@ -314,7 +314,7 @@ defmodule XMAVLink.Util.CacheManager do
          mavlink_major_version,
          state
        ) do
-    if match_message?(message, state.dialect, :Heartbeat) do
+    if message_module?(message, state.dialect, :Heartbeat) do
       # First time this MAV system seen, create a system record
       :ets.insert(
         state.tables.systems,
@@ -355,7 +355,7 @@ defmodule XMAVLink.Util.CacheManager do
          _,
          state
        ) do
-    if match_message?(param_value_msg, state.dialect, :ParamValue) do
+    if message_module?(param_value_msg, state.dialect, :ParamValue) do
       with [{_, system = %{param_count_loaded: param_count_loaded}}] <-
              :ets.lookup(state.tables.systems, {source_system_id, source_component_id}),
            is_new <-
@@ -432,10 +432,8 @@ defmodule XMAVLink.Util.CacheManager do
 
   defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 
-  defp match_message?(%{__struct__: module}, dialect, name),
+  defp message_module?(%{__struct__: module}, dialect, name),
     do: module == message_module(dialect, name)
-
-  defp match_message?(_message, _dialect, _name), do: false
 
   defp describe(dialect, value) do
     if function_exported?(dialect, :describe, 1) do

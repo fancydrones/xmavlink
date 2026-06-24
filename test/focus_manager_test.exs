@@ -54,17 +54,27 @@ defmodule XMAVLink.Util.FocusManager.Test do
   end
 
   test "focus can be scoped to a utility context" do
-    context = Context.new(table_prefix: :vehicle_a)
-    delete_tables(Map.values(context.tables))
-    create_systems_table(context.tables.systems)
-    create_sessions_table(context.tables.sessions)
+    first_context = Context.new(table_prefix: :vehicle_a)
+    second_context = Context.new(table_prefix: :vehicle_b)
+    delete_tables(Map.values(first_context.tables))
+    delete_tables(Map.values(second_context.tables))
+    create_systems_table(first_context.tables.systems)
+    create_systems_table(second_context.tables.systems)
+    create_sessions_table(first_context.tables.sessions)
+    create_sessions_table(second_context.tables.sessions)
 
-    on_exit(fn -> delete_tables(Map.values(context.tables)) end)
+    on_exit(fn ->
+      delete_tables(Map.values(first_context.tables))
+      delete_tables(Map.values(second_context.tables))
+    end)
 
-    :ets.insert(context.tables.systems, {{2, 1}, %{mavlink_major_version: 2}})
+    :ets.insert(first_context.tables.systems, {{2, 1}, %{mavlink_major_version: 2}})
+    :ets.insert(second_context.tables.systems, {{3, 1}, %{mavlink_major_version: 2}})
 
-    assert :ok = FocusManager.focus(2, 1, context: context)
-    assert {:ok, {2, 1, 2}} = FocusManager.focus(context: context)
+    assert :ok = FocusManager.focus(2, 1, context: first_context)
+    assert :ok = FocusManager.focus(3, 1, context: second_context)
+    assert {:ok, {2, 1, 2}} = FocusManager.focus(context: first_context)
+    assert {:ok, {3, 1, 2}} = FocusManager.focus(context: second_context)
     assert {:error, :not_focussed} = FocusManager.focus()
   end
 

@@ -50,14 +50,11 @@ defmodule XMAVLink.ConnectionSpec do
     do: raise(ArgumentError, message: "invalid #{protocol} connection string")
 
   defp validate_port_and_baud(["serial", port, baud]) do
-    case {is_binary(port), parse_positive_integer(baud)} do
-      {false, _} ->
-        raise ArgumentError, message: "Invalid port #{port}"
-
-      {_, :error} ->
+    case parse_positive_integer(baud) do
+      :error ->
         raise ArgumentError, message: "invalid baud rate #{baud}"
 
-      {true, parsed_baud} ->
+      parsed_baud ->
         ["serial", port, parsed_baud]
     end
   end
