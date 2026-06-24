@@ -93,7 +93,8 @@ for upstream or application-owned dialect files, not arbitrary untrusted XML.
 
 ## Configuring the XMAVLink Application
 
-Add `XMAVLink.Application` with no start arguments to your `mix.exs`. You need to point the application at the dialect you just generated 
+Add the `:xmavlink` OTP application with no start arguments to your `mix.exs`.
+You need to point the application at the dialect you just generated
 and list the connections to other vehicles in `config.exs`:
 
 ```
@@ -416,7 +417,8 @@ The default context still uses the configured `:xmavlink` router and dialect,
 with the historical table names `:messages`, `:systems`, `:params`, and
 `:sessions`. Applications that read utility ETS tables directly should migrate
 to `XMAVLink.Util.Context.new/1` and `XMAVLink.Util.Tables.name/2` instead of
-hard-coding those names.
+hard-coding those names. See [MIGRATING_0_14.md](MIGRATING_0_14.md) for
+examples and public cache query APIs that avoid direct ETS reads.
 
 Command helpers such as arm/disarm and parameter setting use bounded retry
 loops by default. Pass `:retries`, `:retry_interval_ms`, or `:context` in the

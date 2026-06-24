@@ -6,14 +6,7 @@ defmodule XMAVLink.Router.Routing do
 
   @system_time_message_id 2
 
-  @type delivery :: %{
-          source_connection: Router.connection_key(),
-          recipients: [Router.connection_key()],
-          remote_recipients: [Router.connection_key()],
-          target: XMAVLink.Dialect.target() | nil,
-          message_id: XMAVLink.Types.message_id(),
-          unreachable?: boolean
-        }
+  @type delivery :: Router.delivery()
 
   def update_route_info(
         {:ok, source_connection_key, source_connection,

@@ -93,6 +93,15 @@ defmodule XMAVLink.Router do
   @type mavlink_address :: Types.mavlink_address()
   @type mavlink_connection :: Types.connection()
   @type connection_key :: :local | binary | port | {port, Types.net_address(), Types.net_port()}
+  @typedoc "Delivery metadata returned by `send_message/1..3`."
+  @type delivery :: %{
+          source_connection: connection_key(),
+          recipients: [connection_key()],
+          remote_recipients: [connection_key()],
+          target: XMAVLink.Dialect.target() | nil,
+          message_id: Types.message_id(),
+          unreachable?: boolean
+        }
   @type router_name :: atom | {:global, term} | {:via, module, term}
   @type router_ref :: GenServer.server()
   @type subscribe_query :: [
@@ -386,19 +395,18 @@ defmodule XMAVLink.Router do
   keys are internal runtime identifiers, but they are useful for observability
   and tests.
   """
-  @spec send_message(Message.t()) :: {:ok, Routing.delivery()} | {:error, term}
+  @spec send_message(Message.t()) :: {:ok, delivery()} | {:error, term}
   def send_message(message), do: send_message(__MODULE__, message, [])
 
-  @spec send_message(Message.t(), keyword) :: {:ok, Routing.delivery()} | {:error, term}
+  @spec send_message(Message.t(), keyword) :: {:ok, delivery()} | {:error, term}
   def send_message(message, opts) when is_map(message) and is_list(opts),
     do: send_message(__MODULE__, message, opts)
 
-  @spec send_message(router_ref, Message.t()) :: {:ok, Routing.delivery()} | {:error, term}
+  @spec send_message(router_ref, Message.t()) :: {:ok, delivery()} | {:error, term}
   def send_message(router, message) when is_router_ref(router) and is_map(message),
     do: send_message(router, message, [])
 
-  @spec send_message(router_ref, Message.t(), keyword) ::
-          {:ok, Routing.delivery()} | {:error, term}
+  @spec send_message(router_ref, Message.t(), keyword) :: {:ok, delivery()} | {:error, term}
   def send_message(router, message, opts) when is_router_ref(router) and is_map(message) do
     version = Keyword.get(opts, :version, 2)
 

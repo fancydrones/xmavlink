@@ -44,3 +44,20 @@ Current trust boundaries:
   discovery happens on a less trusted network.
 - `mix xmavlink` treats MAVLink XML dialect files as trusted build inputs. Do
   not run the generator on arbitrary untrusted XML.
+
+## Deployment Checklist
+
+- Expose UDP listeners only on trusted networks, VPNs, or filtered interfaces.
+- Prefer MAVLink 2 signing on links where peers are not fully trusted.
+- Keep `accept_unsigned: false` unless a migration or mixed-link deployment
+  explicitly requires unsigned MAVLink 2 frames on a signed connection.
+- Persist signing timestamps with the configured load/save callbacks when
+  restart replay protection matters.
+- Treat signing keys and `SETUP_SIGNING` payloads as secrets.
+- Disable utility `auto_param_request` on less trusted networks and request
+  parameter lists only after a peer is expected.
+- Run routers with `remote_forwarding: false` for endpoint or GCS deployments
+  that should not bridge traffic between remote links.
+- Validate firewall, routing, and serial-device ownership outside XMAVLink;
+  the library parses and routes MAVLink frames but does not authenticate peers
+  at the network layer.
