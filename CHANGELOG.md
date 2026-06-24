@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+
+- Utility cache ETS tables now store typed cache structs for visible systems,
+  latest messages, and parameter values. Use `XMAVLink.Util.CacheManager`
+  query APIs instead of relying on direct ETS payload shapes.
+
 ## 0.14.1 - 2026-06-25
 
 ### Added

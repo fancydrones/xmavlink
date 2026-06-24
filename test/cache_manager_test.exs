@@ -1,6 +1,9 @@
 defmodule XMAVLink.Util.CacheManager.Test do
   use ExUnit.Case
 
+  alias XMAVLink.Util.Cache.Message, as: CachedMessage
+  alias XMAVLink.Util.Cache.Param, as: CachedParam
+  alias XMAVLink.Util.Cache.System, as: CachedSystem
   alias XMAVLink.Util.CacheManager
   alias XMAVLink.Util.Context
 
@@ -21,8 +24,22 @@ defmodule XMAVLink.Util.CacheManager.Test do
   end
 
   test "list_systems/1 returns cached system metadata" do
-    first = %{mavlink_major_version: 2, param_count: 4, param_count_loaded: 2}
-    second = %{mavlink_major_version: 1, param_count: 0, param_count_loaded: 0}
+    first =
+      CachedSystem.new(%{
+        mavlink_major_version: 2,
+        mavlink_minor_version: 3,
+        param_count: 4,
+        param_count_loaded: 2
+      })
+
+    second =
+      CachedSystem.new(%{
+        mavlink_major_version: 1,
+        mavlink_minor_version: 0,
+        param_count: 0,
+        param_count_loaded: 0
+      })
+
     :ets.insert(:systems, {{2, 1}, second})
     :ets.insert(:systems, {{1, 1}, first})
 
@@ -42,7 +59,11 @@ defmodule XMAVLink.Util.CacheManager.Test do
     }
 
     received_at = :erlang.monotonic_time(:milli_seconds) - 10
-    :ets.insert(:messages, {{1, 1, Common.Message.Heartbeat}, {received_at, heartbeat}})
+
+    :ets.insert(
+      :messages,
+      {{1, 1, Common.Message.Heartbeat}, CachedMessage.new(heartbeat, received_at)}
+    )
 
     assert {:ok, age_ms, ^heartbeat} = CacheManager.latest_message(1, 1, Common.Message.Heartbeat)
     assert age_ms >= 0
@@ -52,14 +73,16 @@ defmodule XMAVLink.Util.CacheManager.Test do
     :ets.insert(
       :params,
       {{1, 1, "SYSID_THISMAV"},
-       {0,
-        %Common.Message.ParamValue{
-          param_id: "SYSID_THISMAV",
-          param_value: 42.0,
-          param_count: 1,
-          param_index: 0,
-          param_type: :mav_param_type_real32
-        }}}
+       CachedParam.new(
+         %Common.Message.ParamValue{
+           param_id: "SYSID_THISMAV",
+           param_value: 42.0,
+           param_count: 1,
+           param_index: 0,
+           param_type: :mav_param_type_real32
+         },
+         0
+       )}
     )
 
     assert {:ok, params} = CacheManager.params({1, 1, 2}, "SYSID")
@@ -77,7 +100,7 @@ defmodule XMAVLink.Util.CacheManager.Test do
     }
 
     received_at = :erlang.monotonic_time(:milli_seconds) - 10
-    :ets.insert(:params, {{1, 1, "SYSID_THISMAV"}, {received_at, param}})
+    :ets.insert(:params, {{1, 1, "SYSID_THISMAV"}, CachedParam.new(param, received_at)})
 
     assert {:ok, age_ms, ^param} = CacheManager.get_param(1, 1, :sysid_thismav)
     assert age_ms >= 0
@@ -118,7 +141,7 @@ defmodule XMAVLink.Util.CacheManager.Test do
 
     assert [
              {{1, 1},
-              %{
+              %CachedSystem{
                 mavlink_major_version: 2,
                 mavlink_minor_version: 3,
                 param_count: 0,
@@ -164,7 +187,7 @@ defmodule XMAVLink.Util.CacheManager.Test do
 
     assert [
              {{1, 1},
-              %{
+              %CachedSystem{
                 mavlink_major_version: 2,
                 mavlink_minor_version: 3,
                 param_count: 0,
@@ -174,7 +197,7 @@ defmodule XMAVLink.Util.CacheManager.Test do
 
     assert {:ok, [{1, 1}]} = CacheManager.mavs(context: context)
 
-    assert {:ok, [{{1, 1}, %{mavlink_major_version: 2}}]} =
+    assert {:ok, [{{1, 1}, %CachedSystem{mavlink_major_version: 2}}]} =
              CacheManager.list_systems(context: context)
 
     assert {:ok, _age_ms, ^heartbeat} =
