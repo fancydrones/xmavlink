@@ -28,6 +28,7 @@
 ### Fixed
 
 - Fixed local MAVLink sequence numbers to wrap after the full `0..255` range.
+- Preserved utility focus independently for each scoped utility context.
 - Deduplicated targeted route recipients when multiple learned MAVLink
   addresses resolve to the same connection.
 - Updated the `XMAVLink.Message` invalid-term fallback to stay compatible with
