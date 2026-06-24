@@ -3,14 +3,13 @@ defmodule XMAVLink.UDPInConnection do
   MXAVLink.Router delegate for UDP connections
   """
 
-  require Logger
-  import XMAVLink.Frame, only: [binary_to_frame_and_tail: 1, validate_and_unpack: 3]
+  @behaviour XMAVLink.Transport
 
+  require Logger
+
+  alias XMAVLink.Connection.Inbound
   alias XMAVLink.ConnectionWorker
   alias XMAVLink.Frame
-
-  @mavlink_2_signature_flag 0x01
-  @mavlink_2_signature_length 13
 
   defstruct address: nil,
             port: nil,
@@ -36,46 +35,16 @@ defmodule XMAVLink.UDPInConnection do
   end
 
   def handle_info({:udp, socket, source_addr, source_port, raw}, receiving_connection, dialect) do
-    case binary_to_frame_and_tail(raw) do
-      :not_a_frame ->
-        # Noise or malformed frame
-        :ok = Logger.debug("UDPInConnection.handle_info: Not a frame #{inspect(raw)}")
-        {:error, :not_a_frame, {socket, source_addr, source_port}, receiving_connection}
+    connection_key = {socket, source_addr, source_port}
 
-      {nil, _rest} ->
-        reason = frame_parse_error(raw)
-        :ok = Logger.debug("UDPInConnection.handle_info: #{parse_error_message(reason)}")
-        {:error, reason, {socket, source_addr, source_port}, receiving_connection}
-
-      # UDP sends frame per packet, so ignore rest
-      {received_frame, _rest} ->
-        case validate_and_unpack(received_frame, dialect, receiving_connection.signing) do
-          {:ok, valid_frame, signing} ->
-            # Include address and port in connection key because multiple
-            # clients can connect to a UDP "in" port.
-            {:ok, {socket, source_addr, source_port},
-             struct(receiving_connection, signing: signing), valid_frame}
-
-          {:unknown_message, signing} ->
-            # We re-broadcast valid frames with unknown messages
-            :ok =
-              Logger.debug("rebroadcasting unknown message with id #{received_frame.message_id}")
-
-            {:ok, {socket, source_addr, source_port},
-             struct(receiving_connection, signing: signing),
-             struct(received_frame, target: :broadcast)}
-
-          {:error, reason, signing} ->
-            :ok =
-              Logger.debug(
-                "UDPInConnection.handle_info: frame received from " <>
-                  "#{Enum.join(Tuple.to_list(source_addr), ".")}:#{source_port} failed: #{Atom.to_string(reason)}"
-              )
-
-            {:error, reason, {socket, source_addr, source_port},
-             struct(receiving_connection, signing: signing)}
-        end
-    end
+    Inbound.datagram(
+      raw,
+      receiving_connection,
+      connection_key,
+      dialect,
+      "UDPInConnection.handle_info",
+      "from #{Enum.join(Tuple.to_list(source_addr), ".")}:#{source_port}"
+    )
   end
 
   def handle_info({:udp, socket, source_addr, source_port, raw}, nil, dialect, worker) do
@@ -99,32 +68,6 @@ defmodule XMAVLink.UDPInConnection do
       dialect
     )
   end
-
-  defp frame_parse_error(
-         raw =
-           <<0xFD, payload_length::unsigned-integer-size(8),
-             incompatible_flags::unsigned-integer-size(8), _rest::binary>>
-       )
-       when incompatible_flags != 0 do
-    complete_length =
-      payload_length + 12 +
-        if Bitwise.band(incompatible_flags, @mavlink_2_signature_flag) != 0 do
-          @mavlink_2_signature_length
-        else
-          0
-        end
-
-    if byte_size(raw) >= complete_length do
-      :incompatible_flags
-    else
-      :incomplete_frame
-    end
-  end
-
-  defp frame_parse_error(_raw), do: :incomplete_frame
-
-  defp parse_error_message(:incompatible_flags), do: "Incompatible MAVLink 2 frame"
-  defp parse_error_message(:incomplete_frame), do: "Incomplete MAVLink frame"
 
   def open(["udpin", address, port], controlling_process) do
     # Do not add to connections, we don't want to forward to ourselves

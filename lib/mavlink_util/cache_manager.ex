@@ -9,18 +9,17 @@ defmodule XMAVLink.Util.CacheManager do
 
   Using ETS tables allows clients to perform read only API operations directly
   on the tables, preventing this GenServer from becoming a bottleneck.
+
+  Use `XMAVLink.Util.Context` when utility state should be scoped to a
+  specific router, dialect, or ETS table namespace.
   """
 
   use GenServer
   require Logger
+  alias XMAVLink.Util.{Context, Defaults, Tables}
   alias XMAVLink.Util.ParamRequest
-  alias Common.Message.Heartbeat
-  alias Common.Message.ParamValue
-  import XMAVLink.Util.FocusManager, only: [focus: 0]
+  import XMAVLink.Util.FocusManager, only: [focus: 0, focus: 1]
 
-  @messages :messages
-  @systems :systems
-  @params :params
   @one_second_loop :one_second_loop
   @five_second_loop :five_second_loop
   @ten_second_loop :ten_second_loop
@@ -28,8 +27,12 @@ defmodule XMAVLink.Util.CacheManager do
   defstruct one_second_interval_ms: 1_000,
             five_second_interval_ms: 5_000,
             ten_second_interval_ms: 10_000,
+            context: nil,
             router: nil,
-            auto_param_request: true
+            auto_param_request: true,
+            dialect: Defaults.default_dialect(),
+            table_prefix: nil,
+            tables: Tables.names()
 
   # API
 
@@ -37,32 +40,56 @@ defmodule XMAVLink.Util.CacheManager do
     GenServer.start_link(__MODULE__, state, Keyword.put_new(opts, :name, __MODULE__))
   end
 
-  def mavs() do
-    with :ok <- require_table(@systems) do
-      scids = :ets.foldl(fn {scid, _}, acc -> [scid | acc] end, [], @systems)
+  def mavs(opts \\ []) do
+    context = Context.new(opts)
+    systems = context.tables.systems
+
+    with :ok <- require_table(systems) do
+      scids = :ets.foldl(fn {scid, _}, acc -> [scid | acc] end, [], systems)
       Logger.info("Listing #{length(scids)} visible vehicles")
       {:ok, scids}
     end
   end
 
-  def router() do
-    case GenServer.whereis(__MODULE__) do
-      nil ->
-        Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
+  def router(opts \\ []) do
+    cond do
+      Keyword.has_key?(opts, :context) or Keyword.has_key?(opts, :router) ->
+        Context.new(opts).router
 
-      pid ->
+      pid = GenServer.whereis(__MODULE__) ->
         GenServer.call(pid, :router)
+
+      true ->
+        Context.new().router
     end
   end
 
-  def msg() do
+  def msg(), do: msg([])
+
+  def msg(opts) when is_list(opts) do
+    with {:ok, scid} <- focus(opts) do
+      msg(scid, opts)
+    end
+  end
+
+  def msg(scid = {_, _, _}), do: msg(scid, [])
+
+  def msg(name) do
     with {:ok, scid} <- focus() do
-      msg(scid)
+      msg(scid, name)
     end
   end
 
-  def msg({system_id, component_id, _}) do
-    with :ok <- require_table(@messages) do
+  def msg(name, opts) when is_atom(name) and is_list(opts) do
+    with {:ok, scid} <- focus(opts) do
+      msg(scid, name, opts)
+    end
+  end
+
+  def msg({system_id, component_id, _}, opts) when is_list(opts) do
+    messages = Context.new(opts).tables.messages
+
+    with :ok <- require_table(messages) do
       {
         :ok,
         :ets.foldl(
@@ -74,22 +101,20 @@ defmodule XMAVLink.Util.CacheManager do
               acc
           end,
           %{},
-          @messages
+          messages
         )
       }
     end
   end
 
-  def msg(name) do
-    with {:ok, scid} <- focus() do
-      msg(scid, name)
-    end
-  end
+  def msg(scid = {_, _, _}, msg_type) when is_atom(msg_type), do: msg(scid, msg_type, [])
 
-  def msg({system_id, component_id, _}, msg_type) when is_atom(msg_type) do
-    with :ok <- require_table(@messages),
+  def msg({system_id, component_id, _}, msg_type, opts) when is_atom(msg_type) do
+    messages = Context.new(opts).tables.messages
+
+    with :ok <- require_table(messages),
          [{_key, {received, message}}] <-
-           :ets.lookup(@messages, {system_id, component_id, msg_type}) do
+           :ets.lookup(messages, {system_id, component_id, msg_type}) do
       Logger.info("Most recent \"#{dequalify_msg_type(msg_type)}\" message")
       {:ok, now() - received, message}
     else
@@ -105,15 +130,15 @@ defmodule XMAVLink.Util.CacheManager do
     end
   end
 
-  def params() do
-    with {:ok, scid} <- focus() do
-      params(scid)
+  def params(), do: params([])
+
+  def params(opts) when is_list(opts) do
+    with {:ok, scid} <- focus(opts) do
+      params(scid, opts)
     end
   end
 
-  def params(scid = {_, _, _}) do
-    params(scid, "")
-  end
+  def params(scid = {_, _, _}), do: params(scid, [])
 
   def params(match) when is_binary(match) do
     with {:ok, scid} <- focus() do
@@ -121,13 +146,30 @@ defmodule XMAVLink.Util.CacheManager do
     end
   end
 
-  def params({system_id, component_id, _mavlink_version}, match) when is_binary(match) do
-    with :ok <- require_table(@params),
+  def params(match, opts) when is_binary(match) and is_list(opts) do
+    with {:ok, scid} <- focus(opts) do
+      params(scid, match, opts)
+    end
+  end
+
+  def params(scid = {_, _, _}, opts) when is_list(opts) do
+    params(scid, "", opts)
+  end
+
+  def params(scid = {_, _, _}, match) when is_binary(match), do: params(scid, match, [])
+
+  def params({system_id, component_id, _mavlink_version}, match, opts) when is_binary(match) do
+    context = Context.new(opts)
+    params = context.tables.params
+    param_value_module = message_module(context.dialect, :ParamValue)
+
+    with :ok <- require_table(params),
          match_upcase <- String.upcase(match),
          param_map when is_map(param_map) <-
            :ets.foldl(
              fn
-               {{^system_id, ^component_id, param_id}, {_, %ParamValue{param_value: param_value}}},
+               {{^system_id, ^component_id, param_id},
+                {_, %{__struct__: ^param_value_module, param_value: param_value}}},
                acc ->
                  if String.contains?(param_id, match_upcase) do
                    Enum.into([{param_id, param_value}], acc)
@@ -139,7 +181,7 @@ defmodule XMAVLink.Util.CacheManager do
                  acc
              end,
              %{},
-             @params
+             params
            ) do
       Logger.info("Listing #{param_map |> Map.keys() |> length} parameters matching \"#{match}\"")
       {:ok, param_map}
@@ -155,12 +197,37 @@ defmodule XMAVLink.Util.CacheManager do
 
   @impl true
   def init(opts) do
-    :ets.new(@messages, [:named_table, :protected, {:read_concurrency, true}, :set])
-    :ets.new(@systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
-    :ets.new(@params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+    opts = Map.new(opts)
+    context = Context.new(opts)
 
-    state = __MODULE__ |> struct(opts) |> normalize_router()
-    XMAVLink.Router.subscribe(state.router, as_frame: true)
+    :ets.new(context.tables.messages, [:named_table, :protected, {:read_concurrency, true}, :set])
+
+    :ets.new(context.tables.systems, [
+      :named_table,
+      :protected,
+      {:read_concurrency, true},
+      :ordered_set
+    ])
+
+    :ets.new(context.tables.params, [
+      :named_table,
+      :protected,
+      {:read_concurrency, true},
+      :ordered_set
+    ])
+
+    state =
+      __MODULE__
+      |> struct(
+        opts
+        |> Map.put(:context, context)
+        |> Map.put(:router, context.router)
+        |> Map.put(:dialect, context.dialect)
+        |> Map.put(:table_prefix, context.table_prefix)
+        |> Map.put(:tables, context.tables)
+      )
+
+    XMAVLink.Router.subscribe(state.context.router, as_frame: true)
 
     {
       :ok,
@@ -197,10 +264,13 @@ defmodule XMAVLink.Util.CacheManager do
       ) do
     # Get the previously cached message of this type from the MAV, if any
     previous_message_list =
-      :ets.lookup(@messages, {source_system, source_component, message_type})
+      :ets.lookup(state.tables.messages, {source_system, source_component, message_type})
 
     # Replace with the new message
-    :ets.insert(@messages, {{source_system, source_component, message_type}, {now(), message}})
+    :ets.insert(
+      state.tables.messages,
+      {{source_system, source_component, message_type}, {now(), message}}
+    )
 
     # Delegate any message-specific behaviour to handle_mav_message()
     case previous_message_list do
@@ -240,36 +310,38 @@ defmodule XMAVLink.Util.CacheManager do
          source_system_id,
          source_component_id,
          nil,
-         %Heartbeat{type: type, mavlink_version: mavlink_minor_version},
+         %{type: type, mavlink_version: mavlink_minor_version} = message,
          mavlink_major_version,
          state
        ) do
-    # First time this MAV system seen, create a system record
-    :ets.insert(
-      @systems,
-      {
-        {source_system_id, source_component_id},
-        # TODO System struct
-        %{
-          mavlink_major_version: mavlink_major_version,
-          mavlink_minor_version: mavlink_minor_version,
-          param_count: 0,
-          param_count_loaded: 0
+    if message_module?(message, state.dialect, :Heartbeat) do
+      # First time this MAV system seen, create a system record
+      :ets.insert(
+        state.tables.systems,
+        {
+          {source_system_id, source_component_id},
+          # TODO System struct
+          %{
+            mavlink_major_version: mavlink_major_version,
+            mavlink_minor_version: mavlink_minor_version,
+            param_count: 0,
+            param_count_loaded: 0
+          }
         }
-      }
-    )
+      )
 
-    Logger.info(
-      "First sighting of vehicle #{source_system_id}.#{source_component_id}: #{Common.describe(type)}"
-    )
+      Logger.info(
+        "First sighting of vehicle #{source_system_id}.#{source_component_id}: #{describe(state.dialect, type)}"
+      )
 
-    if state.auto_param_request do
-      spawn_link(ParamRequest, :param_request_list, [
-        source_system_id,
-        source_component_id,
-        mavlink_major_version,
-        [router: state.router]
-      ])
+      if state.auto_param_request do
+        spawn_link(ParamRequest, :param_request_list, [
+          source_system_id,
+          source_component_id,
+          mavlink_major_version,
+          [context: state.context]
+        ])
+      end
     end
 
     state
@@ -279,33 +351,36 @@ defmodule XMAVLink.Util.CacheManager do
          source_system_id,
          source_component_id,
          _,
-         param_value_msg = %ParamValue{param_id: param_id, param_count: param_count},
+         param_value_msg = %{param_id: param_id, param_count: param_count},
          _,
          state
        ) do
-    with [{_, system = %{param_count_loaded: param_count_loaded}}] <-
-           :ets.lookup(@systems, {source_system_id, source_component_id}),
-         is_new <-
-           :ets.lookup(@params, {source_system_id, source_component_id, param_id})
-           |> length
-           |> Kernel.==(0),
-         true <-
-           :ets.insert(
-             @params,
-             {{source_system_id, source_component_id, param_id}, {now(), param_value_msg}}
-           ) do
-      # TODO Hidden parameters can become un-hidden, increasing param_count, in which case we need to spawn param_request_list again.
-      :ets.insert(
-        @systems,
-        {
-          {source_system_id, source_component_id},
-          %{
-            system
-            | param_count: param_count,
-              param_count_loaded: if(is_new, do: param_count_loaded + 1, else: param_count_loaded)
+    if message_module?(param_value_msg, state.dialect, :ParamValue) do
+      with [{_, system = %{param_count_loaded: param_count_loaded}}] <-
+             :ets.lookup(state.tables.systems, {source_system_id, source_component_id}),
+           is_new <-
+             :ets.lookup(state.tables.params, {source_system_id, source_component_id, param_id})
+             |> length
+             |> Kernel.==(0),
+           true <-
+             :ets.insert(
+               state.tables.params,
+               {{source_system_id, source_component_id, param_id}, {now(), param_value_msg}}
+             ) do
+        # TODO Hidden parameters can become un-hidden, increasing param_count, in which case we need to spawn param_request_list again.
+        :ets.insert(
+          state.tables.systems,
+          {
+            {source_system_id, source_component_id},
+            %{
+              system
+              | param_count: param_count,
+                param_count_loaded:
+                  if(is_new, do: param_count_loaded + 1, else: param_count_loaded)
+            }
           }
-        }
-      )
+        )
+      end
     end
 
     state
@@ -355,12 +430,16 @@ defmodule XMAVLink.Util.CacheManager do
     end
   end
 
-  defp normalize_router(state = %{router: nil}) do
-    %{
-      state
-      | router: Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
-    }
-  end
+  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 
-  defp normalize_router(state), do: state
+  defp message_module?(%{__struct__: module}, dialect, name),
+    do: module == message_module(dialect, name)
+
+  defp describe(dialect, value) do
+    if function_exported?(dialect, :describe, 1) do
+      apply(dialect, :describe, [value])
+    else
+      inspect(value)
+    end
+  end
 end

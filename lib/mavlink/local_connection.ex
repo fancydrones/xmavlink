@@ -207,7 +207,7 @@ defmodule XMAVLink.LocalConnection do
         initial_sequence_number(local_connection, source_identity)
       )
 
-    next_sequence_number = rem(sequence_number + 1, 255)
+    next_sequence_number = rem(sequence_number + 1, 256)
 
     updated_connection = %LocalConnection{
       local_connection

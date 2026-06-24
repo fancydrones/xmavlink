@@ -51,6 +51,41 @@ defmodule XMAVLink.ApplicationTest do
     assert %XMAVLink.Util.CacheManager{auto_param_request: false} = :sys.get_state(cache_manager)
   end
 
+  test "passes utility context to utility processes" do
+    previous_env =
+      save_env([:dialect, :router_name, :connections, :utilities, :heartbeat, :heartbeats])
+
+    context =
+      XMAVLink.Util.Context.new(
+        router: XMAVLink.Router,
+        dialect: Common,
+        table_prefix: :vehicle_a
+      )
+
+    Application.put_env(:xmavlink, :dialect, Common)
+    Application.put_env(:xmavlink, :router_name, XMAVLink.Router)
+    Application.put_env(:xmavlink, :connections, [])
+    Application.put_env(:xmavlink, :utilities, context: context)
+    Application.delete_env(:xmavlink, :heartbeat)
+    Application.delete_env(:xmavlink, :heartbeats)
+    delete_tables(Map.values(context.tables))
+
+    assert {:ok, supervisor} = XMAVLink.Application.start(:normal, [])
+
+    on_exit(fn ->
+      stop_supervisor(supervisor)
+      cleanup_process(XMAVLink.SubscriptionCache)
+      delete_tables(Map.values(context.tables))
+      restore_env(previous_env)
+    end)
+
+    cache_manager = Process.whereis(XMAVLink.Util.CacheManager)
+
+    assert %XMAVLink.Util.CacheManager{context: ^context} = :sys.get_state(cache_manager)
+    assert :ets.info(context.tables.messages) != :undefined
+    assert :ets.info(:messages) == :undefined
+  end
+
   test "rejects invalid utility options with a clear error" do
     previous_env =
       save_env([:dialect, :router_name, :connections, :utilities, :heartbeat, :heartbeats])
@@ -97,7 +132,11 @@ defmodule XMAVLink.ApplicationTest do
   end
 
   defp delete_utility_tables do
-    for table <- [:messages, :systems, :params, :sessions], :ets.info(table) != :undefined do
+    delete_tables([:messages, :systems, :params, :sessions])
+  end
+
+  defp delete_tables(tables) do
+    for table <- tables, :ets.info(table) != :undefined do
       :ets.delete(table)
     end
   end

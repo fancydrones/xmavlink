@@ -10,6 +10,7 @@ defmodule XMAVLink.Supervisor do
   @impl true
   def init(_) do
     router_name = Application.get_env(:xmavlink, :router_name, XMAVLink.Router) || XMAVLink.Router
+    router_config = XMAVLink.Router.Config.from_application_env()
 
     children =
       [
@@ -21,19 +22,7 @@ defmodule XMAVLink.Supervisor do
           # How many serial ports might you need?
           max_overflow: 10
         ),
-        {
-          XMAVLink.Router,
-          %{
-            name: router_name,
-            dialect: Application.get_env(:xmavlink, :dialect),
-            system: Application.get_env(:xmavlink, :system_id),
-            component: Application.get_env(:xmavlink, :component_id),
-            connection_strings: Application.get_env(:xmavlink, :connections),
-            connection_retry_ms: Application.get_env(:xmavlink, :connection_retry_ms, 1_000),
-            remote_forwarding: Application.get_env(:xmavlink, :remote_forwarding, true),
-            signing: Application.get_env(:xmavlink, :signing)
-          }
-        }
+        {XMAVLink.Router, router_config}
       ] ++ heartbeat_child_specs(router_name)
 
     Supervisor.init(children, strategy: :one_for_all)

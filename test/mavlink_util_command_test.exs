@@ -3,9 +3,11 @@ defmodule XMAVLink.Util.CommandTest do
 
   alias XMAVLink.Router
   alias XMAVLink.Util.Arm
+  alias XMAVLink.Util.Context
   alias XMAVLink.Util.ParamRequest
   alias XMAVLink.Util.ParamSet
   alias XMAVLink.Util.SITL
+  alias XMAVLink.Util.Tables
 
   setup do
     delete_utility_tables()
@@ -42,6 +44,37 @@ defmodule XMAVLink.Util.CommandTest do
     assert {:error, :timeout} =
              ParamSet.param_set(1, 1, 2, "sysid_thismav", 2.0,
                router: router,
+               retries: 0,
+               retry_interval_ms: 1
+             )
+
+    assert_subscriptions(router, [])
+  end
+
+  test "param_set/6 reads parameter metadata from prefixed utility tables", %{router: router} do
+    context = Context.new(router: router, dialect: Common, table_prefix: :vehicle_a)
+    tables = context.tables
+    delete_tables(Map.values(tables))
+    create_utility_tables(tables)
+
+    on_exit(fn -> delete_tables(Map.values(tables)) end)
+
+    :ets.insert(
+      tables.params,
+      {{1, 1, "SYSID_THISMAV"},
+       {0,
+        %Common.Message.ParamValue{
+          param_id: "SYSID_THISMAV",
+          param_value: 1.0,
+          param_count: 1,
+          param_index: 0,
+          param_type: :mav_param_type_real32
+        }}}
+    )
+
+    assert {:error, :timeout} =
+             ParamSet.param_set(1, 1, 2, "sysid_thismav", 2.0,
+               context: context,
                retries: 0,
                retry_interval_ms: 1
              )
@@ -114,13 +147,23 @@ defmodule XMAVLink.Util.CommandTest do
   end
 
   defp create_utility_tables do
-    :ets.new(:messages, [:named_table, :protected, {:read_concurrency, true}, :set])
-    :ets.new(:systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
-    :ets.new(:params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+    create_utility_tables(Tables.names())
+  end
+
+  defp create_utility_tables(tables) do
+    :ets.new(tables.messages, [:named_table, :protected, {:read_concurrency, true}, :set])
+    :ets.new(tables.systems, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
+    :ets.new(tables.params, [:named_table, :protected, {:read_concurrency, true}, :ordered_set])
   end
 
   defp delete_utility_tables do
-    for table <- [:messages, :systems, :params, :sessions], :ets.info(table) != :undefined do
+    delete_tables([:messages, :systems, :params, :sessions])
+  end
+
+  defp delete_tables(tables), do: Enum.each(tables, &delete_table/1)
+
+  defp delete_table(table) do
+    if :ets.info(table) != :undefined do
       :ets.delete(table)
     end
   end

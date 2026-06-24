@@ -4,15 +4,20 @@ defmodule XMAVLink.Util.FocusManager do
   zero or more local PIDs. The API uses this to streamline iex sessions
   by letting the user select a MAV to work with and transparently adding
   {system_id, component_id} tuples to call arguments.
+
+  Pass `context: context` to read or write focus in a scoped utility table
+  namespace.
   """
 
   use GenServer
   require Logger
+  alias XMAVLink.Util.{Context, Tables}
 
-  @sessions :sessions
-  @systems :systems
-
-  defstruct monitors: %{}, sessions: %{}
+  defstruct monitors: %{},
+            sessions: %{},
+            context: nil,
+            table_prefix: nil,
+            tables: Tables.names()
 
   # API
   def start_link(state, opts \\ []) do
@@ -23,9 +28,17 @@ defmodule XMAVLink.Util.FocusManager do
     self() |> focus()
   end
 
-  def focus(pid) when is_pid(pid) do
-    with :ok <- require_table(@sessions),
-         [{^pid, scid}] <- :ets.lookup(@sessions, pid) do
+  def focus(opts) when is_list(opts), do: focus(self(), opts)
+
+  def focus(pid) when is_pid(pid), do: focus(pid, [])
+
+  def focus(system_id) when is_integer(system_id), do: focus(system_id, 1)
+
+  def focus(pid, opts) when is_pid(pid) do
+    sessions = Context.new(opts).tables.sessions
+
+    with :ok <- require_table(sessions),
+         [{^pid, scid}] <- :ets.lookup(sessions, pid) do
       if pid == self() do
         Logger.info("Vehicle #{format(scid)}")
       else
@@ -43,10 +56,15 @@ defmodule XMAVLink.Util.FocusManager do
     end
   end
 
-  def focus(system_id, component_id \\ 1) do
+  def focus(system_id, component_id) when is_integer(system_id) do
+    focus(system_id, component_id, [])
+  end
+
+  def focus(system_id, component_id, opts)
+      when is_integer(system_id) and is_integer(component_id) and is_list(opts) do
     with pid when is_pid(pid) <- GenServer.whereis(__MODULE__),
          {:ok, {system_id, component_id, _}} <-
-           GenServer.call(pid, {:focus, {system_id, component_id}}) do
+           GenServer.call(pid, {:focus, {system_id, component_id}, Context.new(opts)}) do
       configure_iex_prompt(system_id, component_id)
     else
       nil -> {:error, :not_started}
@@ -56,13 +74,31 @@ defmodule XMAVLink.Util.FocusManager do
 
   @impl true
   def init(opts) do
-    :ets.new(@sessions, [:named_table, :protected, {:read_concurrency, true}, :set])
-    {:ok, struct(__MODULE__, opts)}
+    opts = Map.new(opts)
+    context = Context.new(opts)
+
+    :ets.new(context.tables.sessions, [:named_table, :protected, {:read_concurrency, true}, :set])
+
+    {:ok,
+     struct(
+       __MODULE__,
+       opts
+       |> Map.put(:context, context)
+       |> Map.put(:table_prefix, context.table_prefix)
+       |> Map.put(:tables, context.tables)
+     )}
   end
 
   @impl true
-  def handle_call({:focus, scid = {system_id, component_id}}, {caller_pid, _}, state) do
-    with :ok <- require_table(@systems),
+  def handle_call(
+        {:focus, scid = {system_id, component_id}, context},
+        {caller_pid, _},
+        state
+      ) do
+    tables = context.tables
+
+    with :ok <- require_table(tables.systems),
+         :ok <- require_writable_table(tables.sessions),
          mavlink_major_version when is_number(mavlink_major_version) <-
            :ets.foldl(
              fn {next_scid, %{mavlink_major_version: mmv}}, acc ->
@@ -73,11 +109,15 @@ defmodule XMAVLink.Util.FocusManager do
                end
              end,
              0,
-             @systems
+             tables.systems
            ) do
       if mavlink_major_version > 0 do
         state =
-          put_focus_session(state, caller_pid, {system_id, component_id, mavlink_major_version})
+          put_focus_session(state, tables, caller_pid, {
+            system_id,
+            component_id,
+            mavlink_major_version
+          })
 
         Logger.info("Set focus to #{format(scid)}")
         {:reply, {:ok, {system_id, component_id, mavlink_major_version}}, state}
@@ -97,14 +137,15 @@ defmodule XMAVLink.Util.FocusManager do
       {nil, _monitors} ->
         {:noreply, state}
 
-      {monitored_pid, monitors} ->
-        :ets.delete(@sessions, monitored_pid)
+      {session_key, monitors} ->
+        {session, sessions} = Map.pop(state.sessions, session_key)
+        delete_session(session, session_pid(session_key))
 
         {:noreply,
          %{
            state
            | monitors: monitors,
-             sessions: Map.delete(state.sessions, monitored_pid)
+             sessions: sessions
          }}
     end
   end
@@ -120,25 +161,27 @@ defmodule XMAVLink.Util.FocusManager do
     :ok
   end
 
-  defp put_focus_session(state, pid, scid) do
-    state = drop_focus_monitor(state, pid)
+  defp put_focus_session(state, tables, pid, scid) do
+    session_key = {pid, tables.sessions}
+    state = drop_focus_monitor(state, session_key)
     ref = Process.monitor(pid)
-    :ets.insert(@sessions, {pid, scid})
+    :ets.insert(tables.sessions, {pid, scid})
 
     %{
       state
-      | monitors: Map.put(state.monitors, ref, pid),
-        sessions: Map.put(state.sessions, pid, ref)
+      | monitors: Map.put(state.monitors, ref, session_key),
+        sessions: Map.put(state.sessions, session_key, {ref, tables.sessions})
     }
   end
 
-  defp drop_focus_monitor(state, pid) do
-    case Map.pop(state.sessions, pid) do
+  defp drop_focus_monitor(state, session_key = {pid, _sessions_table}) do
+    case Map.pop(state.sessions, session_key) do
       {nil, _sessions} ->
         state
 
-      {ref, sessions} ->
+      {{ref, sessions_table}, sessions} ->
         Process.demonitor(ref, [:flush])
+        delete_session_table_entry(sessions_table, pid)
 
         %{
           state
@@ -148,6 +191,19 @@ defmodule XMAVLink.Util.FocusManager do
     end
   end
 
+  defp delete_session(nil, _pid), do: :ok
+
+  defp delete_session({_ref, sessions_table}, pid),
+    do: delete_session_table_entry(sessions_table, pid)
+
+  defp delete_session_table_entry(sessions_table, pid) do
+    if :ets.info(sessions_table) != :undefined do
+      :ets.delete(sessions_table, pid)
+    end
+  end
+
+  defp session_pid({pid, _sessions_table}), do: pid
+
   defp format({s, c, _}), do: format({s, c})
   defp format({s, c}), do: "#{s}.#{c}"
 
@@ -155,6 +211,20 @@ defmodule XMAVLink.Util.FocusManager do
     case :ets.info(table) do
       :undefined -> {:error, :not_started}
       _ -> :ok
+    end
+  end
+
+  defp require_writable_table(table) do
+    case :ets.info(table) do
+      :undefined ->
+        {:error, :not_started}
+
+      _ ->
+        if :ets.info(table, :owner) == self() or :ets.info(table, :protection) == :public do
+          :ok
+        else
+          {:error, :not_started}
+        end
     end
   end
 end

@@ -26,7 +26,14 @@ defmodule XMAVLink.Application do
 
       opts when is_list(opts) ->
         if Keyword.keyword?(opts) do
-          [{XMAVLink.Util.Supervisor, Keyword.put_new(opts, :router, router_name)}]
+          opts =
+            if Keyword.has_key?(opts, :context) do
+              opts
+            else
+              Keyword.put_new(opts, :router, router_name)
+            end
+
+          [{XMAVLink.Util.Supervisor, opts}]
         else
           invalid_utilities_config!(opts)
         end

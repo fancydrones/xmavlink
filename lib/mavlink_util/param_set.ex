@@ -4,22 +4,20 @@ defmodule XMAVLink.Util.ParamSet do
 
   The helper uses the parameter type cached by `XMAVLink.Util.CacheManager`,
   sends `PARAM_SET`, and waits for a matching `PARAM_VALUE` confirmation.
-  Retries are bounded by default; pass `:retries`, `:retry_interval_ms`, or
-  `:router` in the options to override the defaults.
+  Retries are bounded by default; pass `:context`, `:retries`,
+  `:retry_interval_ms`, or `:router` in the options to override the defaults.
   """
 
-  @params :params
   @param_retry_interval 3000
   @param_retries 5
 
   require Logger
   alias XMAVLink.Util.CacheManager
-  alias Common.Message.ParamValue
-  alias Common.Message.ParamSet
-  import XMAVLink.Util.FocusManager, only: [focus: 0]
+  alias XMAVLink.Util.Context
+  import XMAVLink.Util.FocusManager, only: [focus: 1]
 
   def param_set(param, new_value, opts \\ []) when is_list(opts) do
-    with {:ok, {system_id, component_id, mavlink_version}} <- focus() do
+    with {:ok, {system_id, component_id, mavlink_version}} <- focus(opts) do
       param_set(system_id, component_id, mavlink_version, param, new_value, opts)
     end
   end
@@ -27,12 +25,20 @@ defmodule XMAVLink.Util.ParamSet do
   def param_set(system_id, component_id, mavlink_version, param, new_value, opts \\ []) do
     param = normalize_param_id(param)
     opts = command_opts(opts)
+    params = opts.context.tables.params
+    param_value_module = message_module(opts.dialect, :ParamValue)
 
-    with :ok <- require_table(@params),
-         [{{^system_id, ^component_id, ^param}, {_time, %ParamValue{param_type: param_type}}}] <-
-           :ets.lookup(@params, {system_id, component_id, param}),
+    with :ok <- require_table(params),
+         [
+           {{^system_id, ^component_id, ^param},
+            {_time, %{__struct__: ^param_value_module, param_type: param_type}}}
+         ] <-
+           :ets.lookup(params, {system_id, component_id, param}),
          :ok <-
-           XMAVLink.Router.subscribe(opts.router, message: ParamValue, source_system: system_id) do
+           XMAVLink.Router.subscribe(opts.router,
+             message: param_value_module,
+             source_system: system_id
+           ) do
       try do
         do_param_set(system_id, component_id, mavlink_version, param, new_value, param_type, opts)
       after
@@ -56,20 +62,22 @@ defmodule XMAVLink.Util.ParamSet do
        do: {:error, :timeout}
 
   defp do_param_set(system_id, component_id, mavlink_version, param, new_value, param_type, opts) do
+    param_value_module = message_module(opts.dialect, :ParamValue)
+
     with :ok <-
            XMAVLink.Router.pack_and_send(
              opts.router,
-             %ParamSet{
+             struct(message_module(opts.dialect, :ParamSet), %{
                target_system: system_id,
                target_component: component_id,
                param_id: param,
                param_value: new_value,
                param_type: param_type
-             },
+             }),
              mavlink_version
            ) do
       receive do
-        %ParamValue{param_id: ^param, param_value: ^new_value} ->
+        %{__struct__: ^param_value_module, param_id: ^param, param_value: ^new_value} ->
           Logger.info(
             "Set #{String.downcase(param)} to #{inspect(new_value)} for vehicle #{system_id}.#{component_id}"
           )
@@ -96,10 +104,14 @@ defmodule XMAVLink.Util.ParamSet do
   defp normalize_param_id(param) when is_binary(param), do: String.upcase(param)
 
   defp command_opts(opts) do
+    context = opts |> Keyword.put(:router, CacheManager.router(opts)) |> Context.new()
     retries = Keyword.get(opts, :retries, @param_retries)
 
     %{
-      router: Keyword.get(opts, :router, CacheManager.router()),
+      context: context,
+      router: context.router,
+      dialect: context.dialect,
+      table_prefix: context.table_prefix,
       retry_interval_ms: Keyword.get(opts, :retry_interval_ms, @param_retry_interval),
       attempts: attempts(retries)
     }
@@ -117,4 +129,6 @@ defmodule XMAVLink.Util.ParamSet do
       _ -> :ok
     end
   end
+
+  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 end

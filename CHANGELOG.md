@@ -2,6 +2,39 @@
 
 ## Unreleased
 
+## 0.14.0 - 2026-06-24
+
+### Breaking Changes
+
+- Formalized utility scoping around `XMAVLink.Util.Context`. Utility callers
+  that need non-default ETS table names should pass `context: context` instead
+  of relying on hard-coded global table names.
+- Direct utility ETS table access should migrate from fixed names such as
+  `:messages`, `:systems`, `:params`, and `:sessions` to
+  `XMAVLink.Util.Tables.name/2` or `XMAVLink.Util.Context.tables`.
+
+### Added
+
+- Added `XMAVLink.Router.send_message/1..3`, a synchronous send API that
+  returns delivery metadata while preserving the existing `pack_and_send`
+  APIs.
+- Added `XMAVLink.Util.Context` and `context: context` utility options so
+  cache, focus, parameter, arm/disarm, and SITL helpers can be scoped by
+  router, dialect, and table namespace.
+- Added internal router architecture modules for configuration normalization,
+  connection-string parsing, route selection, transport behaviour contracts,
+  shared inbound frame parsing, and generated dialect behaviour contracts.
+
+### Fixed
+
+- Fixed local MAVLink sequence numbers to wrap after the full `0..255` range.
+- Preserved utility focus independently for each scoped utility context.
+- Deduplicated targeted route recipients when multiple learned MAVLink
+  addresses resolve to the same connection.
+- Updated the `XMAVLink.Message` invalid-term fallback to stay compatible with
+  warnings-as-errors while preserving `Protocol.UndefinedError` for unknown
+  message structs.
+
 ## 0.13.0 - 2026-05-11
 
 - Added `remote_forwarding: false` router/application configuration for

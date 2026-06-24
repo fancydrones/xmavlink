@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.13.0"}
+     {:xmavlink, "~> 0.14.0"}
    ]
  end
  ```
@@ -394,13 +394,32 @@ children = [
 Pass `auto_param_request: false` to `XMAVLink.Util.Supervisor` for the same
 behavior when supervising utilities explicitly.
 
-The current utility API is scoped to one configured router per VM. It uses
-global process names and ETS tables for IEx-friendly helpers, so applications
-that need multiple independent routers should use the core `XMAVLink.Router`
-API directly or keep utility usage limited to one selected router.
+As of `0.14.0`, utility helpers are scoped through
+`XMAVLink.Util.Context`. A context identifies the router, generated dialect, and
+ETS table namespace used by cache, focus, parameter, arm/disarm, and SITL
+helpers:
+
+```elixir
+context =
+  XMAVLink.Util.Context.new(
+    router: MyApp.VehicleRouter,
+    dialect: Common,
+    table_prefix: :vehicle_a
+  )
+
+XMAVLink.Util.CacheManager.mavs(context: context)
+XMAVLink.Util.CacheManager.msg({1, 1, 2}, Common.Message.Heartbeat, context: context)
+XMAVLink.Util.ParamSet.param_set(1, 1, 2, "SYSID_THISMAV", 2.0, context: context)
+```
+
+The default context still uses the configured `:xmavlink` router and dialect,
+with the historical table names `:messages`, `:systems`, `:params`, and
+`:sessions`. Applications that read utility ETS tables directly should migrate
+to `XMAVLink.Util.Context.new/1` and `XMAVLink.Util.Tables.name/2` instead of
+hard-coding those names.
 
 Command helpers such as arm/disarm and parameter setting use bounded retry
-loops by default. Pass `:retries`, `:retry_interval_ms`, or `:router` in the
+loops by default. Pass `:retries`, `:retry_interval_ms`, or `:context` in the
 options when a helper needs different behavior. Parameter queries return maps
 keyed by MAVLink parameter names as strings. `XMAVLink.Util.SITL.forward_rc/2`
 also accepts `:destination_address` when the SITL RC input is not on loopback.
