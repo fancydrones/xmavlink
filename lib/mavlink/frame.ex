@@ -500,7 +500,7 @@ defmodule XMAVLink.Frame do
        when is_binary(raw) and byte_size(raw) >= 12 + @mavlink_2_signature_length do
     signed_packet_size = byte_size(raw) - 6
 
-    <<signed_packet_without_signature::binary-size(signed_packet_size),
+    <<signed_packet_without_signature::binary-size(^signed_packet_size),
       signature::binary-size(6)>> = raw
 
     {:ok, signed_packet_without_signature, signature}

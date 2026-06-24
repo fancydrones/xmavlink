@@ -257,7 +257,7 @@ defmodule XMAVLink.Test.Frame do
   defp corrupt_mavlink_2_checksum(%Frame{mavlink_2_raw: raw} = frame) do
     checksum_offset = byte_size(raw) - 2
 
-    <<prefix::binary-size(checksum_offset), checksum::little-unsigned-integer-size(16)>> = raw
+    <<prefix::binary-size(^checksum_offset), checksum::little-unsigned-integer-size(16)>> = raw
 
     %Frame{
       frame
@@ -269,7 +269,7 @@ defmodule XMAVLink.Test.Frame do
   defp corrupt_signature(%Frame{mavlink_2_raw: raw} = frame) do
     signature_offset = byte_size(raw) - 6
 
-    <<prefix::binary-size(signature_offset), signature_head, signature_tail::binary-size(5)>> =
+    <<prefix::binary-size(^signature_offset), signature_head, signature_tail::binary-size(5)>> =
       raw
 
     %Frame{
