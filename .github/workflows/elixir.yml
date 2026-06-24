@@ -91,8 +91,8 @@ jobs:
         include:
           - elixir: 1.18.4
             otp: 27.3.4.3
-          - elixir: 1.19.5
-            otp: 28.5
+          - elixir: 1.20.1
+            otp: 29.0.2
 
     steps:
       - uses: actions/checkout@v7
@@ -154,8 +154,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: 1.19.5
-          otp-version: 28.5
+          elixir-version: 1.20.1
+          otp-version: 29.0.2
 
       - name: Install OS dependencies
         run: |
@@ -168,9 +168,9 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-dialyzer-1.19.5-28.5-${{ hashFiles('mix.exs', 'mix.lock') }}
+          key: ${{ runner.os }}-dialyzer-1.20.1-29.0.2-${{ hashFiles('mix.exs', 'mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-dialyzer-1.19.5-28.5-
+            ${{ runner.os }}-dialyzer-1.20.1-29.0.2-
 
       - name: Install Mix tools and dependencies
         run: |
@@ -212,8 +212,8 @@ jobs:
 
       - uses: erlef/setup-beam@v1
         with:
-          elixir-version: 1.19.5
-          otp-version: 28.5
+          elixir-version: 1.20.1
+          otp-version: 29.0.2
 
       - name: Install OS dependencies
         run: |
@@ -226,9 +226,9 @@ jobs:
           path: |
             deps
             _build
-          key: ${{ runner.os }}-hex-publish-1.19.5-28.5-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-hex-publish-1.20.1-29.0.2-${{ hashFiles('mix.lock') }}
           restore-keys: |
-            ${{ runner.os }}-hex-publish-1.19.5-28.5-
+            ${{ runner.os }}-hex-publish-1.20.1-29.0.2-
 
       - name: Install Mix tools and dependencies
         run: |

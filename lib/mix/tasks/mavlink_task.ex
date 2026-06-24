@@ -123,9 +123,6 @@ defmodule Mix.Tasks.Xmavlink do
 
     defmodule #{module_name} do
 
-      import String, only: [replace_trailing: 3]
-      import XMAVLink.Utils, only: [unpack_array: 2, unpack_float: 1]
-
       import Bitwise
 
       @moduledoc #{moduledoc}
@@ -497,7 +494,7 @@ defmodule Mix.Tasks.Xmavlink do
 
   # Unpack Message Fields
   defp unpack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: "float"}, _) do
-    "unpack_float(#{downcase(name)}_f)"
+    "XMAVLink.Utils.unpack_float(#{downcase(name)}_f)"
   end
 
   defp unpack_field_code_fragment(%{name: name, ordinality: 1, enum: "", type: "double"}, _) do
@@ -530,19 +527,19 @@ defmodule Mix.Tasks.Xmavlink do
   end
 
   defp unpack_field_code_fragment(%{name: name, type: "char"}, _) do
-    ~s[replace_trailing(#{downcase(name)}_f, <<0>>, "")]
+    ~s[String.replace_trailing(#{downcase(name)}_f, <<0>>, "")]
   end
 
   defp unpack_field_code_fragment(%{name: name, type: "float"}, _) do
-    "unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(4),rest::binary>>) -> {unpack_float(elem), rest} end)"
+    "XMAVLink.Utils.unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(4),rest::binary>>) -> {XMAVLink.Utils.unpack_float(elem), rest} end)"
   end
 
   defp unpack_field_code_fragment(%{name: name, type: "double"}, _) do
-    "unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(8),rest::binary>>) -> {XMAVLink.Utils.unpack_double(elem), rest} end)"
+    "XMAVLink.Utils.unpack_array(#{downcase(name)}_f, fn(<<elem::binary-size(8),rest::binary>>) -> {XMAVLink.Utils.unpack_double(elem), rest} end)"
   end
 
   defp unpack_field_code_fragment(%{name: name, type: type}, _) do
-    "unpack_array(#{downcase(name)}_f, fn(<<elem::#{type_to_binary(type).pattern},rest::binary>>) ->  {elem, rest} end)"
+    "XMAVLink.Utils.unpack_array(#{downcase(name)}_f, fn(<<elem::#{type_to_binary(type).pattern},rest::binary>>) ->  {elem, rest} end)"
   end
 
   # Pack Message Fields
