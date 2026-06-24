@@ -9,6 +9,7 @@ defmodule XMAVLink.Mixfile do
       start_permanent: Mix.env() == :prod,
       description: description(),
       package: package(),
+      docs: docs(),
       aliases: aliases(),
       deps: deps(),
       dialyzer: [plt_add_apps: [:mix, :xmerl]],
@@ -82,6 +83,7 @@ defmodule XMAVLink.Mixfile do
         "mix.exs",
         "README.md",
         "CHANGELOG.md",
+        "MIGRATING_0_14.md",
         "LICENSE",
         "SECURITY.md",
         "MAVLINK_SPEC_ALIGNMENT.md"
@@ -90,6 +92,29 @@ defmodule XMAVLink.Mixfile do
       licenses: ["MIT"],
       links: %{"GitHub" => "https://github.com/fancydrones/xmavlink"},
       maintainers: ["Roy Veshovda"]
+    ]
+  end
+
+  defp docs() do
+    [
+      main: "readme",
+      extras: [
+        "README.md",
+        "MIGRATING_0_14.md",
+        "CHANGELOG.md",
+        "SECURITY.md",
+        "MAVLINK_SPEC_ALIGNMENT.md"
+      ],
+      groups_for_extras: [
+        Guides: [
+          "MIGRATING_0_14.md",
+          "SECURITY.md",
+          "MAVLINK_SPEC_ALIGNMENT.md"
+        ],
+        Release: [
+          "CHANGELOG.md"
+        ]
+      ]
     ]
   end
 end

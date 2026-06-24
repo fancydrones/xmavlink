@@ -1,10 +1,18 @@
 defmodule XMAVLink.Util.Supervisor do
-  @moduledoc false
+  @moduledoc """
+  Supervisor for opt-in utility processes.
+
+  Start this supervisor when an application wants `XMAVLink.Util.CacheManager`
+  and `XMAVLink.Util.FocusManager` for a router. Pass `:context` to scope the
+  utility runtime, or pass `:router`, `:dialect`, and `:table_prefix` options
+  that can be normalized by `XMAVLink.Util.Context`.
+  """
 
   use Supervisor
   alias XMAVLink.Util.Context
 
-  def start_link(opts) do
+  @spec start_link(keyword) :: Supervisor.on_start()
+  def start_link(opts \\ []) do
     Supervisor.start_link(__MODULE__, opts, name: __MODULE__)
   end
 

@@ -20,6 +20,34 @@ defmodule XMAVLink.Util.CacheManager.Test do
     assert Enum.sort(mavs) == [{1, 1}, {2, 1}]
   end
 
+  test "list_systems/1 returns cached system metadata" do
+    first = %{mavlink_major_version: 2, param_count: 4, param_count_loaded: 2}
+    second = %{mavlink_major_version: 1, param_count: 0, param_count_loaded: 0}
+    :ets.insert(:systems, {{2, 1}, second})
+    :ets.insert(:systems, {{1, 1}, first})
+
+    assert {:ok, [{{1, 1}, ^first}, {{2, 1}, ^second}]} = CacheManager.list_systems()
+  end
+
+  test "latest_message/4 returns cached message age and struct" do
+    create_messages_table()
+
+    heartbeat = %Common.Message.Heartbeat{
+      type: :mav_type_quadrotor,
+      autopilot: :mav_autopilot_ardupilotmega,
+      base_mode: MapSet.new(),
+      custom_mode: 0,
+      system_status: :mav_state_active,
+      mavlink_version: 3
+    }
+
+    received_at = :erlang.monotonic_time(:milli_seconds) - 10
+    :ets.insert(:messages, {{1, 1, Common.Message.Heartbeat}, {received_at, heartbeat}})
+
+    assert {:ok, age_ms, ^heartbeat} = CacheManager.latest_message(1, 1, Common.Message.Heartbeat)
+    assert age_ms >= 0
+  end
+
   test "params/2 returns MAVLink parameter names as string keys" do
     :ets.insert(
       :params,
@@ -37,6 +65,22 @@ defmodule XMAVLink.Util.CacheManager.Test do
     assert {:ok, params} = CacheManager.params({1, 1, 2}, "SYSID")
     assert params == %{"SYSID_THISMAV" => 42.0}
     refute Map.has_key?(params, :sysid_thismav)
+  end
+
+  test "get_param/4 returns one cached parameter message" do
+    param = %Common.Message.ParamValue{
+      param_id: "SYSID_THISMAV",
+      param_value: 42.0,
+      param_count: 1,
+      param_index: 0,
+      param_type: :mav_param_type_real32
+    }
+
+    received_at = :erlang.monotonic_time(:milli_seconds) - 10
+    :ets.insert(:params, {{1, 1, "SYSID_THISMAV"}, {received_at, param}})
+
+    assert {:ok, age_ms, ^param} = CacheManager.get_param(1, 1, :sysid_thismav)
+    assert age_ms >= 0
   end
 
   test "msg/2 preserves not-started errors" do
@@ -130,8 +174,11 @@ defmodule XMAVLink.Util.CacheManager.Test do
 
     assert {:ok, [{1, 1}]} = CacheManager.mavs(context: context)
 
+    assert {:ok, [{{1, 1}, %{mavlink_major_version: 2}}]} =
+             CacheManager.list_systems(context: context)
+
     assert {:ok, _age_ms, ^heartbeat} =
-             CacheManager.msg({1, 1, 2}, Common.Message.Heartbeat, context: context)
+             CacheManager.latest_message(1, 1, Common.Message.Heartbeat, context: context)
   end
 
   test "one second loop reschedules one second loop" do
