@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.15.0 - 2026-06-25
+
 ### Breaking Changes
 
 - Hardened MAVLink XML generation by rejecting out-of-range message ids,
@@ -34,7 +36,7 @@
   the existing generated struct-key behavior for fields such as `end`.
 - Updated coverage configuration to ignore generated Common dialect modules
   and use a realistic baseline threshold for hand-written code.
-- Updated installation documentation for the current 0.14.3 release line.
+- Updated installation documentation for the current 0.15.0 release line.
 
 ### Tests
 

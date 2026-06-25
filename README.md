@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.14.3"}
+     {:xmavlink, "~> 0.15.0"}
    ]
  end
  ```
