@@ -13,6 +13,7 @@ defmodule XMAVLink.Util.SITL do
   import XMAVLink.Utils, only: [resolve_address: 1]
 
   alias XMAVLink.Util.CacheManager
+  alias XMAVLink.Util.Command
   alias XMAVLink.Util.Context
   import XMAVLink.Util.FocusManager, only: [focus: 1]
 
@@ -190,5 +191,5 @@ defmodule XMAVLink.Util.SITL do
   defp resolve_destination_address(address) when is_binary(address), do: resolve_address(address)
   defp resolve_destination_address(_address), do: {:error, :invalid_destination_address}
 
-  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
+  defp message_module(dialect, name), do: Command.message_module(dialect, name)
 end

@@ -27,11 +27,12 @@ Current trust boundaries:
   frames are verified before unpacking, replay timestamps are tracked per
   connection, and unsigned MAVLink 2 inbound frames are rejected by default
   while signing is enabled unless `accept_unsigned: true` is set. MAVLink 1
-  inbound frames remain accepted under a signing policy. Unsigned outbound
-  MAVLink 2 frames sent over signing-enabled connections are signed with a
-  monotonically incremented per-connection timestamp. Applications can configure
-  timestamp load/save hooks to preserve local signing timestamps across
-  restarts. Frames with other incompatible MAVLink 2 flags are discarded.
+  inbound and outbound frames remain accepted under a signing policy unless
+  `accept_mavlink1: false` is set. Unsigned outbound MAVLink 2 frames sent over
+  signing-enabled connections are signed with a monotonically incremented
+  per-connection timestamp. Applications can configure timestamp load/save hooks
+  to preserve local signing timestamps across restarts. Frames with other
+  incompatible MAVLink 2 flags are discarded.
 - `SETUP_SIGNING` frames carry key material. Inbound `SETUP_SIGNING` frames are
   delivered locally for application handling but are not forwarded from one
   MAVLink connection to another by the generic router.
@@ -52,6 +53,10 @@ Current trust boundaries:
 - Prefer MAVLink 2 signing on links where peers are not fully trusted.
 - Keep `accept_unsigned: false` unless a migration or mixed-link deployment
   explicitly requires unsigned MAVLink 2 frames on a signed connection.
+- Set `accept_mavlink1: false` on signing-enabled connections that must reject
+  all MAVLink 1 traffic.
+- Set `forward_unknown: :local_only` or `:drop` on routers that should not
+  bridge unknown dialect-extension messages between remote links.
 - Persist signing timestamps with the configured load/save callbacks when
   restart replay protection matters.
 - Treat signing keys and `SETUP_SIGNING` payloads as secrets.

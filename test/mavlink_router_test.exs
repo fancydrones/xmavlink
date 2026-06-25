@@ -1,8 +1,12 @@
 defmodule XMAVLink.Test.Router do
   use ExUnit.Case
 
+  alias XMAVLink.ConnectionSpec
   alias XMAVLink.Frame
   alias XMAVLink.Router
+  alias XMAVLink.TCPOutConnection
+  alias XMAVLink.UDPInConnection
+  alias XMAVLink.UDPOutConnection
 
   @secret_key :binary.copy(<<42>>, 32)
   @link_id 9
@@ -84,6 +88,30 @@ defmodule XMAVLink.Test.Router do
       assert_receive :tcp_peer_accepted, 1_000
 
       GenServer.stop(pid)
+    end
+
+    test "parses bracketed IPv6 network connection strings" do
+      assert %{
+               transport: UDPOutConnection,
+               tokens: ["udpout", {0, 0, 0, 0, 0, 0, 0, 1}, 14_550]
+             } = ConnectionSpec.parse("udpout:[::1]:14550")
+
+      assert %{
+               transport: UDPInConnection,
+               tokens: ["udpin", {0, 0, 0, 0, 0, 0, 0, 0}, 14_550]
+             } = ConnectionSpec.parse("udpin:[::]:14550")
+    end
+
+    test "parses URI-style network connection strings" do
+      assert %{
+               transport: UDPOutConnection,
+               tokens: ["udpout", {127, 0, 0, 1}, 14_550]
+             } = ConnectionSpec.parse("udpout://127.0.0.1:14550")
+
+      assert %{
+               transport: TCPOutConnection,
+               tokens: ["tcpout", {0, 0, 0, 0, 0, 0, 0, 1}, 5_760]
+             } = ConnectionSpec.parse("tcpout://[::1]:5760")
     end
 
     test "rejects invalid hostname" do
@@ -174,6 +202,21 @@ defmodule XMAVLink.Test.Router do
             dialect: APM.Dialect,
             connection_strings: [],
             remote_forwarding: :nope
+          },
+          []
+        )
+      end
+    end
+
+    test "rejects invalid unknown-message forwarding config" do
+      assert_raise ArgumentError, ~r/forward_unknown/, fn ->
+        Router.start_link(
+          %{
+            system: 1,
+            component: 1,
+            dialect: APM.Dialect,
+            connection_strings: [],
+            forward_unknown: :somewhere
           },
           []
         )
@@ -641,6 +684,99 @@ defmodule XMAVLink.Test.Router do
       refute_receive {:udp, ^target_peer_socket, _, _, _}, 50
 
       Router.unsubscribe(router_pid)
+    end
+  end
+
+  describe "unknown message forwarding policy" do
+    test "local_only delivers unknown frames locally without forwarding to remote links" do
+      {:ok, router_socket} = :gen_udp.open(0, [:binary, active: false])
+      {:ok, target_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, target_peer_port} = :inet.port(target_peer_socket)
+      address = {127, 0, 0, 1}
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            forward_unknown: :local_only
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(router_socket)
+        :gen_udp.close(target_peer_socket)
+        stop_router(router_pid)
+      end)
+
+      assert :ok = Router.subscribe(router_pid, message: :unknown, as_frame: true)
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, target_peer_port,
+         unsigned_heartbeat_frame(5, 1).mavlink_2_raw}
+      )
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, 14_551, unknown_frame(6, 1).mavlink_2_raw}
+      )
+
+      assert_receive %Frame{
+                       message_id: 999_999,
+                       source_system: 6,
+                       source_component: 1,
+                       message: %{__struct__: XMAVLink.UnknownMessage}
+                     },
+                     200
+
+      refute_receive {:udp, ^target_peer_socket, _, _, _}, 50
+    end
+
+    test "drop suppresses unknown frames locally and remotely" do
+      {:ok, router_socket} = :gen_udp.open(0, [:binary, active: false])
+      {:ok, target_peer_socket} = :gen_udp.open(0, [:binary, active: true])
+      {:ok, target_peer_port} = :inet.port(target_peer_socket)
+      address = {127, 0, 0, 1}
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [],
+            forward_unknown: :drop
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(router_socket)
+        :gen_udp.close(target_peer_socket)
+        stop_router(router_pid)
+      end)
+
+      assert :ok = Router.subscribe(router_pid, message: :unknown, as_frame: true)
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, target_peer_port,
+         unsigned_heartbeat_frame(5, 1).mavlink_2_raw}
+      )
+
+      send(
+        router_pid,
+        {:udp, router_socket, address, 14_551, unknown_frame(6, 1).mavlink_2_raw}
+      )
+
+      refute_receive %Frame{message: %{__struct__: XMAVLink.UnknownMessage}}, 50
+      refute_receive {:udp, ^target_peer_socket, _, _, _}, 50
     end
   end
 
@@ -1678,6 +1814,18 @@ defmodule XMAVLink.Test.Router do
       message_id: message_id,
       payload: payload,
       crc_extra: crc_extra
+    })
+  end
+
+  defp unknown_frame(source_system, source_component) do
+    Frame.pack_frame(%Frame{
+      version: 2,
+      sequence_number: 7,
+      source_system: source_system,
+      source_component: source_component,
+      message_id: 999_999,
+      payload: <<1, 2, 3>>,
+      crc_extra: 0
     })
   end
 

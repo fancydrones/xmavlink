@@ -24,6 +24,7 @@ defmodule XMAVLink.Router do
   alias XMAVLink.Message
   alias XMAVLink.Router
   alias XMAVLink.Router.Config
+  alias XMAVLink.Router.ConnectionRegistry
   alias XMAVLink.Router.Routing
   alias XMAVLink.Signing
   alias XMAVLink.LocalConnection
@@ -45,6 +46,8 @@ defmodule XMAVLink.Router do
                         ```udpin:<local ip>:<local port>
                         udpout:<remote ip>:<remote port>
                         tcpout:<remote ip>:<remote port>
+                        udpout://<remote ip or host>:<remote port>
+                        tcpout://[<ipv6 address>]:<remote port>
                         serial:<device>:<baud rate>```
 
                         Note there is no tcpin connection - tcp is rarely used for MAVLink, the exception
@@ -70,6 +73,8 @@ defmodule XMAVLink.Router do
     connection_retry_ms: 1_000,
     # Whether remote inbound frames may be forwarded to other remote links
     remote_forwarding: true,
+    # How well-shaped frames from unknown message ids are routed
+    forward_unknown: :broadcast,
     # Subscription cache name for restart restoration, if any
     subscription_cache: nil,
     # Per-connection MAVLink 2 signing policy seed
@@ -90,6 +95,7 @@ defmodule XMAVLink.Router do
   @type mavlink_address :: Types.mavlink_address()
   @type mavlink_connection :: Types.connection()
   @type connection_key :: :local | binary | port | {port, Types.net_address(), Types.net_port()}
+  @type forward_unknown_policy :: :broadcast | :local_only | :drop
   @typedoc "Delivery metadata returned by `send_message/1..3`."
   @type delivery :: %{
           source_connection: connection_key(),
@@ -112,6 +118,7 @@ defmodule XMAVLink.Router do
           connection_strings: [String.t()],
           connection_retry_ms: non_neg_integer,
           remote_forwarding: boolean,
+          forward_unknown: forward_unknown_policy,
           signing: Signing.t() | nil,
           subscription_cache: router_name | nil,
           connection_supervisor: pid | nil,
@@ -152,6 +159,8 @@ defmodule XMAVLink.Router do
                         udpin:<local ip>:<local port>
                         udpout:<remote ip>:<remote port>
                         tcpout:<remote ip>:<remote port>
+                        udpout://<remote ip or host>:<remote port>
+                        tcpout://[<ipv6 address>]:<remote port>
                         serial:<device>:<baud rate>
   - connection_retry_ms:
                         Retry delay for configured connection workers after
@@ -162,6 +171,11 @@ defmodule XMAVLink.Router do
                         to other remote links. Defaults to true. Set false for
                         endpoint/GCS use cases that should receive remote
                         traffic locally without bridging it between links.
+  - forward_unknown:
+                        How frames with message ids missing from the dialect
+                        are handled. Defaults to `:broadcast`, preserving
+                        current forward-compatible routing behavior. Use
+                        `:local_only` or `:drop` for stricter deployments.
 
   - opts:               Standard GenServer options. Pass `:name` to register
                         a non-default router, or `name: nil` in the args map to
@@ -177,6 +191,7 @@ defmodule XMAVLink.Router do
             optional(:connections) => [String.t()],
             optional(:connection_retry_ms) => non_neg_integer,
             optional(:remote_forwarding) => boolean,
+            optional(:forward_unknown) => forward_unknown_policy,
             optional(:signing) => keyword() | nil
           },
           [{atom, any}]
@@ -567,6 +582,7 @@ defmodule XMAVLink.Router do
        connection_strings: args.connection_strings,
        connection_retry_ms: args.connection_retry_ms,
        remote_forwarding: args.remote_forwarding,
+       forward_unknown: args.forward_unknown,
        connection_supervisor: connection_supervisor,
        subscription_cache: subscription_cache,
        signing: args.signing,
@@ -627,13 +643,13 @@ defmodule XMAVLink.Router do
   end
 
   def handle_info({:connection_closed, worker, connection_key}, state) do
-    {:noreply, remove_worker_connection(connection_key, worker, state)}
+    {:noreply, ConnectionRegistry.remove_worker_connection(connection_key, worker, state)}
   end
 
   # Unlike UDP, TCP connections can close
   def handle_info({:tcp_closed, socket}, state) do
     reconnect_worker(state.connection_workers[socket])
-    {:noreply, remove_connection(socket, state)}
+    {:noreply, ConnectionRegistry.remove_connection(socket, state)}
   end
 
   def handle_info({:connection_message, _worker, message = {:circuits_uart, _, raw}}, state)
@@ -649,7 +665,7 @@ defmodule XMAVLink.Router do
   # Received error on serial connection
   def handle_info({:circuits_uart, port, {:error, _reason}}, state) do
     reconnect_worker(state.connection_workers[port])
-    {:noreply, remove_connection(port, state)}
+    {:noreply, ConnectionRegistry.remove_connection(port, state)}
   end
 
   # A local subscribing Elixir process or a supervised connection worker has crashed.
@@ -667,7 +683,7 @@ defmodule XMAVLink.Router do
         {:noreply,
          state
          |> struct(connection_worker_monitors: worker_monitors)
-         |> remove_connections_for_worker(worker)}
+         |> ConnectionRegistry.remove_connections_for_worker(worker)}
     end
   end
 
@@ -682,7 +698,7 @@ defmodule XMAVLink.Router do
         {:add_connection, connection_key, connection},
         state = %Router{connections: connections}
       ) do
-    connection = connection_with_signing(connection, state.signing)
+    connection = ConnectionRegistry.with_signing(connection, state.signing)
 
     {
       :noreply,
@@ -697,12 +713,12 @@ defmodule XMAVLink.Router do
         {:add_connection, connection_key, connection, worker},
         state = %Router{connections: connections}
       ) do
-    connection = connection_with_signing(connection, state.signing)
+    connection = ConnectionRegistry.with_signing(connection, state.signing)
 
     {
       :noreply,
       state
-      |> monitor_connection_worker(worker)
+      |> ConnectionRegistry.monitor_worker(worker)
       |> struct(
         connections: Map.put(connections, connection_key, connection),
         connection_workers: Map.put(state.connection_workers, connection_key, worker)
@@ -788,14 +804,6 @@ defmodule XMAVLink.Router do
   # Helper Functions #
   ####################
 
-  defp connection_with_signing(connection, signing) do
-    if Map.has_key?(connection, :signing) do
-      struct(connection, signing: signing)
-    else
-      connection
-    end
-  end
-
   # Handle user configured connections with supervised workers. If
   # successful they send us an :add_connection message with the details. The
   # local connection gets added automatically.
@@ -813,62 +821,19 @@ defmodule XMAVLink.Router do
   defp reconnect_worker(nil), do: :ok
   defp reconnect_worker(worker), do: ConnectionWorker.reconnect(worker)
 
-  defp monitor_connection_worker(state, worker) do
-    if worker in Map.values(state.connection_worker_monitors) do
-      state
-    else
-      ref = Process.monitor(worker)
-      put_in(state.connection_worker_monitors[ref], worker)
-    end
-  end
-
-  defp track_connection_worker(state, connection_key, %{worker: worker}) when is_pid(worker) do
-    state
-    |> monitor_connection_worker(worker)
-    |> struct(connection_workers: Map.put(state.connection_workers, connection_key, worker))
-  end
-
-  defp track_connection_worker(state, _connection_key, _connection), do: state
-
-  defp remove_worker_connection(connection_key, worker, state) do
-    if state.connection_workers[connection_key] == worker do
-      remove_connection(connection_key, state)
-    else
-      state
-    end
-  end
-
-  defp remove_connections_for_worker(state, worker) do
-    state.connection_workers
-    |> Enum.filter(fn {_connection_key, connection_worker} -> connection_worker == worker end)
-    |> Enum.reduce(state, fn {connection_key, _worker}, updated_state ->
-      remove_connection(connection_key, updated_state)
-    end)
-  end
-
-  defp remove_connection(connection_key, state = %Router{}) do
-    Routing.remove_connection(connection_key, state)
-  end
-
   defp update_route_info(result, state) do
     case Routing.update_route_info(result, state) do
       {:ok, source_connection_key, frame, state} ->
         {:ok, source_connection_key, frame,
-         track_connection_worker(
+         ConnectionRegistry.track_worker(
            state,
            source_connection_key,
            state.connections[source_connection_key]
          )}
 
       {:error, reason, state} ->
-        {:error, reason, track_workers_for_connections(state)}
+        {:error, reason, ConnectionRegistry.track_workers(state)}
     end
-  end
-
-  defp track_workers_for_connections(state) do
-    Enum.reduce(state.connections, state, fn {connection_key, connection}, updated_state ->
-      track_connection_worker(updated_state, connection_key, connection)
-    end)
   end
 
   defp route(result) do
@@ -882,6 +847,27 @@ defmodule XMAVLink.Router do
   defp route_with_delivery(
          {:ok, source_connection_key, frame = %Frame{message_id: @setup_signing_message_id},
           state = %Router{connections: connections}}
+       )
+       when source_connection_key != :local do
+    recipients = [:local]
+
+    {
+      forward_and_update(:local, connections.local, frame, state),
+      Routing.delivery(source_connection_key, recipients, frame, state)
+    }
+  end
+
+  defp route_with_delivery(
+         {:ok, source_connection_key, frame = %Frame{message: nil},
+          state = %Router{forward_unknown: :drop}}
+       )
+       when source_connection_key != :local do
+    {state, Routing.delivery(source_connection_key, [], frame, state)}
+  end
+
+  defp route_with_delivery(
+         {:ok, source_connection_key, frame = %Frame{message: nil},
+          state = %Router{connections: connections, forward_unknown: :local_only}}
        )
        when source_connection_key != :local do
     recipients = [:local]

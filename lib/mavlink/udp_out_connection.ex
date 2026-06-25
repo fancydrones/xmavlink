@@ -4,9 +4,11 @@ defmodule XMAVLink.UDPOutConnection do
   @behaviour XMAVLink.Transport
 
   require Logger
+  import XMAVLink.Utils, only: [format_address: 1]
+
   alias XMAVLink.Connection.Inbound
+  alias XMAVLink.Connection.Outbound
   alias XMAVLink.ConnectionWorker
-  alias XMAVLink.Frame
 
   defstruct address: nil,
             port: nil,
@@ -17,7 +19,7 @@ defmodule XMAVLink.UDPOutConnection do
   @type t :: %XMAVLink.UDPOutConnection{
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
-          socket: pid,
+          socket: port,
           worker: pid | nil,
           signing: XMAVLink.Signing.t() | nil
         }
@@ -38,14 +40,14 @@ defmodule XMAVLink.UDPOutConnection do
       socket,
       dialect,
       "UDPOutConnection.handle_info",
-      "from #{Enum.join(Tuple.to_list(source_addr), ".")}:#{source_port}"
+      "from #{format_address(source_addr)}:#{source_port}"
     )
   end
 
   def open(["udpout", address, port], controlling_process) do
-    case :gen_udp.open(0, [:binary, active: true]) do
+    case :gen_udp.open(0, [:binary, active: true] ++ family_options(address)) do
       {:ok, socket} ->
-        :ok = Logger.info("Opened udpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}")
+        :ok = Logger.info("Opened udpout:#{format_address(address)}:#{port}")
 
         :ok = :gen_udp.controlling_process(socket, controlling_process)
 
@@ -62,6 +64,9 @@ defmodule XMAVLink.UDPOutConnection do
         {:error, other}
     end
   end
+
+  defp family_options(address) when is_tuple(address) and tuple_size(address) == 8, do: [:inet6]
+  defp family_options(_address), do: []
 
   def close(%XMAVLink.UDPOutConnection{socket: socket}) do
     :gen_udp.close(socket)
@@ -83,19 +88,8 @@ defmodule XMAVLink.UDPOutConnection do
           address: address,
           port: port
         },
-        %Frame{version: 1, mavlink_1_raw: packet}
+        frame
       ) do
-    :gen_udp.send(socket, address, port, packet)
-  end
-
-  def forward(
-        %XMAVLink.UDPOutConnection{
-          socket: socket,
-          address: address,
-          port: port
-        },
-        %Frame{version: 2, mavlink_2_raw: packet}
-      ) do
-    :gen_udp.send(socket, address, port, packet)
+    :gen_udp.send(socket, address, port, Outbound.packet!(frame))
   end
 end

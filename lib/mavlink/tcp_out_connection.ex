@@ -4,14 +4,16 @@ defmodule XMAVLink.TCPOutConnection do
   @behaviour XMAVLink.Transport
 
   require Logger
+  import XMAVLink.Utils, only: [format_address: 1]
+
   alias XMAVLink.Connection.Inbound
+  alias XMAVLink.Connection.Outbound
   alias XMAVLink.ConnectionWorker
-  alias XMAVLink.Frame
 
   defstruct socket: nil, address: nil, port: nil, buffer: <<>>, worker: nil, signing: nil
 
   @type t :: %XMAVLink.TCPOutConnection{
-          socket: pid,
+          socket: port,
           address: XMAVLink.Types.net_address(),
           port: XMAVLink.Types.net_port(),
           buffer: binary,
@@ -35,9 +37,9 @@ defmodule XMAVLink.TCPOutConnection do
   end
 
   def open(["tcpout", address, port], controlling_process) do
-    case :gen_tcp.connect(address, port, [:binary, active: true]) do
+    case :gen_tcp.connect(address, port, [:binary, active: true] ++ family_options(address)) do
       {:ok, socket} ->
-        :ok = Logger.debug("Opened tcpout:#{Enum.join(Tuple.to_list(address), ".")}:#{port}")
+        :ok = Logger.debug("Opened tcpout:#{format_address(address)}:#{port}")
 
         :ok = :gen_tcp.controlling_process(socket, controlling_process)
 
@@ -55,6 +57,9 @@ defmodule XMAVLink.TCPOutConnection do
     end
   end
 
+  defp family_options(address) when is_tuple(address) and tuple_size(address) == 8, do: [:inet6]
+  defp family_options(_address), do: []
+
   def close(%XMAVLink.TCPOutConnection{socket: socket}) do
     :gen_tcp.close(socket)
   end
@@ -69,15 +74,8 @@ defmodule XMAVLink.TCPOutConnection do
 
   def forward(
         %XMAVLink.TCPOutConnection{socket: socket},
-        %Frame{version: 1, mavlink_1_raw: packet}
+        frame
       ) do
-    :gen_tcp.send(socket, packet)
-  end
-
-  def forward(
-        %XMAVLink.TCPOutConnection{socket: socket},
-        %Frame{version: 2, mavlink_2_raw: packet}
-      ) do
-    :gen_tcp.send(socket, packet)
+    :gen_tcp.send(socket, Outbound.packet!(frame))
   end
 end

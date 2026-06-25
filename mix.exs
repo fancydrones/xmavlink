@@ -13,6 +13,14 @@ defmodule XMAVLink.Mixfile do
       aliases: aliases(),
       deps: deps(),
       dialyzer: [plt_add_apps: [:mix, :xmerl]],
+      test_coverage: [
+        summary: [threshold: 70],
+        ignore_modules: [
+          Common,
+          ~r/^Common\./,
+          ~r/^XMAVLink\.Message\.Common\./
+        ]
+      ],
       source_url: "https://github.com/fancydrones/xmavlink",
       consolidate_protocols: Mix.env() != :test
     ]
@@ -50,6 +58,8 @@ defmodule XMAVLink.Mixfile do
         # Keep router behavior by default. Set false for endpoint/GCS use cases
         # that should receive remote traffic without bridging remote links.
         remote_forwarding: true,
+        # Keep forward-compatible unknown-message routing by default.
+        forward_unknown: :broadcast,
         connections: []
       ],
       mod: {XMAVLink.Application, []},
@@ -86,7 +96,8 @@ defmodule XMAVLink.Mixfile do
         "MIGRATING_0_14.md",
         "LICENSE",
         "SECURITY.md",
-        "MAVLINK_SPEC_ALIGNMENT.md"
+        "MAVLINK_SPEC_ALIGNMENT.md",
+        "MAVLINK2_SIGNING.md"
       ],
       exclude_patterns: [".DS_Store"],
       licenses: ["MIT"],
@@ -103,13 +114,15 @@ defmodule XMAVLink.Mixfile do
         "MIGRATING_0_14.md",
         "CHANGELOG.md",
         "SECURITY.md",
-        "MAVLINK_SPEC_ALIGNMENT.md"
+        "MAVLINK_SPEC_ALIGNMENT.md",
+        "MAVLINK2_SIGNING.md"
       ],
       groups_for_extras: [
         Guides: [
           "MIGRATING_0_14.md",
           "SECURITY.md",
-          "MAVLINK_SPEC_ALIGNMENT.md"
+          "MAVLINK_SPEC_ALIGNMENT.md",
+          "MAVLINK2_SIGNING.md"
         ],
         Release: [
           "CHANGELOG.md"

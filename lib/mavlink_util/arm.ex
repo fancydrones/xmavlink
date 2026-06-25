@@ -13,7 +13,7 @@ defmodule XMAVLink.Util.Arm do
 
   require Logger
   alias XMAVLink.Util.CacheManager
-  alias XMAVLink.Util.Context
+  alias XMAVLink.Util.Command
   import XMAVLink.Util.FocusManager, only: [focus: 1]
 
   def arm(opts \\ []) when is_list(opts) do
@@ -23,8 +23,8 @@ defmodule XMAVLink.Util.Arm do
   end
 
   def arm(system_id, component_id, mavlink_version, opts \\ []) do
-    opts = command_opts(opts, @arm_retry_interval, @arm_retries)
-    heartbeat_module = message_module(opts.dialect, :Heartbeat)
+    opts = Command.opts(opts, @arm_retry_interval, @arm_retries)
+    heartbeat_module = Command.message_module(opts.dialect, :Heartbeat)
 
     with {:ok, _, %{__struct__: ^heartbeat_module, system_status: system_status}}
          when system_status in [
@@ -49,7 +49,7 @@ defmodule XMAVLink.Util.Arm do
     else
       {:ok, _, %{__struct__: ^heartbeat_module, system_status: invalid_system_status}} ->
         Logger.warning(
-          "Cannot arm vehicle #{system_id}.#{component_id}: #{describe(opts.dialect, invalid_system_status)}"
+          "Cannot arm vehicle #{system_id}.#{component_id}: #{Command.describe(opts.dialect, invalid_system_status)}"
         )
 
         {:error, :cannot_arm_invalid_vehicle_status}
@@ -70,8 +70,8 @@ defmodule XMAVLink.Util.Arm do
   end
 
   def disarm(system_id, component_id, mavlink_version, opts \\ []) do
-    opts = command_opts(opts, @arm_retry_interval, @arm_retries)
-    heartbeat_module = message_module(opts.dialect, :Heartbeat)
+    opts = Command.opts(opts, @arm_retry_interval, @arm_retries)
+    heartbeat_module = Command.message_module(opts.dialect, :Heartbeat)
 
     with :ok <-
            XMAVLink.Router.subscribe(opts.router,
@@ -89,7 +89,7 @@ defmodule XMAVLink.Util.Arm do
   defp do_arm(_system_id, _component_id, _mavlink_version, _opts, 0), do: {:error, :timeout}
 
   defp do_arm(system_id, component_id, mavlink_version, opts, attempts) do
-    heartbeat_module = message_module(opts.dialect, :Heartbeat)
+    heartbeat_module = Command.message_module(opts.dialect, :Heartbeat)
 
     with :ok <-
            XMAVLink.Router.pack_and_send(
@@ -103,11 +103,17 @@ defmodule XMAVLink.Util.Arm do
             Logger.info("Armed vehicle #{system_id}.#{component_id}")
             :ok
           else
-            do_arm(system_id, component_id, mavlink_version, opts, next_attempts(attempts))
+            do_arm(
+              system_id,
+              component_id,
+              mavlink_version,
+              opts,
+              Command.next_attempts(attempts)
+            )
           end
       after
         opts.retry_interval_ms ->
-          do_arm(system_id, component_id, mavlink_version, opts, next_attempts(attempts))
+          do_arm(system_id, component_id, mavlink_version, opts, Command.next_attempts(attempts))
       end
     end
   end
@@ -115,7 +121,7 @@ defmodule XMAVLink.Util.Arm do
   defp do_disarm(_system_id, _component_id, _mavlink_version, _opts, 0), do: {:error, :timeout}
 
   defp do_disarm(system_id, component_id, mavlink_version, opts, attempts) do
-    heartbeat_module = message_module(opts.dialect, :Heartbeat)
+    heartbeat_module = Command.message_module(opts.dialect, :Heartbeat)
 
     with :ok <-
            XMAVLink.Router.pack_and_send(
@@ -129,37 +135,29 @@ defmodule XMAVLink.Util.Arm do
             Logger.info("Disarmed vehicle #{system_id}.#{component_id}")
             :ok
           else
-            do_disarm(system_id, component_id, mavlink_version, opts, next_attempts(attempts))
+            do_disarm(
+              system_id,
+              component_id,
+              mavlink_version,
+              opts,
+              Command.next_attempts(attempts)
+            )
           end
       after
         opts.retry_interval_ms ->
-          do_disarm(system_id, component_id, mavlink_version, opts, next_attempts(attempts))
+          do_disarm(
+            system_id,
+            component_id,
+            mavlink_version,
+            opts,
+            Command.next_attempts(attempts)
+          )
       end
     end
   end
 
-  defp command_opts(opts, retry_interval_ms, retries) do
-    context = opts |> Keyword.put(:router, CacheManager.router(opts)) |> Context.new()
-    retries = Keyword.get(opts, :retries, retries)
-
-    %{
-      context: context,
-      router: context.router,
-      dialect: context.dialect,
-      table_prefix: context.table_prefix,
-      retry_interval_ms: Keyword.get(opts, :retry_interval_ms, retry_interval_ms),
-      attempts: attempts(retries)
-    }
-  end
-
-  defp attempts(:infinity), do: :infinity
-  defp attempts(retries) when is_integer(retries) and retries >= 0, do: retries + 1
-
-  defp next_attempts(:infinity), do: :infinity
-  defp next_attempts(attempts), do: attempts - 1
-
   defp arm_command(system_id, component_id, arm, dialect) do
-    struct(message_module(dialect, :CommandLong), %{
+    struct(Command.message_module(dialect, :CommandLong), %{
       command: :mav_cmd_component_arm_disarm,
       confirmation: 1,
       param1: arm,
@@ -172,15 +170,5 @@ defmodule XMAVLink.Util.Arm do
       target_component: component_id,
       target_system: system_id
     })
-  end
-
-  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
-
-  defp describe(dialect, value) do
-    if function_exported?(dialect, :describe, 1) do
-      apply(dialect, :describe, [value])
-    else
-      inspect(value)
-    end
   end
 end

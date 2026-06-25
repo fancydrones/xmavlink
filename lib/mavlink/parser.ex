@@ -57,6 +57,8 @@ defmodule XMAVLink.Parser do
   @unit_regex ~r/\A[A-Za-z0-9_%@\/\*\^\.\-]+\z/
   @scalar_field_types ~w(char uint8_t int8_t uint16_t int16_t uint32_t int32_t uint64_t int64_t float double)
   @valid_display_values ~w(bitmask)
+  @max_message_id 0xFF_FFFF
+  @max_enum_value 0xFFFF_FFFF_FFFF_FFFF
   @reserved_identifier_names MapSet.new(~w(
     abstract after await boolean break byte case catch char class cond const
     continue debugger default def defimpl defmodule defp defprotocol delete do
@@ -605,7 +607,7 @@ defmodule XMAVLink.Parser do
          {:ok, field_name} <-
            :xmerl_xpath.string(~c"@name", element)
            |> extract_text
-           |> required_identifier("field name", context),
+           |> required_identifier("field name", context, allow_reserved: true),
          {:ok, enum} <-
            :xmerl_xpath.string(~c"@enum", element)
            |> extract_text
@@ -699,13 +701,29 @@ defmodule XMAVLink.Parser do
   end
 
   defp validate_definition(definition) do
-    with :ok <- validate_unique_message_ids(definition.messages),
+    with :ok <- validate_message_ids(definition.messages),
+         :ok <- validate_unique_message_ids(definition.messages),
          :ok <- validate_unique_message_modules(definition.messages),
          :ok <- validate_unique_enums(definition.enums),
          :ok <- validate_enum_entries(definition.enums),
-         :ok <- validate_message_fields(definition.messages) do
+         :ok <- validate_message_fields(definition.messages),
+         :ok <- validate_field_enum_references(definition.messages, definition.enums) do
       definition
     end
+  end
+
+  defp validate_message_ids(messages) do
+    reduce(messages, :ok, fn
+      _next_message, {:error, _reason} = error ->
+        error
+
+      %{id: id}, :ok when id in 0..@max_message_id ->
+        :ok
+
+      %{id: id, name: name}, :ok ->
+        {:error,
+         "Invalid message id #{inspect(id)} for #{name}; MAVLink 2 message ids must be in 0..#{@max_message_id}"}
+    end)
   end
 
   defp validate_unique_message_ids(messages) do
@@ -766,13 +784,28 @@ defmodule XMAVLink.Parser do
   defp validate_unique_enum_entry_values(enum) do
     resolved_entries = resolve_enum_entry_values(enum.entries)
 
-    case duplicate_by(resolved_entries, & &1.value) do
+    with :ok <- validate_enum_entry_value_range(enum, resolved_entries) do
+      case duplicate_by(resolved_entries, & &1.value) do
+        nil ->
+          :ok
+
+        {value, duplicate_entries} ->
+          names = duplicate_entries |> map(&inspect(&1.name)) |> Enum.join(", ")
+          {:error, "Duplicate enum value #{value} in enum #{inspect(enum.name)} for #{names}"}
+      end
+    end
+  end
+
+  defp validate_enum_entry_value_range(enum, entries) do
+    entries
+    |> Enum.find(fn entry -> entry.value < 0 or entry.value > @max_enum_value end)
+    |> case do
       nil ->
         :ok
 
-      {value, duplicate_entries} ->
-        names = duplicate_entries |> map(&inspect(&1.name)) |> Enum.join(", ")
-        {:error, "Duplicate enum value #{value} in enum #{inspect(enum.name)} for #{names}"}
+      entry ->
+        {:error,
+         "Invalid enum value #{entry.value} for #{inspect(entry.name)} in enum #{inspect(enum.name)}; enum values must be in 0..#{@max_enum_value}"}
     end
   end
 
@@ -791,6 +824,30 @@ defmodule XMAVLink.Parser do
         end
     end)
   end
+
+  defp validate_field_enum_references(messages, enums) do
+    enum_names = MapSet.new(enums, &Atom.to_string(&1.name))
+
+    reduce(messages, :ok, fn
+      _message, {:error, _reason} = error ->
+        error
+
+      message, :ok ->
+        case Enum.find(message.fields, &unknown_enum_reference?(&1, enum_names)) do
+          nil ->
+            :ok
+
+          field ->
+            {:error,
+             "Unknown enum #{inspect(field.enum)} referenced by field #{field.name} in message #{message.name}"}
+        end
+    end)
+  end
+
+  defp unknown_enum_reference?(%{enum: ""}, _enum_names), do: false
+
+  defp unknown_enum_reference?(%{enum: enum}, enum_names),
+    do: not MapSet.member?(enum_names, enum)
 
   defp resolve_enum_entry_values(entries) do
     entries
@@ -817,15 +874,23 @@ defmodule XMAVLink.Parser do
     |> Enum.join("")
   end
 
-  defp required_identifier(nil, kind, context), do: {:error, "Missing #{kind} in #{context}"}
-  defp required_identifier("", kind, context), do: {:error, "Missing #{kind} in #{context}"}
+  defp required_identifier(value, kind, context),
+    do: required_identifier(value, kind, context, [])
 
-  defp required_identifier(value, kind, context) when is_binary(value) do
+  defp required_identifier(nil, kind, context, _opts),
+    do: {:error, "Missing #{kind} in #{context}"}
+
+  defp required_identifier("", kind, context, _opts),
+    do: {:error, "Missing #{kind} in #{context}"}
+
+  defp required_identifier(value, kind, context, opts) when is_binary(value) do
+    allow_reserved? = Keyword.get(opts, :allow_reserved, false)
+
     cond do
       not Regex.match?(@identifier_regex, value) ->
         {:error, "Invalid #{kind} #{inspect(value)} in #{context}"}
 
-      reserved_identifier?(value) ->
+      not allow_reserved? and reserved_identifier?(value) ->
         {:error, "Reserved #{kind} #{inspect(value)} in #{context}"}
 
       true ->

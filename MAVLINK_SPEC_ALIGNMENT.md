@@ -1,6 +1,6 @@
 # MAVLink Spec Alignment for 1.0
 
-Review date: 2026-05-08
+Review date: 2026-06-25
 
 Primary references:
 
@@ -53,7 +53,7 @@ Known non-goals for 1.0 unless separately implemented:
 | MAVLink 1 frame shape | Supported | Existing parser/packer handles v1 framing, checksum, and 8-bit message ids. New MAVLink 1-only expansion is not a priority for 1.0. |
 | CRC_EXTRA calculation | Supported | Field ordering is size-stable for base fields, arrays are ordered by element size, and extension fields are excluded. |
 | Field ordering | Supported | Base fields are stably sorted by native type size; extension fields remain in XML declaration order. |
-| Unknown message handling | Partial | Unknown known-shape frames are forwarded as broadcast when the message id is not present in the dialect. Unknown messages cannot expose target fields because the payload cannot be decoded. |
+| Unknown message handling | Configurable partial | Unknown known-shape frames are forwarded as broadcast by default when the message id is not present in the dialect. Routers can set `forward_unknown: :local_only` or `:drop` for stricter deployments. Unknown messages cannot expose target fields because the payload cannot be decoded. |
 | Compatible flags | Supported | MAVLink 2 compatible flags are retained and otherwise ignored. |
 | Incompatible flags | Supported | Unknown incompatible flags are discarded as required. Signing's known 13-byte trailer is consumed when present so stream boundaries stay aligned. |
 | Routing unchanged packets | Supported with signing caveat | Forwarding generally uses the original raw frame bytes. Unsigned MAVLink 2 frames sent over signing-enabled connections are signed for that outbound link; already signed MAVLink 2 frames are forwarded unchanged. |
@@ -63,10 +63,10 @@ Known non-goals for 1.0 unless separately implemented:
 | Enum merging | Partial | Matching enum names are merged and sorted by value. Duplicate enum entries and duplicate resolved values are rejected. |
 | Duplicate message ids | Supported validation | Duplicate message ids are rejected across the combined dialect, including included XML files. |
 | XML `bitmask="true"` | Supported | Enum-level bitmask declarations are parsed and used before heuristic bitmask detection. |
-| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. The parser validates generated identifiers, rejects reserved enum/message/field names, and escapes generated docs/descriptions before source generation. |
+| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. The parser validates generated identifiers, rejects reserved enum and message names, rejects out-of-range message ids and enum values, validates field enum references, and escapes generated docs/descriptions before source generation. Reserved field names such as `end` are accepted because generated message structs already support them as keys. |
 | Generated Common dialect | Supported within above scope | `lib/common.ex` is regenerated from `config/common.xml` and should be treated as build output. |
 
-## Changes Made In This Pass
+## Recent Alignment Work
 
 - Generated MAVLink 2 unpackers now accept extra trailing bytes after all
   locally known fields and ignore them as future extension fields.

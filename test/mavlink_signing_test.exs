@@ -27,6 +27,7 @@ defmodule XMAVLink.Test.Signing do
                 timestamp_load: nil,
                 timestamp_save: nil,
                 accept_unsigned: true,
+                accept_mavlink1: true,
                 stream_timestamps: %{}
               }} =
                Signing.new(
@@ -91,6 +92,13 @@ defmodule XMAVLink.Test.Signing do
                  secret_key: @secret_key,
                  link_id: @link_id,
                  accept_unsigned: :sometimes
+               )
+
+      assert {:error, :invalid_accept_mavlink1} =
+               Signing.new(
+                 secret_key: @secret_key,
+                 link_id: @link_id,
+                 accept_mavlink1: :sometimes
                )
 
       assert {:error, :invalid_timestamp_load} =
@@ -231,6 +239,24 @@ defmodule XMAVLink.Test.Signing do
       assert {:ok, ^frame, ^signing} = Signing.validate_inbound(frame, signing)
     end
 
+    test "rejects MAVLink 1 frames when signing policy disables MAVLink 1 acceptance" do
+      frame =
+        Frame.pack_frame(%Frame{
+          version: 1,
+          sequence_number: 7,
+          source_system: 1,
+          source_component: 1,
+          message_id: 24,
+          payload: <<1, 2, 3>>,
+          crc_extra: 0
+        })
+
+      signing = signing(accept_mavlink1: false)
+
+      assert {:error, :mavlink_1_rejected, ^signing} =
+               Signing.validate_inbound(frame, signing)
+    end
+
     test "disabled policy keeps unsigned frames accepted and signed frames unsupported" do
       unsigned_frame = unsigned_frame()
       signed_frame = signed_frame(@valid_timestamp)
@@ -288,6 +314,24 @@ defmodule XMAVLink.Test.Signing do
       signing = signing()
 
       assert {:ok, ^mavlink_1_frame, ^signing} = Signing.sign_outbound(mavlink_1_frame, signing)
+    end
+
+    test "rejects outbound MAVLink 1 frames when signing policy disables MAVLink 1 acceptance" do
+      mavlink_1_frame =
+        Frame.pack_frame(%Frame{
+          version: 1,
+          sequence_number: 7,
+          source_system: 1,
+          source_component: 1,
+          message_id: 24,
+          payload: <<1, 2, 3>>,
+          crc_extra: 0
+        })
+
+      signing = signing(accept_mavlink1: false)
+
+      assert {:error, :mavlink_1_rejected, ^signing} =
+               Signing.sign_outbound(mavlink_1_frame, signing)
     end
 
     test "leaves already signed frames unchanged and catches up local timestamp" do

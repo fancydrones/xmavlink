@@ -389,6 +389,19 @@ defmodule XMAVLink.Test.Parser do
                    }
                  ],
                  name: :mav_autopilot
+               },
+               %{
+                 bitmask: false,
+                 description: "MAVLINK component type reported in HEARTBEAT message.",
+                 entries: [
+                   %{
+                     description: "Generic micro air vehicle.",
+                     name: :mav_type_generic,
+                     params: [],
+                     value: 0
+                   }
+                 ],
+                 name: :mav_type
                }
              ],
              messages: [
@@ -686,6 +699,70 @@ defmodule XMAVLink.Test.Parser do
     )
   end
 
+  test "out-of-range message ids are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="16777216" name="TOO_HIGH">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Invalid message id 16777216"
+        assert message =~ "TOO_HIGH"
+        assert message =~ "0..16777215"
+      end
+    )
+  end
+
+  test "fields referencing unknown enums are rejected after includes are merged" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>included.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint8_t" name="known" enum="INCLUDED_ENUM">Known enum</field>
+              <field type="uint8_t" name="missing" enum="MISSING_ENUM">Missing enum</field>
+            </message>
+          </messages>
+        </mavlink>
+        """,
+        "included.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="INCLUDED_ENUM">
+              <entry value="0" name="INCLUDED_ZERO" />
+            </enum>
+          </enums>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ ~s(Unknown enum "missing_enum")
+        assert message =~ "field missing"
+        assert message =~ "TEST_MESSAGE"
+      end
+    )
+  end
+
   test "duplicate enum entries are rejected" do
     with_xml(
       %{
@@ -706,6 +783,31 @@ defmodule XMAVLink.Test.Parser do
       fn dir ->
         assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
         assert message =~ "Duplicate enum entry :test_entry"
+        assert message =~ ":test_enum"
+      end
+    )
+  end
+
+  test "negative enum values are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="TEST_ENUM">
+              <entry value="-1" name="TEST_NEGATIVE" />
+            </enum>
+          </enums>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Invalid enum value -1"
+        assert message =~ ":test_negative"
         assert message =~ ":test_enum"
       end
     )
@@ -780,22 +882,6 @@ defmodule XMAVLink.Test.Parser do
         ~s(Reserved message name "CLASS" in message id 1)
       },
       {
-        "reserved field name",
-        """
-        <?xml version="1.0"?>
-        <mavlink>
-          <version>3</version>
-          <dialect>0</dialect>
-          <messages>
-            <message id="1" name="TEST_MESSAGE">
-              <field type="uint8_t" name="case">Value</field>
-            </message>
-          </messages>
-        </mavlink>
-        """,
-        ~s(Reserved field name "case" in message TEST_MESSAGE)
-      },
-      {
         "reserved enum name",
         """
         <?xml version="1.0"?>
@@ -835,6 +921,29 @@ defmodule XMAVLink.Test.Parser do
         assert message =~ expected_message
       end)
     end
+  end
+
+  test "reserved field names are accepted as struct keys" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint16_t" name="end">End index</field>
+            </message>
+          </messages>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert %{messages: [%{fields: [%{name: "end"}]}]} =
+                 parse_mavlink_xml(Path.join(dir, "root.xml"))
+      end
+    )
   end
 
   test "invalid field display values are rejected before atom creation" do
