@@ -59,11 +59,11 @@ Known non-goals for 1.0 unless separately implemented:
 | Routing unchanged packets | Supported with signing caveat | Forwarding generally uses the original raw frame bytes. Unsigned MAVLink 2 frames sent over signing-enabled connections are signed for that outbound link; already signed MAVLink 2 frames are forwarded unchanged. |
 | Target inference | Supported | Generated metadata classifies broadcast, system, component, and system-component targets from `target_system` and `target_component` fields. |
 | Route reset after reboot | Supported | Routing tracks `SYSTEM_TIME.time_boot_ms` per source system/component and clears learned routes for that system when the same source reports a lower boot time. |
-| XML includes | Partial | Includes are recursive and deterministic, but missing include errors and duplicate handling are not yet aligned with `mavgen`. |
-| Enum merging | Partial | Matching enum names are merged and sorted by value. Duplicate enum entries are not rejected yet. |
-| Duplicate message ids | Unsupported validation | The parser/generator does not currently reject duplicate message ids across includes. |
+| XML includes | Supported with limits | Includes are recursive and deterministic. Missing includes, empty includes, include cycles, conflicting include paths, excessive include depth/count, and oversized XML files return explicit errors. |
+| Enum merging | Partial | Matching enum names are merged and sorted by value. Duplicate enum entries and duplicate resolved values are rejected. |
+| Duplicate message ids | Supported validation | Duplicate message ids are rejected across the combined dialect, including included XML files. |
 | XML `bitmask="true"` | Supported | Enum-level bitmask declarations are parsed and used before heuristic bitmask detection. |
-| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. Identifier validation and safer escaping are tracked separately in #49. |
+| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. The parser validates generated identifiers and escapes generated docs/descriptions before source generation. Reserved-name validation is still tracked separately. |
 | Generated Common dialect | Supported within above scope | `lib/common.ex` is regenerated from `config/common.xml` and should be treated as build output. |
 
 ## Changes Made In This Pass
@@ -106,8 +106,8 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #53: Align XML parser/generator validation with `mavgen` for missing
-  includes, duplicate message ids, duplicate enum entries, and reserved names.
+- #53: Continue aligning XML parser/generator validation with `mavgen`,
+  especially reserved-name validation.
 
 These follow-ups should be prioritized by MAVLink 2 impact first. None of the
 reviewed gaps require new MAVLink 1-only work before 1.0.

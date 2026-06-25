@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Added
+
+- Added MAVLink XML parser hardening for include cycles, conflicting include
+  paths, file-size limits, include-depth limits, and include-count limits.
+
 ### Changed
 
 - Utility cache ETS tables now store typed cache structs for visible systems,

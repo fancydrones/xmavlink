@@ -57,6 +57,11 @@ defmodule XMAVLink.Parser do
   @unit_regex ~r/\A[A-Za-z0-9_%@\/\*\^\.\-]+\z/
   @scalar_field_types ~w(char uint8_t int8_t uint16_t int16_t uint32_t int32_t uint64_t int64_t float double)
   @valid_display_values ~w(bitmask)
+  @default_limits %{
+    max_xml_file_bytes: 2_000_000,
+    max_include_depth: 32,
+    max_include_files: 128
+  }
 
   @xmerl_header "xmerl/include/xmerl.hrl"
   defrecord :xmlElement, extract(:xmlElement, from_lib: @xmerl_header)
@@ -70,77 +75,213 @@ defmodule XMAVLink.Parser do
           messages: [message_description]
         }
 
+  @type parser_limit :: pos_integer | :infinity
+  @type parse_option ::
+          {:max_xml_file_bytes, parser_limit}
+          | {:max_include_depth, parser_limit}
+          | {:max_include_files, parser_limit}
+  @type parse_options :: [parse_option]
+
   @spec parse_mavlink_xml(String.t()) ::
           mavlink_definition | {:error, String.t()}
   def parse_mavlink_xml(path) do
-    case parse_mavlink_xml(path, %{seen: MapSet.new(), definitions: []}) do
-      {:error, _message} = error ->
-        error
+    parse_mavlink_xml(path, [])
+  end
 
-      %{definitions: definitions} ->
-        definitions
-        |> reverse()
-        |> combine_definitions()
-        |> validate_definition()
+  @spec parse_mavlink_xml(String.t(), parse_options) ::
+          mavlink_definition | {:error, String.t()}
+  def parse_mavlink_xml(path, opts) when is_list(opts) do
+    with {:ok, limits} <- parse_limits(opts) do
+      path
+      |> parse_mavlink_xml_file(initial_acc(limits))
+      |> combined_definition()
     end
   end
 
-  def parse_mavlink_xml(path, paths) do
+  @doc false
+  def parse_mavlink_xml(path, paths) when is_map(paths) do
     acc =
       if Map.has_key?(paths, :seen) and Map.has_key?(paths, :definitions) do
-        paths
+        normalize_acc(paths)
       else
-        %{seen: MapSet.new(Map.keys(paths)), definitions: Map.values(paths)}
+        normalize_acc(%{
+          seen: MapSet.new(Map.keys(paths)),
+          definitions: Map.values(paths)
+        })
       end
 
     parse_mavlink_xml_file(path, acc)
   end
 
+  defp combined_definition({:error, _message} = error), do: error
+
+  defp combined_definition(%{definitions: definitions}) do
+    definitions
+    |> reverse()
+    |> combine_definitions()
+    |> validate_definition()
+  end
+
+  defp initial_acc(limits) do
+    %{
+      seen: MapSet.new(),
+      definitions: [],
+      stack: [],
+      file_count: 0,
+      limits: limits
+    }
+  end
+
+  defp normalize_acc(acc) do
+    seen =
+      acc
+      |> Map.get(:seen, MapSet.new())
+      |> MapSet.to_list()
+      |> map(&Path.expand/1)
+      |> MapSet.new()
+
+    Map.merge(acc, %{
+      seen: seen,
+      definitions: Map.get(acc, :definitions, []),
+      stack: Map.get(acc, :stack, []),
+      file_count: Map.get(acc, :file_count, 0),
+      limits: Map.get(acc, :limits, @default_limits)
+    })
+  end
+
+  defp parse_limits(opts) do
+    reduce(opts, {:ok, @default_limits}, fn
+      _option, {:error, _message} = error ->
+        error
+
+      {key, value}, {:ok, limits} when is_map_key(@default_limits, key) ->
+        if valid_limit?(value) do
+          {:ok, Map.put(limits, key, value)}
+        else
+          {:error, "Invalid MAVLink XML parser limit #{inspect(key)}: #{inspect(value)}"}
+        end
+
+      option, {:ok, _limits} ->
+        {:error, "Invalid MAVLink XML parser option #{inspect(option)}"}
+    end)
+  end
+
+  defp valid_limit?(:infinity), do: true
+  defp valid_limit?(value), do: is_integer(value) and value > 0
+
   defp parse_mavlink_xml_file(path, acc) do
     path_key = Path.expand(path)
 
-    case MapSet.member?(acc.seen, path_key) do
-      true ->
+    cond do
+      path_key in acc.stack ->
+        {:error,
+         "Cyclic MAVLink XML include detected: #{format_path_chain(acc.stack ++ [path_key])}"}
+
+      MapSet.member?(acc.seen, path_key) ->
         # Don't include a file twice
         acc
 
-      false ->
-        case scan_file(path) do
-          {defs, []} ->
-            acc = %{acc | seen: MapSet.put(acc.seen, path_key)}
+      exceeds_limit?(length(acc.stack) + 1, acc.limits.max_include_depth) ->
+        {:error,
+         "MAVLink XML include depth for '#{path_key}' exceeds max_include_depth limit of #{format_limit(acc.limits.max_include_depth)} in #{format_path_chain(acc.stack ++ [path_key])}"}
 
-            with {:ok, acc} <- parse_includes(defs, path, acc),
-                 {:ok, definition} <- parse_definition(defs) do
-              %{acc | definitions: [definition | acc.definitions]}
-            end
+      exceeds_limit?(acc.file_count + 1, acc.limits.max_include_files) ->
+        {:error,
+         "MAVLink XML include graph exceeds max_include_files limit of #{format_limit(acc.limits.max_include_files)} while parsing '#{path_key}'"}
 
-          {:error, :enoent} ->
-            {:error, "File '#{path}' does not exist"}
+      true ->
+        parse_new_mavlink_xml_file(path, path_key, acc)
+    end
+  end
 
-          {:error, message} when is_binary(message) ->
-            {:error, message}
+  defp parse_new_mavlink_xml_file(path, path_key, acc) do
+    parent_stack = acc.stack
 
-          {:error, message} ->
-            {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect(message)}"}
+    acc = %{
+      acc
+      | seen: MapSet.put(acc.seen, path_key),
+        stack: parent_stack ++ [path_key],
+        file_count: acc.file_count + 1
+    }
+
+    case scan_file(path, acc.limits) do
+      {defs, []} ->
+        with {:ok, acc} <- parse_includes(defs, path_key, acc),
+             {:ok, definition} <- parse_definition(defs) do
+          %{acc | definitions: [definition | acc.definitions], stack: parent_stack}
         end
+
+      {:error, :enoent} ->
+        {:error, "File '#{path}' does not exist"}
+
+      {:error, message} when is_binary(message) ->
+        {:error, message}
+
+      {:error, message} ->
+        {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect(message)}"}
     end
   end
 
   defp parse_includes(defs, path, acc) do
+    with {:ok, includes} <- include_paths(defs, path),
+         :ok <- validate_include_conflicts(includes, path) do
+      reduce(includes, {:ok, acc}, fn
+        _include, {:error, _message} = error ->
+          error
+
+        {_include, include_path}, {:ok, acc} ->
+          case parse_mavlink_xml_file(include_path, acc) do
+            {:error, _message} = error -> error
+            acc -> {:ok, acc}
+          end
+      end)
+    end
+  end
+
+  defp include_paths(defs, path) do
     :xmerl_xpath.string(~c"/mavlink/include/text()", defs)
     |> map(&extract_text/1)
-    |> reduce({:ok, acc}, fn
-      _next_include, {:error, _message} = error ->
+    |> reduce({:ok, []}, fn
+      _include, {:error, _message} = error ->
         error
 
-      next_include, {:ok, acc} ->
-        include_path = Path.expand(next_include, Path.dirname(path))
+      include, {:ok, _acc} when include in [nil, ""] ->
+        {:error, "Empty MAVLink XML include in '#{path}'"}
 
-        case parse_mavlink_xml_file(include_path, acc) do
-          {:error, _message} = error -> error
-          acc -> {:ok, acc}
-        end
+      include, {:ok, acc} ->
+        {:ok, [{include, Path.expand(include, Path.dirname(path))} | acc]}
     end)
+    |> case do
+      {:ok, includes} -> {:ok, reverse(includes)}
+      {:error, _message} = error -> error
+    end
+  end
+
+  defp validate_include_conflicts(includes, path) do
+    includes
+    |> Enum.group_by(fn {_include, include_path} -> include_path end, fn {include, _path} ->
+      include
+    end)
+    |> Enum.find(fn {_include_path, include_names} ->
+      include_names
+      |> MapSet.new()
+      |> MapSet.size()
+      |> Kernel.>(1)
+    end)
+    |> case do
+      nil ->
+        :ok
+
+      {include_path, include_names} ->
+        names =
+          include_names
+          |> Enum.uniq()
+          |> map(&inspect/1)
+          |> Enum.join(", ")
+
+        {:error,
+         "Conflicting MAVLink XML includes in '#{path}' resolve to '#{include_path}': #{names}"}
+    end
   end
 
   defp parse_definition(defs) do
@@ -173,13 +314,52 @@ defmodule XMAVLink.Parser do
     end
   end
 
-  defp scan_file(path) do
-    try do
-      :xmerl_scan.file(path)
-    catch
-      kind, reason ->
-        {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect({kind, reason})}"}
+  defp scan_file(path, limits) do
+    with :ok <- validate_file_size(path, limits) do
+      try do
+        :xmerl_scan.file(path)
+      catch
+        kind, reason ->
+          {:error, "Failed to parse MAVLink XML file '#{path}': #{inspect({kind, reason})}"}
+      end
     end
+  end
+
+  defp validate_file_size(path, limits) do
+    case File.stat(path) do
+      {:ok, %{type: :regular, size: size}} ->
+        if exceeds_limit?(size, limits.max_xml_file_bytes) do
+          {:error,
+           "MAVLink XML file '#{path}' is #{size} bytes, exceeding max_xml_file_bytes limit of #{format_limit(limits.max_xml_file_bytes)}"}
+        else
+          :ok
+        end
+
+      {:ok, %{type: type}} ->
+        {:error, "MAVLink XML path '#{path}' is not a regular file: #{inspect(type)}"}
+
+      {:error, :enoent} ->
+        {:error, :enoent}
+
+      {:error, reason} ->
+        {:error, "Failed to stat MAVLink XML file '#{path}': #{inspect(reason)}"}
+    end
+  end
+
+  defp exceeds_limit?(_value, :infinity), do: false
+  defp exceeds_limit?(value, limit), do: value > limit
+
+  defp format_limit(limit) do
+    case limit do
+      :infinity -> "infinity"
+      limit -> Integer.to_string(limit)
+    end
+  end
+
+  defp format_path_chain(paths) do
+    paths
+    |> map(&Path.basename/1)
+    |> Enum.join(" -> ")
   end
 
   def combine_definitions([single_def]) do

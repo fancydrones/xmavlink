@@ -484,6 +484,142 @@ defmodule XMAVLink.Test.Parser do
     )
   end
 
+  test "XML file size limit is enforced before parsing" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <description>#{String.duplicate("x", 128)}</description>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} =
+                 parse_mavlink_xml(Path.join(dir, "root.xml"), max_xml_file_bytes: 64)
+
+        assert message =~ "max_xml_file_bytes limit of 64"
+        assert message =~ "root.xml"
+      end
+    )
+  end
+
+  test "include depth limit is enforced with include chain context" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>child.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """,
+        "child.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>grandchild.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """,
+        "grandchild.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} =
+                 parse_mavlink_xml(Path.join(dir, "root.xml"), max_include_depth: 2)
+
+        assert message =~ "max_include_depth limit of 2"
+        assert message =~ "root.xml -> child.xml -> grandchild.xml"
+      end
+    )
+  end
+
+  test "cyclic includes are rejected with include chain context" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>child.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """,
+        "child.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>root.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Cyclic MAVLink XML include detected"
+        assert message =~ "root.xml -> child.xml -> root.xml"
+      end
+    )
+  end
+
+  test "empty includes are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include> </include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Empty MAVLink XML include"
+        assert message =~ "root.xml"
+      end
+    )
+  end
+
+  test "conflicting include paths are rejected" do
+    with_xml(
+      %{
+        "root.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <include>included.xml</include>
+          <include>./included.xml</include>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """,
+        "included.xml" => """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+        </mavlink>
+        """
+      },
+      fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml"))
+        assert message =~ "Conflicting MAVLink XML includes"
+        assert message =~ ~s("included.xml")
+        assert message =~ ~s("./included.xml")
+      end
+    )
+  end
+
   test "duplicate message ids across includes are rejected" do
     with_xml(
       %{
