@@ -2,8 +2,16 @@
 
 ## Unreleased
 
+### Added
+
+- Added MAVLink XML parser hardening for include cycles, conflicting include
+  paths, file-size limits, include-depth limits, and include-count limits.
+
 ### Changed
 
+- Utility cache ETS tables now store typed cache structs for visible systems,
+  latest messages, and parameter values. Use `XMAVLink.Util.CacheManager`
+  query APIs instead of relying on direct ETS payload shapes.
 - Clarified the public HexDocs API surface and hid internal transport delegate
   modules from generated documentation.
 
