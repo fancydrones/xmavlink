@@ -1,0 +1,5 @@
+%{
+  "circuits_uart": {:hex, :circuits_uart, "1.6.0", "259e8126b4004648e1bba6da5827b9e473b7e09e1eb4357f0026a1d9f274fce2", [:mix], [{:elixir_make, "~> 0.6", [hex: :elixir_make, repo: "hexpm", optional: false]}], "hexpm", "9f0bdf612706b16beb2026a9e316cc313b919c35b663c1177d374b1f7330b790"},
+  "elixir_make": {:hex, :elixir_make, "0.10.0", "16577e2583a79bb79237bbff349619ef5d80afffc07eac6e4faf0d00e2ddaf7d", [:mix], [], "hexpm", "dc1f09fb7fa68866b886abd5f0f3c83553b1a19a52359a899e92af1bb3b31982"},
+  "poolboy": {:hex, :poolboy, "1.5.2", "392b007a1693a64540cead79830443abf5762f5d30cf50bc95cb2c1aaafa006b", [:rebar3], [], "hexpm", "dad79704ce5440f3d5a3681c8590b9dc25d1a561e8f5a9c995281012860901e3"},
+}
