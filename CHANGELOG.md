@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.2 - 2026-06-25
+
 ### Added
 
 - Added MAVLink XML parser hardening for include cycles, conflicting include
