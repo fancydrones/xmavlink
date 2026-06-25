@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Tests
+
+- Added router coverage for subscriber cleanup and independent outbound signing
+  state across multiple UDP connections.
+
 ## 0.14.2 - 2026-06-25
 
 ### Added
