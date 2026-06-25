@@ -4,11 +4,7 @@ defmodule XMAVLink.Types do
   """
 
   @typedoc "Internal connection state structs owned by `XMAVLink.Router`"
-  @type connection ::
-          XMAVLink.SerialConnection
-          | XMAVLink.TCPOutConnection
-          | XMAVLink.UDPInConnection
-          | XMAVLink.UDPOutConnection
+  @type connection :: struct()
 
   @typedoc "A system/component id tuple"
   @type mavlink_address :: {0..255, 0..255}
@@ -19,8 +15,8 @@ defmodule XMAVLink.Types do
   @typedoc "MAVLink message sequence number"
   @type sequence_number :: 0..255
 
-  @typedoc "A 4-tuple network address"
-  @type net_address :: {0..255, 0..255, 0..255, 0..255}
+  @typedoc "An IPv4 or IPv6 network address tuple"
+  @type net_address :: :inet.ip_address()
 
   @typedoc "A non-reserved network port"
   @type net_port :: 1024..65535
@@ -69,8 +65,8 @@ defmodule XMAVLink.Types do
   @typedoc "64-bit unsigned integer"
   @type uint64_t :: 0..18_446_744_073_709_551_615
 
-  @typedoc "64-bit signed float"
-  @type double :: Float64
+  @typedoc "64-bit MAVLink double represented as an Elixir float"
+  @type double :: float()
 
   @typedoc "1 -> not an array 2..255 -> an array"
   @type field_ordinality :: 1..255

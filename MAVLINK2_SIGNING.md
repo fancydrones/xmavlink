@@ -1,11 +1,11 @@
-# MAVLink 2 Signing Plan
+# MAVLink 2 Signing Guide
 
 Primary references:
 
 - MAVLink message signing: https://mavlink.io/en/guide/message_signing.html
 - MAVLink packet serialization: https://mavlink.io/en/guide/serialization.html
 
-## Current State
+## Overview
 
 XMAVLink parses the MAVLink 2 signing incompatibility flag (`0x01`) as a known
 frame-shape feature and extracts the 13-byte signing trailer into
@@ -23,13 +23,14 @@ state needed for replay protection by tracking the last accepted timestamp per
 streams more than 6,000,000 ticks behind the local signing timestamp.
 
 Routers accept a `:signing` configuration with `:secret_key`, `:link_id`,
-`:timestamp`, optional `:accept_unsigned`, and optional timestamp persistence
-callbacks. Receive paths seed each connection with that policy. Configured
-signed MAVLink 2 frames are verified before dialect unpacking, delivered to
-subscribers, forwarded through the normal routing logic, and recorded for replay
-protection. Unsigned MAVLink 2 inbound frames are rejected by default while
-signing is enabled unless `accept_unsigned: true` is set. MAVLink 1 frames
-remain accepted under a signing policy. When signing is not configured, signed
+`:timestamp`, optional `:accept_unsigned`, optional `:accept_mavlink1`, and
+optional timestamp persistence callbacks. Receive paths seed each connection
+with that policy. Configured signed MAVLink 2 frames are verified before dialect
+unpacking, delivered to subscribers, forwarded through the normal routing logic,
+and recorded for replay protection. Unsigned MAVLink 2 inbound frames are
+rejected by default while signing is enabled unless `accept_unsigned: true` is
+set. MAVLink 1 frames remain accepted under a signing policy unless
+`accept_mavlink1: false` is configured. When signing is not configured, signed
 MAVLink 2 frames still return `:signed_frame_unsupported`.
 
 Outbound routing signs unsigned MAVLink 2 frames on signing-enabled
@@ -64,7 +65,7 @@ The signature is defined as the first 48 bits of SHA-256 over the 32-byte shared
 secret key followed by the wire header including the magic byte, payload, CRC,
 link id, and timestamp.
 
-## Intended Public Policy Shape
+## Public Policy Shape
 
 Signing is currently configured per router and copied into each connection:
 
@@ -75,6 +76,10 @@ Signing is currently configured per router and copied into each connection:
   sign unsigned outbound MAVLink 2 frames on each connection.
 - `accept_unsigned: false | true`: explicit policy for unsigned frames when
   signing is enabled. The policy helper defaults to reject.
+- `accept_mavlink1: true | false`: explicit policy for MAVLink 1 frames when
+  signing is enabled. The policy helper defaults to accept for mixed-link
+  compatibility. Set false for signed-only deployments that should reject
+  MAVLink 1 inbound and outbound traffic on signing-enabled connections.
 - `timestamp_load: fun | {module, function, args}`: optional zero-arity callback
   that returns a previously saved timestamp, `{:ok, timestamp}`, or `nil` when
   no timestamp has been saved yet. Loaded timestamps are combined with the

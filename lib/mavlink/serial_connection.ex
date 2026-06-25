@@ -6,8 +6,8 @@ defmodule XMAVLink.SerialConnection do
   require Logger
 
   alias XMAVLink.Connection.Inbound
+  alias XMAVLink.Connection.Outbound
   alias XMAVLink.ConnectionWorker
-  alias XMAVLink.Frame
   alias Circuits.UART
 
   defstruct port: nil,
@@ -84,15 +84,8 @@ defmodule XMAVLink.SerialConnection do
 
   def forward(
         %XMAVLink.SerialConnection{uart: uart},
-        %Frame{version: 1, mavlink_1_raw: packet}
+        frame
       ) do
-    UART.write(uart, packet)
-  end
-
-  def forward(
-        %XMAVLink.SerialConnection{uart: uart},
-        %Frame{version: 2, mavlink_2_raw: packet}
-      ) do
-    UART.write(uart, packet)
+    UART.write(uart, Outbound.packet!(frame))
   end
 end

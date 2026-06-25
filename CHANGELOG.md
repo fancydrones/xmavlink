@@ -2,6 +2,46 @@
 
 ## Unreleased
 
+### Breaking Changes
+
+- Hardened MAVLink XML generation by rejecting out-of-range message ids,
+  negative or oversized enum values, and message fields that reference unknown
+  enums after includes are merged.
+
+### Added
+
+- Added `accept_mavlink1: false` as an opt-in signing policy for deployments
+  that should reject MAVLink 1 inbound and outbound traffic on signing-enabled
+  connections.
+- Added `forward_unknown: :broadcast | :local_only | :drop` router policy for
+  well-shaped frames whose message ids are missing from the configured dialect.
+  The default remains `:broadcast`.
+- Added bracketed IPv6 and URI-style network connection string forms such as
+  `udpout:[::1]:14550` and `tcpout://[::1]:5760`.
+
+### Changed
+
+- Included the MAVLink 2 signing guide in Hex package files and generated
+  documentation.
+- Bounded retained stream-transport tails after valid MAVLink frames to avoid
+  holding oversized garbage buffers.
+- Deduplicated internal raw packet selection for transport forwarding.
+- Extracted router connection and worker bookkeeping into an internal router
+  registry module.
+- Deduplicated internal utility command context, retry, and table helpers.
+- Corrected internal connection and MAVLink float/double typespecs.
+- Allowed reserved Elixir words as MAVLink field names when parsing XML, matching
+  the existing generated struct-key behavior for fields such as `end`.
+- Updated coverage configuration to ignore generated Common dialect modules
+  and use a realistic baseline threshold for hand-written code.
+- Updated installation documentation for the current 0.14.3 release line.
+
+### Tests
+
+- Added a Hex dependency audit step to CI.
+- Added stream-transport coverage for oversized trailing data after a valid
+  frame.
+
 ## 0.14.3 - 2026-06-25
 
 ### Changed

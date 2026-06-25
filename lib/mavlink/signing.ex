@@ -22,6 +22,7 @@ defmodule XMAVLink.Signing do
             timestamp_load: nil,
             timestamp_save: nil,
             accept_unsigned: false,
+            accept_mavlink1: true,
             stream_timestamps: %{}
 
   @type timestamp :: 0..281_474_976_710_655
@@ -38,11 +39,13 @@ defmodule XMAVLink.Signing do
           timestamp_load: timestamp_load | nil,
           timestamp_save: timestamp_save | nil,
           accept_unsigned: boolean,
+          accept_mavlink1: boolean,
           stream_timestamps: %{stream_key() => timestamp}
         }
 
   @type new_error ::
           :invalid_accept_unsigned
+          | :invalid_accept_mavlink1
           | :invalid_options
           | :invalid_link_id
           | :invalid_secret_key
@@ -63,6 +66,7 @@ defmodule XMAVLink.Signing do
           | :timestamp_save_failed
           | :unsigned_frame
           | :unsigned_frame_rejected
+          | :mavlink_1_rejected
 
   @type sign_error ::
           :already_signed
@@ -72,6 +76,7 @@ defmodule XMAVLink.Signing do
           | :invalid_mavlink_2_frame
           | :invalid_secret_key
           | :invalid_timestamp
+          | :mavlink_1_rejected
           | :mavlink_1_not_signable
           | :missing_crc_extra
           | :missing_mavlink_2_raw
@@ -100,7 +105,15 @@ defmodule XMAVLink.Signing do
          {:ok, timestamp} <-
            initial_timestamp(Keyword.get_lazy(opts, :timestamp, &now_timestamp/0), timestamp_load),
          {:ok, accept_unsigned} <-
-           validate_accept_unsigned(Keyword.get(opts, :accept_unsigned, false)) do
+           validate_boolean_option(
+             Keyword.get(opts, :accept_unsigned, false),
+             :invalid_accept_unsigned
+           ),
+         {:ok, accept_mavlink1} <-
+           validate_boolean_option(
+             Keyword.get(opts, :accept_mavlink1, true),
+             :invalid_accept_mavlink1
+           ) do
       {:ok,
        %Signing{
          secret_key: secret_key,
@@ -108,7 +121,8 @@ defmodule XMAVLink.Signing do
          timestamp: timestamp,
          timestamp_load: timestamp_load,
          timestamp_save: timestamp_save,
-         accept_unsigned: accept_unsigned
+         accept_unsigned: accept_unsigned,
+         accept_mavlink1: accept_mavlink1
        }}
     end
   end
@@ -125,8 +139,11 @@ defmodule XMAVLink.Signing do
 
   def validate_inbound(frame = %Frame{}, signing = %Signing{}) do
     cond do
-      frame.version == 1 ->
+      frame.version == 1 and signing.accept_mavlink1 ->
         {:ok, frame, signing}
+
+      frame.version == 1 ->
+        {:error, :mavlink_1_rejected, signing}
 
       Frame.signed?(frame) ->
         validate_signed_inbound(frame, signing)
@@ -143,8 +160,13 @@ defmodule XMAVLink.Signing do
           {:ok, Frame.t(), t | nil} | {:error, sign_error, t | nil}
   def sign_outbound(frame = %Frame{}, nil), do: {:ok, frame, nil}
 
-  def sign_outbound(frame = %Frame{version: 1}, signing = %Signing{}),
-    do: {:ok, frame, signing}
+  def sign_outbound(frame = %Frame{version: 1}, signing = %Signing{}) do
+    if signing.accept_mavlink1 do
+      {:ok, frame, signing}
+    else
+      {:error, :mavlink_1_rejected, signing}
+    end
+  end
 
   def sign_outbound(
         frame = %Frame{version: 2, signature: %{timestamp: timestamp}},
@@ -363,10 +385,8 @@ defmodule XMAVLink.Signing do
 
   defp validate_timestamp(_timestamp), do: {:error, :invalid_timestamp}
 
-  defp validate_accept_unsigned(accept_unsigned) when is_boolean(accept_unsigned),
-    do: {:ok, accept_unsigned}
-
-  defp validate_accept_unsigned(_accept_unsigned), do: {:error, :invalid_accept_unsigned}
+  defp validate_boolean_option(value, _error) when is_boolean(value), do: {:ok, value}
+  defp validate_boolean_option(_value, error), do: {:error, error}
 
   defp validate_timestamp_load(nil), do: {:ok, nil}
 

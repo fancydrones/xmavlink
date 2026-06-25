@@ -21,7 +21,7 @@ by adding `xmavlink` to your list of dependencies in `mix.exs`:
   ```elixir
  def deps do
    [
-     {:xmavlink, "~> 0.14.2"}
+     {:xmavlink, "~> 0.14.3"}
    ]
  end
  ```
@@ -56,13 +56,14 @@ timestamps are tracked per connection, and unsigned MAVLink 2 inbound frames are
 rejected by default while signing is enabled unless `accept_unsigned: true` is
 set. Unsigned outbound MAVLink 2 frames sent over a signing-enabled connection
 are signed with a monotonically incremented per-connection timestamp. MAVLink 1
-inbound and outbound frames remain unsigned and accepted under a signing policy.
-Applications can configure timestamp load/save callbacks to preserve local
-signing timestamps across restarts. Inbound `SETUP_SIGNING` frames are delivered
-locally but are not forwarded between MAVLink links by generic routing. MAVLink
-2 frames with other incompatible flags are discarded. Supported configured
-transports are serial, UDP client (`udpout`), UDP server (`udpin`), and TCP
-client (`tcpout`). TCP server (`tcpin`) connections are not implemented.
+inbound and outbound frames remain unsigned and accepted under a signing policy
+unless `accept_mavlink1: false` is configured. Applications can configure
+timestamp load/save callbacks to preserve local signing timestamps across
+restarts. Inbound `SETUP_SIGNING` frames are delivered locally but are not
+forwarded between MAVLink links by generic routing. MAVLink 2 frames with other
+incompatible flags are discarded. Supported configured transports are serial,
+UDP client (`udpout`), UDP server (`udpin`), and TCP client (`tcpout`). TCP
+server (`tcpin`) connections are not implemented.
 
 MAVLink 2 is the primary 1.0 compatibility target. MAVLink 1 remains supported
 for existing frame parsing, packing, and routing behavior while that support
@@ -147,6 +148,11 @@ XMAVLink supports the following connection string formats:
 - **UDP In (server)**: `udpin:<address>:<port>` (e.g., `"udpin:0.0.0.0:14550"`)
 - **TCP Out (client)**: `tcpout:<address>:<port>` (e.g., `"tcpout:192.168.1.100:5760"`)
 
+Network connection strings also accept bracketed IPv6 literals and URI-style
+forms, for example `"udpout:[::1]:14550"` and
+`"tcpout://[::1]:5760"`. Existing hostname, IPv4, and comma-separated network
+forms remain supported.
+
 There is no `tcpin` connection string. TCP is currently supported only as an
 outbound client connection, primarily for SITL endpoints.
 
@@ -186,6 +192,19 @@ learned for routing, and delivered to local subscribers. Local messages sent
 with `XMAVLink.Router.pack_and_send/2` or `/3` can still be forwarded to learned
 remote vehicles.
 
+Frames with message ids missing from the configured dialect are treated as
+unknown but well-shaped MAVLink frames. By default, `forward_unknown:
+:broadcast` preserves forward-compatible routing behavior. Stricter deployments
+can set `forward_unknown: :local_only` to deliver unknown frames only to local
+subscribers, or `forward_unknown: :drop` to suppress them entirely:
+
+```elixir
+config :xmavlink,
+  dialect: Common,
+  connections: ["udpin:0.0.0.0:14550"],
+  forward_unknown: :local_only
+```
+
 ### DNS Hostname Support
 
 As of version 0.4.2, XMAVLink supports DNS hostnames in addition to IP addresses for network connections. This is particularly useful in:
@@ -209,7 +228,10 @@ config :xmavlink,
   ]
 ```
 
-The router will automatically resolve DNS hostnames to IP addresses at startup. If a hostname cannot be resolved, the router will raise an `ArgumentError` with details about the resolution failure.
+The router will automatically resolve DNS hostnames to IP addresses at startup.
+IPv4 is preferred when both address families resolve; IPv6 literals and
+IPv6-only names are also supported. If a hostname cannot be resolved, the router
+will raise an `ArgumentError` with details about the resolution failure.
 
 ### Heartbeat emission
 

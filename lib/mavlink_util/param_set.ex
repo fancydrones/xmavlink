@@ -12,8 +12,7 @@ defmodule XMAVLink.Util.ParamSet do
   @param_retries 5
 
   require Logger
-  alias XMAVLink.Util.CacheManager
-  alias XMAVLink.Util.Context
+  alias XMAVLink.Util.Command
   import XMAVLink.Util.FocusManager, only: [focus: 1]
 
   def param_set(param, new_value, opts \\ []) when is_list(opts) do
@@ -24,11 +23,11 @@ defmodule XMAVLink.Util.ParamSet do
 
   def param_set(system_id, component_id, mavlink_version, param, new_value, opts \\ []) do
     param = normalize_param_id(param)
-    opts = command_opts(opts)
+    opts = Command.opts(opts, @param_retry_interval, @param_retries)
     params = opts.context.tables.params
-    param_value_module = message_module(opts.dialect, :ParamValue)
+    param_value_module = Command.message_module(opts.dialect, :ParamValue)
 
-    with :ok <- require_table(params),
+    with :ok <- Command.require_table(params),
          [
            {{^system_id, ^component_id, ^param},
             {_time, %{__struct__: ^param_value_module, param_type: param_type}}}
@@ -62,12 +61,12 @@ defmodule XMAVLink.Util.ParamSet do
        do: {:error, :timeout}
 
   defp do_param_set(system_id, component_id, mavlink_version, param, new_value, param_type, opts) do
-    param_value_module = message_module(opts.dialect, :ParamValue)
+    param_value_module = Command.message_module(opts.dialect, :ParamValue)
 
     with :ok <-
            XMAVLink.Router.pack_and_send(
              opts.router,
-             struct(message_module(opts.dialect, :ParamSet), %{
+             struct(Command.message_module(opts.dialect, :ParamSet), %{
                target_system: system_id,
                target_component: component_id,
                param_id: param,
@@ -92,7 +91,7 @@ defmodule XMAVLink.Util.ParamSet do
             param,
             new_value,
             param_type,
-            %{opts | attempts: next_attempts(opts.attempts)}
+            %{opts | attempts: Command.next_attempts(opts.attempts)}
           )
       end
     end
@@ -102,33 +101,4 @@ defmodule XMAVLink.Util.ParamSet do
     do: param |> Atom.to_string() |> String.upcase()
 
   defp normalize_param_id(param) when is_binary(param), do: String.upcase(param)
-
-  defp command_opts(opts) do
-    context = opts |> Keyword.put(:router, CacheManager.router(opts)) |> Context.new()
-    retries = Keyword.get(opts, :retries, @param_retries)
-
-    %{
-      context: context,
-      router: context.router,
-      dialect: context.dialect,
-      table_prefix: context.table_prefix,
-      retry_interval_ms: Keyword.get(opts, :retry_interval_ms, @param_retry_interval),
-      attempts: attempts(retries)
-    }
-  end
-
-  defp attempts(:infinity), do: :infinity
-  defp attempts(retries) when is_integer(retries) and retries >= 0, do: retries + 1
-
-  defp next_attempts(:infinity), do: :infinity
-  defp next_attempts(attempts), do: attempts - 1
-
-  defp require_table(table) do
-    case :ets.info(table) do
-      :undefined -> {:error, :not_started}
-      _ -> :ok
-    end
-  end
-
-  defp message_module(dialect, name), do: Module.concat([dialect, Message, name])
 end

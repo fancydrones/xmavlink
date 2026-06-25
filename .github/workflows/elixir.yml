@@ -128,6 +128,9 @@ jobs:
       - name: Check dependency lock hygiene
         run: mix deps.unlock --check-unused
 
+      - name: Audit Hex dependencies
+        run: mix hex.audit
+
       - name: Check formatting
         run: mix format --check-formatted
 

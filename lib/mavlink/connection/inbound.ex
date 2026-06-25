@@ -8,6 +8,7 @@ defmodule XMAVLink.Connection.Inbound do
   @mavlink_2_signature_flag 0x01
   @mavlink_2_signature_length 13
   @smallest_mavlink_message 8
+  @max_stream_buffer_size 4_096
 
   def datagram(raw, connection, connection_key, dialect, log_prefix, failure_description \\ nil) do
     case binary_to_frame_and_tail(raw) do
@@ -42,7 +43,15 @@ defmodule XMAVLink.Connection.Inbound do
         {:error, :not_a_frame, socket, struct(connection, buffer: <<>>)}
 
       {nil, rest} ->
-        {:error, :incomplete_frame, socket, struct(connection, buffer: rest)}
+        if byte_size(rest) > @max_stream_buffer_size do
+          Logger.debug(
+            "#{log_prefix}: Dropping overlong incomplete MAVLink stream buffer (#{byte_size(rest)} bytes)"
+          )
+
+          {:error, :stream_buffer_overflow, socket, struct(connection, buffer: <<>>)}
+        else
+          {:error, :incomplete_frame, socket, struct(connection, buffer: rest)}
+        end
 
       {received_frame, rest} ->
         if byte_size(rest) >= @smallest_mavlink_message do

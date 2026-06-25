@@ -3,6 +3,7 @@ defmodule XMAVLink.ConnectionWorker do
 
   use GenServer
   require Logger
+  import XMAVLink.Utils, only: [format_address: 1]
 
   defstruct [
     :router,
@@ -234,9 +235,8 @@ defmodule XMAVLink.ConnectionWorker do
 
   defp direct_connection(connection), do: connection
 
-  defp connection_description([protocol, address, port])
-       when is_tuple(address) and tuple_size(address) == 4 do
-    "#{protocol}:#{Enum.join(Tuple.to_list(address), ".")}:#{port}"
+  defp connection_description([protocol, address, port]) when is_tuple(address) do
+    "#{protocol}:#{format_address(address)}:#{port}"
   end
 
   defp connection_description(["serial", port, baud]), do: "serial:#{port}:#{baud}"

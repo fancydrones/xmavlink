@@ -133,9 +133,23 @@ defmodule XMAVLink.Utils do
       {:ok, ip_tuple} ->
         {:ok, ip_tuple}
 
-      {:error, reason} ->
-        {:error, reason}
+      {:error, ipv4_reason} ->
+        case :inet.getaddr(charlist_address, :inet6) do
+          {:ok, ip_tuple} -> {:ok, ip_tuple}
+          {:error, _ipv6_reason} -> {:error, ipv4_reason}
+        end
     end
+  end
+
+  def format_address(address) when is_tuple(address) and tuple_size(address) == 4 do
+    address |> Tuple.to_list() |> Enum.join(".")
+  end
+
+  def format_address(address) when is_tuple(address) and tuple_size(address) == 8 do
+    address
+    |> Tuple.to_list()
+    |> Enum.map(&Integer.to_string(&1, 16))
+    |> Enum.join(":")
   end
 
   @doc "Parse an ip address string into a tuple"
