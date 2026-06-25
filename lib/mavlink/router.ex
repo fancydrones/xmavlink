@@ -50,12 +50,9 @@ defmodule XMAVLink.Router do
                         Note there is no tcpin connection - tcp is rarely used for MAVLink, the exception
                         being SITL testing which requires a tcpout connection.
 
-  - connections:        A map containing the state of the connections described by connection_strings along
-                        with the local connection, which is automatically created and responsible for allowing
-                        Elixir processes to receive and send MAVLink messages. The map is keyed by the port,
-                        device or :local to allow the corresponding connection state to be easily retrieved
-                        when we receive a message. See MAVLink.*Connection for map values. Note LocalConnection
-                        contains the system/component id, subscriber list and next sequence number.
+  - connections:        A map containing internal connection state for configured
+                        transports and the local process connection. This field is
+                        owned by the router and is not a supported integration API.
   - routes:             A map from a {system id, component id} tuple to the connection key a message from that
                         system/component was last received on. Used to forward messages to that system/component.
   - system_time_boot_ms:

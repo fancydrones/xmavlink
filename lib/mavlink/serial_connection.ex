@@ -1,7 +1,5 @@
 defmodule XMAVLink.SerialConnection do
-  @moduledoc """
-  XMAVLink.Router delegate for Serial connections
-  """
+  @moduledoc false
 
   @behaviour XMAVLink.Transport
 

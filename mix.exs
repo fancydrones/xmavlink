@@ -114,6 +114,29 @@ defmodule XMAVLink.Mixfile do
         Release: [
           "CHANGELOG.md"
         ]
+      ],
+      groups_for_modules: [
+        "Core Runtime": [
+          XMAVLink.Router,
+          XMAVLink.Frame,
+          XMAVLink.Frame.Signature,
+          XMAVLink.Message,
+          XMAVLink.Signing,
+          XMAVLink.Heartbeat
+        ],
+        Utilities: ~r/^XMAVLink\.Util\./,
+        "Dialect And Generator Support": [
+          XMAVLink.Dialect,
+          XMAVLink.Parser,
+          XMAVLink.Types,
+          XMAVLink.Utils,
+          Mix.Tasks.Xmavlink
+        ],
+        "Generated Common Dialect": [
+          Common,
+          ~r/^Common\./,
+          ~r/^XMAVLink\.Message\.Common\./
+        ]
       ]
     ]
   end
