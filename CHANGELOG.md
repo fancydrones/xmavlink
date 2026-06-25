@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.14.3 - 2026-06-25
+
 ### Changed
 
 - Hardened MAVLink XML generation by rejecting reserved identifiers before
