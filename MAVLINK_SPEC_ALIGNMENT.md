@@ -63,7 +63,7 @@ Known non-goals for 1.0 unless separately implemented:
 | Enum merging | Partial | Matching enum names are merged and sorted by value. Duplicate enum entries and duplicate resolved values are rejected. |
 | Duplicate message ids | Supported validation | Duplicate message ids are rejected across the combined dialect, including included XML files. |
 | XML `bitmask="true"` | Supported | Enum-level bitmask declarations are parsed and used before heuristic bitmask detection. |
-| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. The parser validates generated identifiers and escapes generated docs/descriptions before source generation. Reserved-name validation is still tracked separately. |
+| XML identifiers and source generation safety | Partial | XML is treated as trusted build input. The parser validates generated identifiers, rejects reserved enum/message/field names, and escapes generated docs/descriptions before source generation. |
 | Generated Common dialect | Supported within above scope | `lib/common.ex` is regenerated from `config/common.xml` and should be treated as build output. |
 
 ## Changes Made In This Pass
@@ -106,8 +106,7 @@ Known non-goals for 1.0 unless separately implemented:
 
 ## Follow-Up Issues
 
-- #53: Continue aligning XML parser/generator validation with `mavgen`,
-  especially reserved-name validation.
+- #53: Continue aligning XML parser/generator validation with `mavgen`.
 
 These follow-ups should be prioritized by MAVLink 2 impact first. None of the
 reviewed gaps require new MAVLink 1-only work before 1.0.
