@@ -57,6 +57,15 @@ defmodule XMAVLink.Parser do
   @unit_regex ~r/\A[A-Za-z0-9_%@\/\*\^\.\-]+\z/
   @scalar_field_types ~w(char uint8_t int8_t uint16_t int16_t uint32_t int32_t uint64_t int64_t float double)
   @valid_display_values ~w(bitmask)
+  @reserved_identifier_names MapSet.new(~w(
+    abstract after await boolean break byte case catch char class cond const
+    continue debugger default def defimpl defmodule defp defprotocol delete do
+    double else end enum export extends false final finally float fn for
+    function goto if implements import in instanceof int interface let long
+    native new nil package private protected public quote receive rescue return
+    short static super switch synchronized this throw transient true try typeof
+    unless unquote unquote_splicing var void volatile when while with yield
+  ))
   @default_limits %{
     max_xml_file_bytes: 2_000_000,
     max_include_depth: 32,
@@ -812,11 +821,20 @@ defmodule XMAVLink.Parser do
   defp required_identifier("", kind, context), do: {:error, "Missing #{kind} in #{context}"}
 
   defp required_identifier(value, kind, context) when is_binary(value) do
-    if Regex.match?(@identifier_regex, value) do
-      {:ok, value}
-    else
-      {:error, "Invalid #{kind} #{inspect(value)} in #{context}"}
+    cond do
+      not Regex.match?(@identifier_regex, value) ->
+        {:error, "Invalid #{kind} #{inspect(value)} in #{context}"}
+
+      reserved_identifier?(value) ->
+        {:error, "Reserved #{kind} #{inspect(value)} in #{context}"}
+
+      true ->
+        {:ok, value}
     end
+  end
+
+  defp reserved_identifier?(value) do
+    MapSet.member?(@reserved_identifier_names, downcase(value))
   end
 
   defp optional_identifier(nil, _kind, _context), do: {:ok, nil}

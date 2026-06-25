@@ -89,9 +89,9 @@ formatting generated files by hand. The generator emits deterministic,
 formatter-compatible source for repeatable diffs.
 
 Treat MAVLink XML dialect files as trusted build inputs. The generator enforces
-basic include graph, file size, identifier, and duplicate-definition checks, but
-it is meant for upstream or application-owned dialect files, not arbitrary
-untrusted XML.
+basic include graph, file size, identifier, reserved-name, and
+duplicate-definition checks, but it is meant for upstream or application-owned
+dialect files, not arbitrary untrusted XML.
 
 ## Public API Surface
 

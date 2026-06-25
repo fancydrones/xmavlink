@@ -761,6 +761,82 @@ defmodule XMAVLink.Test.Parser do
     )
   end
 
+  test "reserved XML identifiers are rejected before source generation" do
+    cases = [
+      {
+        "reserved message name",
+        """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="CLASS">
+              <field type="uint8_t" name="value">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """,
+        ~s(Reserved message name "CLASS" in message id 1)
+      },
+      {
+        "reserved field name",
+        """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <messages>
+            <message id="1" name="TEST_MESSAGE">
+              <field type="uint8_t" name="case">Value</field>
+            </message>
+          </messages>
+        </mavlink>
+        """,
+        ~s(Reserved field name "case" in message TEST_MESSAGE)
+      },
+      {
+        "reserved enum name",
+        """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="SWITCH">
+              <entry value="0" name="TEST_ENTRY" />
+            </enum>
+          </enums>
+        </mavlink>
+        """,
+        ~s(Reserved enum name "SWITCH" in enum)
+      },
+      {
+        "reserved enum entry name",
+        """
+        <?xml version="1.0"?>
+        <mavlink>
+          <version>3</version>
+          <dialect>0</dialect>
+          <enums>
+            <enum name="TEST_ENUM">
+              <entry value="0" name="RETURN" />
+            </enum>
+          </enums>
+        </mavlink>
+        """,
+        ~s(Reserved enum entry name "RETURN" in enum TEST_ENUM)
+      }
+    ]
+
+    for {label, xml, expected_message} <- cases do
+      with_xml(%{"root.xml" => xml}, fn dir ->
+        assert {:error, message} = parse_mavlink_xml(Path.join(dir, "root.xml")), label
+        assert message =~ expected_message
+      end)
+    end
+  end
+
   test "invalid field display values are rejected before atom creation" do
     with_xml(
       %{

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Changed
+
+- Hardened MAVLink XML generation by rejecting reserved identifiers before
+  source generation.
+
 ### Tests
 
 - Added router coverage for subscriber cleanup and independent outbound signing
