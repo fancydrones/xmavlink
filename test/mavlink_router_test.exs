@@ -861,6 +861,30 @@ defmodule XMAVLink.Test.Router do
           flunk("UDPOut connection didn't materialize within timeout")
       end
     end
+
+    defp wait_for_udpout_sockets(router_pid, count, attempts \\ 50) do
+      state = :sys.get_state(router_pid)
+
+      udpout_sockets =
+        state.connections
+        |> Enum.flat_map(fn
+          {key, %XMAVLink.UDPOutConnection{}} when is_port(key) -> [key]
+          _ -> []
+        end)
+        |> Enum.sort()
+
+      cond do
+        length(udpout_sockets) >= count ->
+          Enum.take(udpout_sockets, count)
+
+        attempts > 0 ->
+          Process.sleep(20)
+          wait_for_udpout_sockets(router_pid, count, attempts - 1)
+
+        true ->
+          flunk("#{count} UDPOut connections didn't materialize within timeout")
+      end
+    end
   end
 
   describe "inbound signing policy" do
@@ -1147,6 +1171,88 @@ defmodule XMAVLink.Test.Router do
       assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 2
     end
 
+    test "keeps independent outbound signing timestamps for multiple UDP connections" do
+      {first_socket, first_port} = open_udp_socket()
+      {second_socket, second_port} = open_udp_socket()
+      :ok = :inet.setopts(first_socket, active: true)
+      :ok = :inet.setopts(second_socket, active: true)
+      parent = self()
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: nil,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: [
+              "udpout:127.0.0.1:#{first_port}",
+              "udpout:127.0.0.1:#{second_port}"
+            ],
+            signing: [
+              secret_key: @secret_key,
+              link_id: @link_id,
+              timestamp: @local_timestamp,
+              timestamp_save: fn timestamp ->
+                send(parent, {:saved_router_timestamp, timestamp})
+                :ok
+              end
+            ]
+          },
+          []
+        )
+
+      on_exit(fn ->
+        :gen_udp.close(first_socket)
+        :gen_udp.close(second_socket)
+        stop_router(router_pid)
+      end)
+
+      udpout_sockets = wait_for_udpout_sockets(router_pid, 2)
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 2)
+
+      for socket <- [first_socket, second_socket] do
+        assert_receive {:udp, ^socket, {127, 0, 0, 1}, _source_port, raw}, 500
+        assert_signed_udp_frame(raw, @local_timestamp + 1)
+      end
+
+      saved_timestamps =
+        for _ <- 1..2 do
+          assert_receive {:saved_router_timestamp, timestamp}, 500
+          timestamp
+        end
+
+      assert Enum.sort(saved_timestamps) == [@local_timestamp + 1, @local_timestamp + 1]
+
+      state = :sys.get_state(router_pid)
+
+      for udpout_socket <- udpout_sockets do
+        assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 1
+      end
+
+      assert :ok = Router.pack_and_send(router_pid, sample_heartbeat(), 2)
+
+      for socket <- [first_socket, second_socket] do
+        assert_receive {:udp, ^socket, {127, 0, 0, 1}, _source_port, raw}, 500
+        assert_signed_udp_frame(raw, @local_timestamp + 2)
+      end
+
+      saved_timestamps =
+        for _ <- 1..2 do
+          assert_receive {:saved_router_timestamp, timestamp}, 500
+          timestamp
+        end
+
+      assert Enum.sort(saved_timestamps) == [@local_timestamp + 2, @local_timestamp + 2]
+
+      state = :sys.get_state(router_pid)
+
+      for udpout_socket <- udpout_sockets do
+        assert state.connections[udpout_socket].signing.timestamp == @local_timestamp + 2
+      end
+    end
+
     test "keeps outbound MAVLink 1 frames unsigned when signing is enabled" do
       {udp_socket, udp_port} = open_udp_socket()
       :ok = :inet.setopts(udp_socket, active: true)
@@ -1226,6 +1332,58 @@ defmodule XMAVLink.Test.Router do
 
       Router.unsubscribe()
       GenServer.stop(pid)
+    end
+
+    test "removes subscriptions and cached entries when a subscriber exits" do
+      router_name = :subscriber_cleanup_router
+      stop_subscription_cache(router_name)
+
+      {:ok, router_pid} =
+        Router.start_link(
+          %{
+            name: router_name,
+            system: 1,
+            component: 1,
+            dialect: Common,
+            connection_strings: []
+          },
+          []
+        )
+
+      on_exit(fn ->
+        stop_subscription_cache(router_name)
+        stop_router(router_pid)
+      end)
+
+      parent = self()
+
+      subscriber =
+        spawn(fn ->
+          case Router.subscribe(router_pid, message: Common.Message.Heartbeat, as_frame: true) do
+            :ok -> send(parent, {:subscribed, self()})
+            other -> send(parent, {:subscribe_failed, other})
+          end
+
+          receive do
+            :stop -> :ok
+          end
+        end)
+
+      assert_receive {:subscribed, ^subscriber}, 200
+
+      state = :sys.get_state(router_pid)
+      assert subscribed?(state.connections.local.subscriptions, subscriber)
+      assert subscribed?(Agent.get(state.subscription_cache, & &1), subscriber)
+
+      ref = Process.monitor(subscriber)
+      send(subscriber, :stop)
+
+      assert_receive {:DOWN, ^ref, :process, ^subscriber, :normal}, 200
+      assert wait_for_unsubscribed(router_pid, subscriber)
+
+      state = :sys.get_state(router_pid)
+      refute subscribed?(state.connections.local.subscriptions, subscriber)
+      refute subscribed?(Agent.get(state.subscription_cache, & &1), subscriber)
     end
   end
 
@@ -1570,6 +1728,36 @@ defmodule XMAVLink.Test.Router do
       {:udp, ^socket, _, _, _} -> flush_udp(socket)
     after
       0 -> :ok
+    end
+  end
+
+  defp assert_signed_udp_frame(raw, expected_timestamp) do
+    assert {%Frame{} = frame, <<>>} = Frame.binary_to_frame_and_tail(raw)
+    assert Frame.signed?(frame)
+    assert frame.signature.link_id == @link_id
+    assert frame.signature.timestamp == expected_timestamp
+    assert :ok = Frame.validate_signature(frame, @secret_key)
+    frame
+  end
+
+  defp subscribed?(subscriptions, subscriber) do
+    Enum.any?(subscriptions, fn {_query, pid} -> pid == subscriber end)
+  end
+
+  defp wait_for_unsubscribed(router_pid, subscriber, attempts \\ 20) do
+    state = :sys.get_state(router_pid)
+    cache_subscriptions = Agent.get(state.subscription_cache, & &1)
+
+    if subscribed?(state.connections.local.subscriptions, subscriber) or
+         subscribed?(cache_subscriptions, subscriber) do
+      if attempts > 0 do
+        Process.sleep(10)
+        wait_for_unsubscribed(router_pid, subscriber, attempts - 1)
+      else
+        false
+      end
+    else
+      true
     end
   end
 
