@@ -4,7 +4,7 @@ defmodule XMAVLink.Mixfile do
   def project do
     [
       app: :xmavlink,
-      version: "0.14.2",
+      version: "0.14.3",
       elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       description: description(),
