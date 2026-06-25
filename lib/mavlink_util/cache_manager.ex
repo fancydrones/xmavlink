@@ -7,8 +7,9 @@ defmodule XMAVLink.Util.CacheManager do
   - the most recently received messages for each MAV and message type
   - the most recently received set of parameters for each MAV
 
-  Using ETS tables allows clients to perform read only API operations directly
-  on the tables, preventing this GenServer from becoming a bottleneck.
+  Using ETS tables allows read-heavy utility queries without turning this
+  GenServer into a bottleneck. Prefer this module's query functions over direct
+  ETS access; table contents are internal cache structs.
 
   Use `XMAVLink.Util.Context` when utility state should be scoped to a
   specific router, dialect, or ETS table namespace.
@@ -16,6 +17,9 @@ defmodule XMAVLink.Util.CacheManager do
 
   use GenServer
   require Logger
+  alias XMAVLink.Util.Cache.Message, as: CachedMessage
+  alias XMAVLink.Util.Cache.Param, as: CachedParam
+  alias XMAVLink.Util.Cache.System, as: CachedSystem
   alias XMAVLink.Util.{Context, Defaults, Tables}
   alias XMAVLink.Util.ParamRequest
   import XMAVLink.Util.FocusManager, only: [focus: 0, focus: 1]
@@ -48,7 +52,7 @@ defmodule XMAVLink.Util.CacheManager do
   `system_component_id` is `{system_id, component_id}`.
   """
   @spec list_systems(keyword) ::
-          {:ok, [{XMAVLink.Types.mavlink_address(), map}]} | {:error, :not_started}
+          {:ok, [{XMAVLink.Types.mavlink_address(), CachedSystem.t()}]} | {:error, :not_started}
   def list_systems(opts \\ []) do
     systems = Context.new(opts).tables.systems
 
@@ -112,8 +116,11 @@ defmodule XMAVLink.Util.CacheManager do
         :ok,
         :ets.foldl(
           fn
-            {{^system_id, ^component_id, msg_type}, {received, msg}}, acc ->
-              Enum.into([{msg_type, {now() - received, msg}}], acc)
+            {{^system_id, ^component_id, msg_type}, entry}, acc ->
+              case cache_entry(entry) do
+                {:ok, age_ms, message} -> Enum.into([{msg_type, {age_ms, message}}], acc)
+                :error -> acc
+              end
 
             _, acc ->
               acc
@@ -160,9 +167,9 @@ defmodule XMAVLink.Util.CacheManager do
     messages = Context.new(opts).tables.messages
 
     with :ok <- require_table(messages),
-         [{_key, {received, message}}] <-
-           :ets.lookup(messages, {system_id, component_id, msg_type}) do
-      {:ok, now() - received, message}
+         [{_key, entry}] <- :ets.lookup(messages, {system_id, component_id, msg_type}),
+         {:ok, age_ms, message} <- cache_entry(entry) do
+      {:ok, age_ms, message}
     else
       {:error, :not_started} -> {:error, :not_started}
       _ -> {:error, :no_such_message}
@@ -207,13 +214,17 @@ defmodule XMAVLink.Util.CacheManager do
          param_map when is_map(param_map) <-
            :ets.foldl(
              fn
-               {{^system_id, ^component_id, param_id},
-                {_, %{__struct__: ^param_value_module, param_value: param_value}}},
-               acc ->
-                 if String.contains?(param_id, match_upcase) do
-                   Enum.into([{param_id, param_value}], acc)
-                 else
-                   acc
+               {{^system_id, ^component_id, param_id}, entry}, acc ->
+                 case cache_entry(entry) do
+                   {:ok, _age_ms, %{__struct__: ^param_value_module, param_value: param_value}} ->
+                     if String.contains?(param_id, match_upcase) do
+                       Enum.into([{param_id, param_value}], acc)
+                     else
+                       acc
+                     end
+
+                   _ ->
+                     acc
                  end
 
                _, acc ->
@@ -252,12 +263,10 @@ defmodule XMAVLink.Util.CacheManager do
     param_value_module = message_module(context.dialect, :ParamValue)
 
     with :ok <- require_table(params),
-         [
-           {_key,
-            {received, param_value_msg = %{__struct__: ^param_value_module, param_id: ^param}}}
-         ] <-
-           :ets.lookup(params, {system_id, component_id, param}) do
-      {:ok, now() - received, param_value_msg}
+         [{_key, entry}] <- :ets.lookup(params, {system_id, component_id, param}),
+         {:ok, age_ms, param_value_msg = %{__struct__: ^param_value_module, param_id: ^param}} <-
+           cache_entry(entry) do
+      {:ok, age_ms, param_value_msg}
     else
       {:error, :not_started} -> {:error, :not_started}
       _ -> {:error, :no_such_param}
@@ -338,7 +347,7 @@ defmodule XMAVLink.Util.CacheManager do
     # Replace with the new message
     :ets.insert(
       state.tables.messages,
-      {{source_system, source_component, message_type}, {now(), message}}
+      {{source_system, source_component, message_type}, CachedMessage.new(message, now())}
     )
 
     # Delegate any message-specific behaviour to handle_mav_message()
@@ -389,13 +398,12 @@ defmodule XMAVLink.Util.CacheManager do
         state.tables.systems,
         {
           {source_system_id, source_component_id},
-          # TODO System struct
-          %{
+          CachedSystem.new(%{
             mavlink_major_version: mavlink_major_version,
             mavlink_minor_version: mavlink_minor_version,
             param_count: 0,
             param_count_loaded: 0
-          }
+          })
         }
       )
 
@@ -434,7 +442,8 @@ defmodule XMAVLink.Util.CacheManager do
            true <-
              :ets.insert(
                state.tables.params,
-               {{source_system_id, source_component_id, param_id}, {now(), param_value_msg}}
+               {{source_system_id, source_component_id, param_id},
+                CachedParam.new(param_value_msg, now())}
              ) do
         # TODO Hidden parameters can become un-hidden, increasing param_count, in which case we need to spawn param_request_list again.
         :ets.insert(
@@ -496,6 +505,17 @@ defmodule XMAVLink.Util.CacheManager do
     do: param |> Atom.to_string() |> String.upcase()
 
   defp normalize_param_id(param) when is_binary(param), do: String.upcase(param)
+
+  defp cache_entry(%{received_at_ms: received_at_ms, message: message})
+       when is_integer(received_at_ms) do
+    {:ok, now() - received_at_ms, message}
+  end
+
+  defp cache_entry({received_at_ms, message}) when is_integer(received_at_ms) do
+    {:ok, now() - received_at_ms, message}
+  end
+
+  defp cache_entry(_entry), do: :error
 
   defp require_table(table) do
     case :ets.info(table) do
