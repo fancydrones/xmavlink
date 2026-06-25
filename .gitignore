@@ -37,6 +37,8 @@ MAVLink.ex
 
 # Example output directory for generated files.
 /output
+/examples/*/_build
+/examples/*/deps
 
 # macOS kruft
 

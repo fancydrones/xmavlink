@@ -181,6 +181,52 @@ jobs:
       - name: Run Dialyzer
         run: mix dialyzer
 
+  docs_and_examples:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: erlef/setup-beam@v1
+        with:
+          elixir-version: 1.20.1
+          otp-version: 29.0.2
+
+      - name: Install OS dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential
+
+      - name: Cache Mix dependencies and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            deps
+            _build
+            examples/downstream_smoke/deps
+            examples/downstream_smoke/_build
+          key: ${{ runner.os }}-docs-examples-1.20.1-29.0.2-${{ hashFiles('mix.lock', 'examples/downstream_smoke/mix.exs') }}
+          restore-keys: |
+            ${{ runner.os }}-docs-examples-1.20.1-29.0.2-
+
+      - name: Install Mix tools and dependencies
+        run: |
+          mix local.rebar --force
+          mix local.hex --force
+          MIX_ENV=dev mix deps.get
+
+      - name: Build docs
+        run: MIX_ENV=dev mix docs
+
+      - name: Run downstream smoke fixture
+        working-directory: examples/downstream_smoke
+        run: |
+          mix deps.get
+          mix test --warnings-as-errors
+
   publish_hex:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -189,6 +235,7 @@ jobs:
       - detect_hex_publish
       - quality
       - dialyzer
+      - docs_and_examples
 
     if: github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect_hex_publish.outputs.should_publish == 'true'
 

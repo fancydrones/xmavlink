@@ -6,6 +6,8 @@
 
 - Added router coverage for subscriber cleanup and independent outbound signing
   state across multiple UDP connections.
+- Added a downstream compatibility smoke fixture and CI coverage for docs and
+  example workflows.
 
 ## 0.14.2 - 2026-06-25
 
